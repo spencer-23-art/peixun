@@ -5,7 +5,7 @@ services:
     build: .
     container_name: peixun-service
     ports:
-      - "8000:8000" # 冒号左边为宿主机外部端口，若 8000 被旧项目占用，可改为其他空闲端口（如 8080:8000）
+      - "8001:8000" # 避开原项目占用的 8000 端口，映射到服务器的 8001 端口
     volumes:
       - ./uploads:/app/uploads # 挂载图片目录，容器升级重建不丢失照片
       # 注意：如果需要将 SQLite 数据库文件也挂载出来：
