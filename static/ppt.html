@@ -720,7 +720,7 @@
       </svg>
       培训人员信息录入与门禁系统
     </div>
-    <div class="system-info" id="slide-progress-text">1 / 4</div>
+    <div class="system-info" id="slide-progress-text">1 / 5</div>
   </div>
 
   <!-- PPT 主幻灯片容器 -->
@@ -1220,6 +1220,161 @@
         </div>
       </div>
 
+      <!-- SLIDE 5: 门禁恢复 (新) -->
+      <div class="slide">
+        <div class="slide-left">
+          <span class="slide-tag">STEP 05</span>
+          <h2>本单位人员门禁恢复</h2>
+          <p>演示如何批量检索并恢复本单位下已录入人员的门禁权限：</p>
+          <ul class="steps-list" style="margin-bottom: 25px;">
+            <li><strong>一键切入门禁页签：</strong> 点击“门禁恢复”页签，系统自动检索出同属于本单位下的所有员工。</li>
+            <li><strong>智能勾选与全选：</strong> 表头提供一键全选复选框，也可单选，已选人数在下方状态栏实时显示。</li>
+            <li><strong>批量恢复申请：</strong> 勾选完成后点击“恢复门禁”，一键向系统发送权限恢复请求，迅速开通通行权限。</li>
+          </ul>
+          <button class="btn-action" id="btn-play-restore" onclick="playRestoreAnimation()">
+            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+              <path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            开始门禁恢复演示
+          </button>
+        </div>
+        <div class="slide-right">
+          <!-- 电脑端实际画面仿真框 (加大版，无下拉条) -->
+          <div class="browser-mockup large-browser" id="mockup-container-restore">
+            <div class="mock-cursor" id="cursor-restore"></div>
+            <div class="browser-topbar">
+              <div class="browser-dot red"></div>
+              <div class="browser-dot yellow"></div>
+              <div class="browser-dot green"></div>
+              <div class="browser-address">http://8.137.13.118:8001/client</div>
+            </div>
+            
+            <div class="browser-screen" style="overflow-y: hidden; padding: 10px 15px;">
+              <div class="mock-toast" id="toast-restore" style="background: rgba(16, 185, 129, 0.95); top: 40px; left: 15px; right: 15px;">门禁恢复申请提交成功！</div>
+
+              <!-- 实际用户栏 -->
+              <div class="user-info-bar-mock">
+                <div>
+                  <span>录入人员：</span><strong>张三</strong>
+                  <span style="margin-left: 15px;">工作单位：</span><strong>心连心化学工业集团</strong>
+                </div>
+                <div class="btn-logout-mock">退出登录</div>
+              </div>
+              
+              <!-- 页签 -->
+              <div class="admin-nav-mock">
+                <div class="admin-nav-mock-item active" id="rest-nav-form">信息录入</div>
+                <div class="admin-nav-mock-item" id="rest-nav-history">历史记录</div>
+                <div class="admin-nav-mock-item" id="rest-nav-restore">门禁恢复</div>
+              </div>
+
+              <!-- 区域一：信息录入表单面板 -->
+              <div class="form-container-mock" id="rest-panel-form" style="display: block;">
+                <h2>培训人员信息录入</h2>
+                <p class="subtitle">请准确填写您的真实信息并上传照片</p>
+                
+                <div style="display:flex; flex-direction:column; gap:8px;">
+                  <div class="mock-form-group">
+                    <label>第一行：电子照片</label>
+                    <div class="photo-uploader-mock">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                      </svg>
+                      <p>选择照片 / 拍摄现场照</p>
+                    </div>
+                  </div>
+                  <div class="mock-form-group">
+                    <label>第二行：基本与岗位信息</label>
+                    <div class="form-grid-mock">
+                      <div class="mock-form-group">
+                        <label>姓名 *</label>
+                        <input type="text" class="mock-input" readonly>
+                      </div>
+                      <div class="mock-form-group">
+                        <label>民族 *</label>
+                        <input type="text" class="mock-input" placeholder="点击选择民族" readonly>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 区域二：门禁恢复控制面板 -->
+              <div class="form-container-mock" id="rest-panel-restore" style="display: none; padding: 10px;">
+                <h2 style="font-size: 11px;">本单位人员门禁恢复</h2>
+                <p class="subtitle" style="font-size: 7px; margin-bottom: 8px;">在此可检索并选择您工作单位下的所有人进行门禁恢复申请。</p>
+                
+                <!-- 搜索条 -->
+                <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px;">
+                  <input type="text" class="mock-input" placeholder="输入姓名搜索同单位员工..." style="width: 140px; padding: 4px 6px; font-size: 8px;" readonly>
+                  <button class="mock-btn" style="width: auto; padding: 4px 8px; margin: 0; background: #4b5563; font-size: 7px;">清除</button>
+                </div>
+
+                <!-- 仿真表格 -->
+                <table class="mock-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 20px; text-align: center;">
+                        <input type="checkbox" id="rest-check-all-mock" style="cursor: pointer; width: 10px; height: 10px;">
+                      </th>
+                      <th style="width: 25px; text-align: center;">照片</th>
+                      <th>人员基本信息</th>
+                      <th>权限与常住地址</th>
+                      <th style="width: 40px;">录入人</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <!-- 行一：李四 -->
+                    <tr>
+                      <td style="text-align: center;">
+                        <input type="checkbox" class="rest-row-cb-mock" id="rest-cb-lisi" style="cursor: pointer; width: 10px; height: 10px;">
+                      </td>
+                      <td style="text-align: center;"><img src="avatar_demo.png" class="mock-table-img"></td>
+                      <td>
+                        <strong>李四</strong> (汉族 · 36岁)<br>
+                        身份证: 110101199003072314<br>
+                        手机: 13988889999
+                      </td>
+                      <td>
+                        <strong>权限:</strong> 心连心生活区<br>
+                        <strong>地址:</strong> 心连心生活区
+                      </td>
+                      <td>张三</td>
+                    </tr>
+                    <!-- 行二：王五 -->
+                    <tr>
+                      <td style="text-align: center;">
+                        <input type="checkbox" class="rest-row-cb-mock" id="rest-cb-wangwu" style="cursor: pointer; width: 10px; height: 10px;">
+                      </td>
+                      <td style="text-align: center;"><img src="avatar_demo.png" class="mock-table-img" style="filter: hue-rotate(90deg);"></td>
+                      <td>
+                        <strong>王五</strong> (汉族 · 30岁)<br>
+                        身份证: 110101199505051234<br>
+                        手机: 13500001111
+                      </td>
+                      <td>
+                        <strong>权限:</strong> 心连心生活区<br>
+                        <strong>地址:</strong> 心连心生活区
+                      </td>
+                      <td>张三</td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                <!-- 底部提交统计栏 -->
+                <div style="margin-top: 10px; display: flex; align-items: center; justify-content: space-between;">
+                  <span style="font-size: 8px; color: var(--text-muted);">已选择 <strong id="rest-select-count-mock" style="color: var(--primary);">0</strong> 人</span>
+                  <button class="mock-btn primary" id="rest-btn-submit-mock" style="width: auto; padding: 4px 12px; margin: 0; font-size: 8px; opacity: 0.5; cursor: not-allowed;" disabled>恢复门禁 (恢复申请)</button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -1426,6 +1581,24 @@
       document.getElementById('cursor-history').style.display = 'none';
       document.getElementById('btn-play-history').disabled = false;
       document.getElementById('btn-play-history').style.opacity = '1';
+
+      // 5. 门禁恢复页重置
+      document.getElementById('rest-nav-form').classList.add('active');
+      document.getElementById('rest-nav-restore').classList.remove('active');
+      document.getElementById('rest-panel-form').style.display = 'block';
+      document.getElementById('rest-panel-restore').style.display = 'none';
+      document.getElementById('rest-check-all-mock').checked = false;
+      document.getElementById('rest-cb-lisi').checked = false;
+      document.getElementById('rest-cb-wangwu').checked = false;
+      document.getElementById('rest-select-count-mock').textContent = '0';
+      const restSubmitBtn = document.getElementById('rest-btn-submit-mock');
+      restSubmitBtn.disabled = true;
+      restSubmitBtn.style.opacity = '0.5';
+      restSubmitBtn.style.cursor = 'not-allowed';
+      document.getElementById('toast-restore').classList.remove('show');
+      document.getElementById('cursor-restore').style.display = 'none';
+      document.getElementById('btn-play-restore').disabled = false;
+      document.getElementById('btn-play-restore').style.opacity = '1';
     }
 
     // SLIDE 1 注册动画
@@ -1738,6 +1911,62 @@
       cursor.style.display = 'none';
       await sleep(2000);
       
+      btn.disabled = false;
+      btn.style.opacity = '1';
+    }
+
+    // SLIDE 5 门禁恢复动画
+    async function playRestoreAnimation() {
+      const btn = document.getElementById('btn-play-restore');
+      btn.disabled = true;
+      btn.style.opacity = '0.5';
+
+      const cursor = document.getElementById('cursor-restore');
+      cursor.style.display = 'block';
+      cursor.style.left = '30px'; cursor.style.top = '30px';
+      await sleep(500);
+
+      // 1. 点击“门禁恢复”页签
+      moveCursorToElement('cursor-restore', 'rest-nav-restore', 'mockup-container-restore');
+      await sleep(600); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
+      await sleep(200);
+
+      // 切换到门禁恢复面板
+      document.getElementById('rest-nav-form').classList.remove('active');
+      document.getElementById('rest-nav-restore').classList.add('active');
+      document.getElementById('rest-panel-form').style.display = 'none';
+      document.getElementById('rest-panel-restore').style.display = 'block';
+      await sleep(800);
+
+      // 2. 移动到全选复选框并点击
+      moveCursorToElement('cursor-restore', 'rest-check-all-mock', 'mockup-container-restore');
+      await sleep(600); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
+      await sleep(200);
+
+      // 全选生效，子项复选框勾选，按钮激活，数量变化
+      document.getElementById('rest-check-all-mock').checked = true;
+      document.getElementById('rest-cb-lisi').checked = true;
+      document.getElementById('rest-cb-wangwu').checked = true;
+      document.getElementById('rest-select-count-mock').textContent = '2';
+      
+      const submitBtn = document.getElementById('rest-btn-submit-mock');
+      submitBtn.disabled = false;
+      submitBtn.style.opacity = '1';
+      submitBtn.style.cursor = 'pointer';
+      await sleep(800);
+
+      // 3. 点击“恢复门禁 (恢复申请)”按钮
+      moveCursorToElement('cursor-restore', 'rest-btn-submit-mock', 'mockup-container-restore');
+      await sleep(600); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
+      await sleep(300);
+
+      // 显示成功 Toast
+      document.getElementById('toast-restore').classList.add('show');
+      await sleep(2000);
+      document.getElementById('toast-restore').classList.remove('show');
+      cursor.style.display = 'none';
+
+      await sleep(1000);
       btn.disabled = false;
       btn.style.opacity = '1';
     }
