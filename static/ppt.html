@@ -691,6 +691,16 @@
       font-size: 8px;
     }
     .mobile-client-screen::-webkit-scrollbar { display: none; }
+    
+    /* 调整第2页浏览器框，使其加大并一次展示全，无下拉条 */
+    .browser-mockup.large-browser {
+      width: 550px;
+      height: 555px;
+    }
+    .browser-mockup.large-browser .browser-screen {
+      overflow-y: hidden; /* 彻底屏蔽滚动条 */
+      padding: 10px 15px;
+    }
   </style>
 </head>
 <body>
@@ -809,8 +819,8 @@
           </button>
         </div>
         <div class="slide-right">
-          <!-- 电脑端实际画面仿真框 -->
-          <div class="browser-mockup">
+          <!-- 电脑端实际画面仿真框 (加大版，无下拉条) -->
+          <div class="browser-mockup large-browser">
             <div class="mock-cursor" id="cursor-pc"></div>
             <div class="browser-topbar">
               <div class="browser-dot red"></div>
