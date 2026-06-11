@@ -361,7 +361,8 @@
         </div>
       </div>
 
-      <button class="btn btn-primary" onclick="restartExam()">重新答题</button>
+      <button class="btn btn-primary" onclick="restartExamDirectly()">重新答题</button>
+      <button class="btn btn-secondary" onclick="restartExamWithNewSubject()" style="margin-top: 10px; background: rgba(255, 255, 255, 0.08); border: 1px solid var(--glass-border); color: var(--text-main); width: 100%;">更换科目 / 返回登录</button>
     </div>
   </div>
 
@@ -683,10 +684,42 @@
       showPanel('result-panel');
     }
 
-    // 重新答题
-    function restartExam() {
-      document.getElementById('start-form').reset();
+    // 直接以相同的姓名、单位、科目重新答题
+    async function restartExamDirectly() {
+      if (!examData.name || !examData.company || !examData.examType) {
+        restartExamWithNewSubject();
+        return;
+      }
+      
+      examData.answers = {};
+      examData.currentIndex = 0;
+      examData.startTime = Date.now();
+      examData.remainingTime = examData.timeLimit;
+      
+      try {
+        await loadQuestions(examData.examType);
+        startTimer();
+        showPanel('exam-panel');
+        document.getElementById('exam-title').textContent = `${examData.examType}安全知识考试`;
+        renderQuestion();
+        renderQuestionNav();
+      } catch (error) {
+        console.error('加载试题失败:', error);
+        alert('加载试题失败，请稍后重试');
+      }
+    }
+
+    // 返回科目选择，但自动保留和回填已填写的姓名和工作单位
+    async function restartExamWithNewSubject() {
       showPanel('start-panel');
+      if (examData.name) {
+        document.getElementById('exam-name').value = examData.name;
+      }
+      await loadCompanies();
+      if (examData.company) {
+        document.getElementById('exam-company').value = examData.company;
+      }
+      document.getElementById('exam-type').value = '';
     }
   </script>
 </body>

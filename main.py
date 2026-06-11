@@ -1621,6 +1621,17 @@ def save_exam_record(data: dict):
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         
+        # 删除同姓名、同单位、同考试科目的旧记录（级联删除详情表记录），以只保留最后一次答题记录
+        cursor.execute('''
+            SELECT id FROM exam_records 
+            WHERE name = ? AND company = ? AND exam_type = ?
+        ''', (name, company, exam_type))
+        old_records = cursor.fetchall()
+        for r in old_records:
+            old_id = r[0]
+            cursor.execute('DELETE FROM exam_details WHERE exam_record_id = ?', (old_id,))
+            cursor.execute('DELETE FROM exam_records WHERE id = ?', (old_id,))
+        
         # 插入答题记录
         cursor.execute('''
             INSERT INTO exam_records (name, company, exam_type, score, answered_count, correct_count, duration)
