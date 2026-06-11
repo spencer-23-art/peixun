@@ -118,13 +118,275 @@
       color: white;
       border-color: var(--primary-color, #4f46e5);
     }
+
+    /* 汉堡按钮 */
+    .hamburger-btn {
+      display: none;
+      background: transparent;
+      border: none;
+      color: var(--text-main);
+      cursor: pointer;
+      padding: 6px;
+      border-radius: 6px;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s;
+    }
+    .hamburger-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    /* 侧边拉栏 */
+    .admin-sidebar {
+      position: fixed;
+      top: 0;
+      left: -280px;
+      width: 280px;
+      height: 100vh;
+      background: rgba(15, 23, 42, 0.95);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-right: 1px solid var(--glass-border);
+      box-shadow: 10px 0 30px rgba(0, 0, 0, 0.5);
+      z-index: 2000;
+      display: flex;
+      flex-direction: column;
+      transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .admin-sidebar.open {
+      left: 0;
+    }
+    .sidebar-header {
+      padding: 20px;
+      border-bottom: 1px solid var(--glass-border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .sidebar-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+    .sidebar-close {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 1.5rem;
+      cursor: pointer;
+      line-height: 1;
+    }
+    .sidebar-menu {
+      flex: 1;
+      padding: 20px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      overflow-y: auto;
+    }
+    .sidebar-menu-item {
+      display: flex;
+      align-items: center;
+      padding: 12px 16px;
+      color: var(--text-muted);
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.2s ease;
+    }
+    .sidebar-menu-item:hover {
+      color: var(--text-main);
+      background: rgba(255, 255, 255, 0.05);
+    }
+    .sidebar-menu-item.active {
+      color: var(--primary-color);
+      background: rgba(79, 70, 229, 0.15);
+      border: 1px solid rgba(79, 70, 229, 0.3);
+    }
+    .sidebar-footer {
+      padding: 20px;
+      border-top: 1px solid var(--glass-border);
+      font-size: 0.85rem;
+    }
+    .sidebar-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      z-index: 1999;
+    }
+    .sidebar-overlay.open {
+      display: block;
+    }
+
+    /* 筛选面板卡片样式 */
+    .filter-card {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 20px;
+    }
+    .filter-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr auto;
+      gap: 16px;
+      align-items: flex-end;
+    }
+    .filter-item {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .filter-label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      text-align: left;
+    }
+    .filter-control {
+      height: 38px;
+      padding: 6px 12px;
+      font-size: 0.88rem;
+      margin-bottom: 0 !important;
+    }
+    /* 日期范围输入框并排 */
+    .date-inputs {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+    }
+    .date-inputs .filter-control {
+      flex: 1;
+      min-width: 0;
+    }
+    .date-sep {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+    .filter-actions-btn {
+      display: flex;
+      align-items: center;
+      height: 38px;
+    }
+    .filter-btn {
+      height: 38px;
+      padding: 0 16px;
+      font-size: 0.88rem;
+      white-space: nowrap;
+      width: auto;
+    }
+
+    .exam-filter-grid {
+      grid-template-columns: 1fr 1fr 1fr auto !important;
+    }
+
+    /* 响应式调整 */
+    @media (max-width: 1024px) {
+      .exam-filter-grid {
+        grid-template-columns: 1fr 1fr !important;
+      }
+      .filter-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+      .filter-date-range {
+        grid-column: span 2;
+      }
+      .filter-actions-btn {
+        grid-column: span 2;
+        justify-content: flex-end;
+      }
+      .filter-btn {
+        width: 100%;
+      }
+    }
+    @media (max-width: 768px) {
+      .hamburger-btn {
+        display: flex !important;
+      }
+      .header-bar {
+        padding: 12px 15px !important;
+      }
+      .header-bar .user-info {
+        display: none !important; /* 手机端隐藏，移动到侧边栏 */
+      }
+      .admin-nav {
+        display: none !important; /* 手机端隐藏顶部页签导航 */
+      }
+    }
+    @media (max-width: 576px) {
+      .filter-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+      }
+      .filter-date-range {
+        grid-column: span 1;
+      }
+      .filter-actions-btn {
+        grid-column: span 1;
+      }
+    }
   </style>
 </head>
 <body>
 
+  <!-- 侧拉栏 (仅移动端可用，通过汉堡键唤起) -->
+  <div id="admin-sidebar" class="admin-sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-title">管理菜单</div>
+      <button class="sidebar-close" onclick="toggleSidebar(false)">&times;</button>
+    </div>
+    <div class="sidebar-menu">
+      <div class="sidebar-menu-item active" id="side-nav-records" onclick="handleSidebarTab('records')">
+        <svg style="width:16px;height:16px;margin-right:8px;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h7"/></svg>
+        已录入培训数据
+      </div>
+      <div class="sidebar-menu-item" id="side-nav-pending" onclick="handleSidebarTab('pending')">
+        <svg style="width:16px;height:16px;margin-right:8px;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        注册用户管理
+      </div>
+      <div class="sidebar-menu-item" id="side-nav-restore" onclick="handleSidebarTab('restore')">
+        <svg style="width:16px;height:16px;margin-right:8px;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+        门禁恢复管理
+      </div>
+      <div class="sidebar-menu-item" id="side-nav-exam" onclick="handleSidebarTab('exam')">
+        <svg style="width:16px;height:16px;margin-right:8px;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        在线答题
+      </div>
+      <div class="sidebar-menu-item" id="side-nav-config" onclick="handleSidebarTab('config')">
+        <svg style="width:16px;height:16px;margin-right:8px;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3"/></svg>
+        系统配置
+      </div>
+    </div>
+    <div class="sidebar-footer">
+      <div style="color: var(--text-muted); margin-bottom: 8px;">当前管理员：<strong>系统管理员</strong></div>
+      <button class="btn btn-danger" style="padding: 8px; font-size: 0.85rem;" onclick="logout()">退出后台</button>
+    </div>
+  </div>
+  <!-- 侧拉栏遮罩 -->
+  <div id="sidebar-overlay" class="sidebar-overlay" onclick="toggleSidebar(false)"></div>
+
   <!-- 后台头部栏 -->
   <div class="header-bar">
-    <h2>培训信息后台管理中心</h2>
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <button class="hamburger-btn" onclick="toggleSidebar(true)">
+        <svg style="width:24px;height:24px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="3" y1="12" x2="21" y2="12"></line>
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+      </button>
+      <h2 style="margin: 0; font-size: 1.3rem;">培训信息后台管理中心</h2>
+    </div>
     <div class="user-info">
       <span>当前管理员：<strong>系统管理员</strong></span>
       <button class="btn-logout" onclick="logout()">退出后台</button>
@@ -166,25 +428,38 @@
     <!-- TAB 1: 已录入培训数据 -->
     <div class="tab-content active" id="admin-content-records">
       
-      <!-- 日期与单位区间筛选器 -->
-      <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 15px; flex-wrap: wrap;">
-        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-          <span style="font-size: 0.9rem; color: var(--text-muted);">上传日期范围：</span>
-          <input type="date" id="filter-start-date" class="form-control" style="width: auto; padding: 6px 12px; margin-bottom: 0;" onchange="handleDateFilterChange()">
-          <span style="font-size: 0.9rem; color: var(--text-muted);">至</span>
-          <input type="date" id="filter-end-date" class="form-control" style="width: auto; padding: 6px 12px; margin-bottom: 0;" onchange="handleDateFilterChange()">
+      <!-- 重新设计的精美筛选器卡片 -->
+      <div class="filter-card">
+        <div class="filter-grid">
+          <!-- 上传日期范围 -->
+          <div class="filter-item filter-date-range">
+            <label class="filter-label">上传日期范围</label>
+            <div class="date-inputs">
+              <input type="date" id="filter-start-date" class="form-control filter-control" onchange="handleDateFilterChange()">
+              <span class="date-sep">至</span>
+              <input type="date" id="filter-end-date" class="form-control filter-control" onchange="handleDateFilterChange()">
+            </div>
+          </div>
+          <!-- 工作单位 -->
+          <div class="filter-item">
+            <label class="filter-label">工作单位</label>
+            <select id="filter-company" class="form-control filter-control" onchange="handleCompanyFilterChange()">
+              <option value="">全部单位</option>
+            </select>
+          </div>
+          <!-- 姓名搜索 -->
+          <div class="filter-item">
+            <label class="filter-label">姓名搜索</label>
+            <input type="text" id="filter-name" class="form-control filter-control" placeholder="输入姓名搜索..." oninput="handleNameSearch()">
+          </div>
+          <!-- 筛选操作按钮 -->
+          <div class="filter-actions-btn">
+            <button class="btn btn-secondary filter-btn" onclick="clearDateFilter()">
+              <svg style="width:14px;height:14px;margin-right:4px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+              重置
+            </button>
+          </div>
         </div>
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <span style="font-size: 0.9rem; color: var(--text-muted);">工作单位：</span>
-          <select id="filter-company" class="form-control" style="width: auto; padding: 6px 36px 6px 12px; margin-bottom: 0; min-width: 150px;" onchange="handleCompanyFilterChange()">
-            <option value="">全部单位</option>
-          </select>
-        </div>
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <span style="font-size: 0.9rem; color: var(--text-muted);">姓名搜索：</span>
-          <input type="text" id="filter-name" class="form-control" placeholder="输入姓名搜索..." style="width: auto; padding: 6px 12px; margin-bottom: 0; min-width: 130px;" oninput="handleNameSearch()">
-        </div>
-        <button class="btn btn-secondary" style="width: auto; padding: 6px 12px;" onclick="clearDateFilter()">清除筛选</button>
       </div>
 
       <div class="table-wrapper">
@@ -252,31 +527,43 @@
 
     <!-- TAB 4: 在线答题 -->
     <div class="tab-content" id="admin-content-exam">
-      <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 15px; flex-wrap: wrap;">
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <span style="font-size: 0.9rem; color: var(--text-muted);">工作单位：</span>
-          <select id="exam-filter-company" class="form-control" style="width: auto; padding: 6px 36px 6px 12px; margin-bottom: 0; min-width: 150px;" onchange="handleExamCompanyFilterChange()">
-            <option value="">全部单位</option>
-          </select>
+      <!-- 重新设计的在线答题筛选器卡片 -->
+      <div class="filter-card">
+        <div class="filter-grid exam-filter-grid">
+          <!-- 工作单位 -->
+          <div class="filter-item">
+            <label class="filter-label">工作单位</label>
+            <select id="exam-filter-company" class="form-control filter-control" onchange="handleExamCompanyFilterChange()">
+              <option value="">全部单位</option>
+            </select>
+          </div>
+          <!-- 考试科目 -->
+          <div class="filter-item">
+            <label class="filter-label">考试科目</label>
+            <select id="exam-filter-type" class="form-control filter-control" onchange="handleExamTypeFilterChange()">
+              <option value="">全部科目</option>
+              <option value="普工">普工</option>
+              <option value="焊工">焊工</option>
+              <option value="探伤">探伤</option>
+              <option value="高处作业">高处作业</option>
+              <option value="吊装作业">吊装作业</option>
+              <option value="电工">电工</option>
+              <option value="叉车">叉车</option>
+            </select>
+          </div>
+          <!-- 姓名搜索 -->
+          <div class="filter-item">
+            <label class="filter-label">姓名搜索</label>
+            <input type="text" id="exam-filter-name" class="form-control filter-control" placeholder="输入姓名搜索..." oninput="handleExamNameSearch()">
+          </div>
+          <!-- 筛选操作按钮 -->
+          <div class="filter-actions-btn">
+            <button class="btn btn-secondary filter-btn" onclick="clearExamFilter()">
+              <svg style="width:14px;height:14px;margin-right:4px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+              重置
+            </button>
+          </div>
         </div>
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <span style="font-size: 0.9rem; color: var(--text-muted);">考试科目：</span>
-          <select id="exam-filter-type" class="form-control" style="width: auto; padding: 6px 36px 6px 12px; margin-bottom: 0; min-width: 120px;" onchange="handleExamTypeFilterChange()">
-            <option value="">全部科目</option>
-            <option value="普工">普工</option>
-            <option value="焊工">焊工</option>
-            <option value="探伤">探伤</option>
-            <option value="高处作业">高处作业</option>
-            <option value="吊装作业">吊装作业</option>
-            <option value="电工">电工</option>
-            <option value="叉车">叉车</option>
-          </select>
-        </div>
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <span style="font-size: 0.9rem; color: var(--text-muted);">姓名搜索：</span>
-          <input type="text" id="exam-filter-name" class="form-control" placeholder="输入姓名搜索..." style="width: auto; padding: 6px 12px; margin-bottom: 0; min-width: 130px;" oninput="handleExamNameSearch()">
-        </div>
-        <button class="btn btn-secondary" style="width: auto; padding: 6px 12px;" onclick="clearExamFilter()">清除筛选</button>
       </div>
 
       <div class="table-wrapper">
@@ -423,7 +710,11 @@
 
     function switchAdminTab(tab) {
       document.querySelectorAll('.admin-nav-item').forEach(function(item) { item.classList.remove('active'); });
+      document.querySelectorAll('.sidebar-menu-item').forEach(function(item) { item.classList.remove('active'); });
       document.querySelectorAll('.tab-content').forEach(function(content) { content.classList.remove('active'); });
+
+      var sideNavItem = document.getElementById('side-nav-' + tab);
+      if (sideNavItem) sideNavItem.classList.add('active');
 
       var btnExcel = document.getElementById('btn-export-excel');
       var btnGate = document.getElementById('btn-export-gate');
@@ -1707,6 +1998,26 @@
       } catch (err) {
         alert('保存配置时出现网络错误');
       }
+    }
+
+    // 侧拉栏控制函数
+    function toggleSidebar(open) {
+      const sidebar = document.getElementById('admin-sidebar');
+      const overlay = document.getElementById('sidebar-overlay');
+      if (!sidebar || !overlay) return;
+      if (open) {
+        sidebar.classList.add('open');
+        overlay.classList.add('open');
+      } else {
+        sidebar.classList.remove('open');
+        overlay.classList.remove('open');
+      }
+    }
+
+    // 侧拉栏菜单项点击函数
+    function handleSidebarTab(tab) {
+      switchAdminTab(tab);
+      toggleSidebar(false);
     }
   </script>
 </body>
