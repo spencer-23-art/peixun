@@ -462,22 +462,13 @@
           });
           console.log('工作单位加载成功，共', result.data.length, '个单位');
         } else {
-          // 如果没有数据，显示默认选项
-          select.innerHTML = `
-            <option value="">请选择工作单位</option>
-            <option value="四川华庭">四川华庭</option>
-            <option value="测试建筑工程有限公司">测试建筑工程有限公司</option>
-          `;
-          console.log('工作单位数据为空，使用默认选项');
+          // 数据为空时，仅保留提示选项，不再显示默认测试单位
+          select.innerHTML = '<option value="">请选择工作单位</option>';
+          console.log('工作单位数据为空');
         }
       } catch (error) {
         console.error('加载工作单位失败:', error);
-        // 加载失败时使用默认选项
-        select.innerHTML = `
-          <option value="">请选择工作单位</option>
-          <option value="四川华庭">四川华庭</option>
-          <option value="测试建筑工程有限公司">测试建筑工程有限公司</option>
-        `;
+        select.innerHTML = '<option value="">请选择工作单位</option>';
       }
     }
 
