@@ -76,6 +76,48 @@
       transition: opacity 0.5s ease;
       opacity: 1;
     }
+    /* 分页控件样式 */
+    .pagination-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 20px;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--glass-border);
+      border-radius: 8px;
+      margin-top: 15px;
+      font-size: 0.9rem;
+    }
+    .pagination-info {
+      color: var(--text-muted);
+    }
+    .pagination-btns {
+      display: flex;
+      gap: 5px;
+    }
+    .pagination-btn {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--glass-border);
+      color: var(--text-main);
+      padding: 4px 10px;
+      font-size: 0.85rem;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .pagination-btn:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.15);
+      border-color: rgba(255, 255, 255, 0.3);
+    }
+    .pagination-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .pagination-btn.active {
+      background: var(--primary-color, #4f46e5);
+      color: white;
+      border-color: var(--primary-color, #4f46e5);
+    }
   </style>
 </head>
 <body>
@@ -162,6 +204,8 @@
           </tbody>
         </table>
         <div id="records-no-data" class="no-data" style="display: none;">暂无已录入的培训人员信息</div>
+        <!-- 分页控制 -->
+        <div id="records-pagination" class="pagination-bar" style="display: none;"></div>
       </div>
     </div>
 
@@ -211,13 +255,13 @@
       <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 15px; flex-wrap: wrap;">
         <div style="display: flex; align-items: center; gap: 8px;">
           <span style="font-size: 0.9rem; color: var(--text-muted);">工作单位：</span>
-          <select id="exam-filter-company" class="form-control" style="width: auto; padding: 6px 36px 6px 12px; margin-bottom: 0; min-width: 150px;" onchange="loadExamRecords()">
+          <select id="exam-filter-company" class="form-control" style="width: auto; padding: 6px 36px 6px 12px; margin-bottom: 0; min-width: 150px;" onchange="handleExamCompanyFilterChange()">
             <option value="">全部单位</option>
           </select>
         </div>
         <div style="display: flex; align-items: center; gap: 8px;">
           <span style="font-size: 0.9rem; color: var(--text-muted);">考试科目：</span>
-          <select id="exam-filter-type" class="form-control" style="width: auto; padding: 6px 36px 6px 12px; margin-bottom: 0; min-width: 120px;" onchange="loadExamRecords()">
+          <select id="exam-filter-type" class="form-control" style="width: auto; padding: 6px 36px 6px 12px; margin-bottom: 0; min-width: 120px;" onchange="handleExamTypeFilterChange()">
             <option value="">全部科目</option>
             <option value="普工">普工</option>
             <option value="焊工">焊工</option>
@@ -253,6 +297,8 @@
           </tbody>
         </table>
         <div id="exam-no-data" class="no-data" style="display: none;">暂无答题记录</div>
+        <!-- 分页控制 -->
+        <div id="exam-pagination" class="pagination-bar" style="display: none;"></div>
       </div>
     </div>
     
@@ -364,6 +410,11 @@
     let filterEndDate = '';
     let filterCompany = '';
     let filterName = '';
+    
+    // 分页管理
+    let recordsPage = 1;
+    const recordsLimit = 20;
+    let recordsTotal = 0;
     
     // 跨筛选的选中记忆状态机
     let selectedRecordsMap = new Map();
@@ -672,6 +723,8 @@
           url += 'name=' + encodeURIComponent(filterName) + '&';
         }
         
+        url += 'page=' + recordsPage + '&limit=' + recordsLimit;
+        
         const response = await fetch(url, {
           headers: { 'Authorization': token }
         });
@@ -679,6 +732,7 @@
         
         if (response.ok && result.code === 200) {
           lastFilteredRecords = result.data;
+          recordsTotal = result.total || 0;
           
           // 首次加载或重新加载时，对于未下载且之前没有选中/反选历史的数据，默认加入选中集
           lastFilteredRecords.forEach(r => {
@@ -691,6 +745,7 @@
           
           // 执行渲染
           renderRecords();
+          renderRecordsPagination();
         } else {
           showAlert('error', result.detail || '加载录入信息失败');
         }
@@ -794,16 +849,62 @@
       updateCheckAllState();
     }
 
+    // 渲染录入信息的分页按钮
+    function renderRecordsPagination() {
+      const container = document.getElementById('records-pagination');
+      if (!container) return;
+      
+      const totalPages = Math.ceil(recordsTotal / recordsLimit) || 1;
+      
+      let html = `<div class="pagination-info">共 <strong>${recordsTotal}</strong> 条记录，当前第 <strong>${recordsPage}</strong> / <strong>${totalPages}</strong> 页</div>`;
+      html += `<div class="pagination-btns">`;
+      
+      // 上一页
+      html += `<button class="pagination-btn" ${recordsPage === 1 ? 'disabled' : ''} onclick="changeRecordsPage(${recordsPage - 1})">上一页</button>`;
+      
+      // 显示页码范围（最多显示5个页码）
+      let startPage = Math.max(1, recordsPage - 2);
+      let endPage = Math.min(totalPages, recordsPage + 2);
+      
+      if (startPage > 1) {
+        html += `<button class="pagination-btn" onclick="changeRecordsPage(1)">1</button>`;
+        if (startPage > 2) html += `<span style="color:var(--text-muted); padding: 0 4px;">...</span>`;
+      }
+      
+      for (let i = startPage; i <= endPage; i++) {
+        html += `<button class="pagination-btn ${i === recordsPage ? 'active' : ''}" onclick="changeRecordsPage(${i})">${i}</button>`;
+      }
+      
+      if (endPage < totalPages) {
+        if (endPage < totalPages - 1) html += `<span style="color:var(--text-muted); padding: 0 4px;">...</span>`;
+        html += `<button class="pagination-btn" onclick="changeRecordsPage(${totalPages})">${totalPages}</button>`;
+      }
+      
+      // 下一页
+      html += `<button class="pagination-btn" ${recordsPage === totalPages ? 'disabled' : ''} onclick="changeRecordsPage(${recordsPage + 1})">下一页</button>`;
+      html += `</div>`;
+      
+      container.innerHTML = html;
+      container.style.display = recordsTotal > 0 ? 'flex' : 'none';
+    }
+    
+    function changeRecordsPage(page) {
+      recordsPage = page;
+      loadRecords();
+    }
+
     // 筛选日期变化
     function handleDateFilterChange() {
       filterStartDate = document.getElementById('filter-start-date').value;
       filterEndDate = document.getElementById('filter-end-date').value;
+      recordsPage = 1;
       loadRecords();
     }
 
     // 筛选单位变化
     function handleCompanyFilterChange() {
       filterCompany = document.getElementById('filter-company').value;
+      recordsPage = 1;
       loadRecords();
     }
 
@@ -813,6 +914,7 @@
       clearTimeout(searchTimeout);
       searchTimeout = setTimeout(() => {
         filterName = document.getElementById('filter-name').value;
+        recordsPage = 1;
         loadRecords();
       }, 300);
     }
@@ -827,6 +929,7 @@
       filterEndDate = '';
       filterCompany = '';
       filterName = '';
+      recordsPage = 1;
       
       // 清空所有勾选历史状态，重新应用默认勾选
       selectedRecordsMap.clear();
@@ -1295,6 +1398,9 @@
 
     // 在线答题相关函数
     let examFilterName = '';
+    let examRecordsPage = 1;
+    const examRecordsLimit = 20;
+    let examRecordsTotal = 0;
 
     function formatDateTime(dateStr) {
       if (!dateStr) return '';
@@ -1326,6 +1432,10 @@
         if (company) params.push('company=' + encodeURIComponent(company));
         if (examType) params.push('exam_type=' + encodeURIComponent(examType));
         if (name) params.push('name=' + encodeURIComponent(name));
+        
+        params.push('page=' + examRecordsPage);
+        params.push('limit=' + examRecordsLimit);
+        
         if (params.length > 0) url += '?' + params.join('&');
         
         var response = await fetch(url, {
@@ -1334,7 +1444,9 @@
         var result = await response.json();
         
         if (response.ok && result.code === 200) {
+          examRecordsTotal = result.total || 0;
           renderExamRecords(result.data);
+          renderExamPagination();
         } else {
           showAlert('error', result.message || '加载答题记录失败');
           if (debugDiv) { debugDiv.style.display = 'block'; debugDiv.innerText = '加载答题记录失败'; }
@@ -1395,6 +1507,60 @@
       }).join('');
     }
 
+    // 渲染考试记录的分页按钮
+    function renderExamPagination() {
+      const container = document.getElementById('exam-pagination');
+      if (!container) return;
+      
+      const totalPages = Math.ceil(examRecordsTotal / examRecordsLimit) || 1;
+      
+      let html = `<div class="pagination-info">共 <strong>${examRecordsTotal}</strong> 条记录，当前第 <strong>${examRecordsPage}</strong> / <strong>${totalPages}</strong> 页</div>`;
+      html += `<div class="pagination-btns">`;
+      
+      // 上一页
+      html += `<button class="pagination-btn" ${examRecordsPage === 1 ? 'disabled' : ''} onclick="changeExamPage(${examRecordsPage - 1})">上一页</button>`;
+      
+      // 显示页码范围（最多显示5个页码）
+      let startPage = Math.max(1, examRecordsPage - 2);
+      let endPage = Math.min(totalPages, examRecordsPage + 2);
+      
+      if (startPage > 1) {
+        html += `<button class="pagination-btn" onclick="changeExamPage(1)">1</button>`;
+        if (startPage > 2) html += `<span style="color:var(--text-muted); padding: 0 4px;">...</span>`;
+      }
+      
+      for (let i = startPage; i <= endPage; i++) {
+        html += `<button class="pagination-btn ${i === examRecordsPage ? 'active' : ''}" onclick="changeExamPage(${i})">${i}</button>`;
+      }
+      
+      if (endPage < totalPages) {
+        if (endPage < totalPages - 1) html += `<span style="color:var(--text-muted); padding: 0 4px;">...</span>`;
+        html += `<button class="pagination-btn" onclick="changeExamPage(${totalPages})">${totalPages}</button>`;
+      }
+      
+      // 下一页
+      html += `<button class="pagination-btn" ${examRecordsPage === totalPages ? 'disabled' : ''} onclick="changeExamPage(${examRecordsPage + 1})">下一页</button>`;
+      html += `</div>`;
+      
+      container.innerHTML = html;
+      container.style.display = examRecordsTotal > 0 ? 'flex' : 'none';
+    }
+    
+    function changeExamPage(page) {
+      examRecordsPage = page;
+      loadExamRecords();
+    }
+
+    function handleExamCompanyFilterChange() {
+      examRecordsPage = 1;
+      loadExamRecords();
+    }
+
+    function handleExamTypeFilterChange() {
+      examRecordsPage = 1;
+      loadExamRecords();
+    }
+
     async function loadExamCompanyOptions() {
       try {
         var response = await fetch('/api/companies', {
@@ -1420,6 +1586,7 @@
 
     function handleExamNameSearch() {
       examFilterName = document.getElementById('exam-filter-name').value.trim();
+      examRecordsPage = 1;
       loadExamRecords();
     }
 
@@ -1428,6 +1595,7 @@
       document.getElementById('exam-filter-type').value = '';
       document.getElementById('exam-filter-name').value = '';
       examFilterName = '';
+      examRecordsPage = 1;
       loadExamRecords();
     }
 

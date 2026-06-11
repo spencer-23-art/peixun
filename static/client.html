@@ -60,13 +60,6 @@
       color: var(--primary-color);
     }
 
-    @media (max-width: 600px) {
-      .form-grid {
-        grid-template-columns: 1fr 1fr;
-        gap: 10px;
-      }
-    }
-
     /* 覆盖原照片位样式，使其为竖向 3:4 比例，且显示完整 */
     .photo-uploader {
       width: 180px;
@@ -99,81 +92,172 @@
       color: var(--primary-color);
       border-bottom-color: var(--primary-color);
     }
-    /* 优化表格在小屏幕下集中紧凑显示，彻底消除水平滚动条 */
+
+    /* 移动端专有优化：彻底改用现代卡片式流布局 */
     @media (max-width: 768px) {
-      .table-wrapper {
-        overflow-x: hidden !important;
-      }
-      .table-wrapper table {
-        width: 100% !important;
-        table-layout: fixed !important;
-        min-width: unset !important;
-      }
-      .table-wrapper th, .table-wrapper td {
-        padding: 5px 3px !important;
-        font-size: 0.72rem !important;
-        word-break: break-all !important;
-        white-space: normal !important;
-      }
-      .table-wrapper td div {
-        margin-top: 1px !important;
-      }
-      .table-img {
-        width: 32px !important;
-        height: 40px !important;
-      }
-      
-      /* 历史记录表格移动端列宽限制 */
-      #tab-content-history th:nth-child(1),
-      #tab-content-history td:nth-child(1) {
-        width: 38px !important;
-      }
-      #tab-content-history th:nth-child(2),
-      #tab-content-history td:nth-child(2) {
-        width: auto !important;
-      }
-      #tab-content-history th:nth-child(3),
-      #tab-content-history td:nth-child(3) {
-        width: 100px !important;
-      }
-      #tab-content-history th:nth-child(4),
-      #tab-content-history td:nth-child(4) {
-        width: 70px !important;
-        text-align: center !important;
-      }
-      #tab-content-history th:nth-child(5),
-      #tab-content-history td:nth-child(5) {
-        width: 45px !important;
-      }
-      #tab-content-history .btn-success {
-        padding: 4px 6px !important;
-        font-size: 0.7rem !important;
+      /* 表单网格在小屏幕下强制单列展示，极大扩宽输入视野 */
+      .form-grid {
+        grid-template-columns: 1fr !important;
+        gap: 12px !important;
       }
 
-      /* 门禁恢复表格移动端列宽限制 */
-      #tab-content-restore th:nth-child(1),
-      #tab-content-restore td:nth-child(1) {
-        width: 25px !important;
+      /* 头部个人信息条移动端自适应折行与留白调整 */
+      .user-info-bar {
+        flex-direction: column;
+        gap: 10px;
+        align-items: stretch;
+        text-align: center;
+        padding: 15px;
       }
-      #tab-content-restore th:nth-child(2),
-      #tab-content-restore td:nth-child(2) {
-        width: 38px !important;
+      .user-info-bar div {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        font-size: 0.85rem;
       }
-      #tab-content-restore th:nth-child(3),
-      #tab-content-restore td:nth-child(3) {
+      .user-info-bar div span {
+        display: inline-block;
+      }
+      .user-info-bar div strong {
+        color: var(--text-main);
+      }
+      .user-info-bar .btn-logout {
+        width: 100%;
+        padding: 8px;
+        font-size: 0.9rem;
+      }
+
+      /* 移动端导航标签平分宽度，更加显眼 */
+      .admin-nav {
+        justify-content: space-around;
+        gap: 0;
+      }
+      .admin-nav-item {
+        padding: 10px 0;
+        flex: 1;
+        text-align: center;
+        font-size: 0.9rem;
+      }
+
+      /* 移动端搜索栏纵向堆叠并拉满 */
+      #tab-content-history > .glass-container > div[style*="display: flex"],
+      #tab-content-restore > .glass-container > div[style*="display: flex"] {
+        flex-direction: column;
+        align-items: stretch !important;
+        gap: 8px !important;
+      }
+      #history-search-name, #restore-search-name {
+        width: 100% !important;
+        box-sizing: border-box;
+      }
+      #tab-content-history button, #tab-content-restore button {
+        width: 100% !important;
+      }
+
+      /* 彻底隐藏表格头部 */
+      .table-wrapper table thead {
+        display: none !important;
+      }
+
+      /* 消除表格的横向滚动，转换为卡片布局 */
+      .table-wrapper {
+        overflow-x: visible !important;
+        border: none !important;
+        background: transparent !important;
+      }
+      .table-wrapper table {
+        display: block !important;
+        width: 100% !important;
+        border: none !important;
+      }
+      .table-wrapper tbody {
+        display: flex !important;
+        flex-direction: column;
+        gap: 15px;
+      }
+      .table-wrapper tr {
+        display: block !important;
+        background: rgba(255, 255, 255, 0.02) !important;
+        border: 1px solid var(--glass-border) !important;
+        border-radius: 12px !important;
+        padding: 16px !important;
+        margin-bottom: 0 !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        position: relative !important;
+        overflow: hidden;
+      }
+      .table-wrapper tr.downloaded-row {
+        opacity: 0.65;
+        background: rgba(255, 255, 255, 0.01) !important;
+      }
+      .table-wrapper td {
+        display: block !important;
+        border: none !important;
+        padding: 4px 0 !important;
+        text-align: left !important;
+        white-space: normal !important;
+        font-size: 0.85rem !important;
+        width: 100% !important;
+      }
+
+      /* 卡片式结构定制：第一列/第二列照片绝对定位到卡片右上角 */
+      #history-table-body td:nth-child(1),
+      #restore-table-body td:nth-child(2) {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        width: 50px !important;
+        height: 66px !important;
+        padding: 0 !important;
+      }
+      .table-img {
+        width: 50px !important;
+        height: 66px !important;
+        border-radius: 4px;
+        border: 1px solid var(--glass-border);
+      }
+
+      /* 卡片式结构定制：文字信息列在右侧留白，防止遮挡 */
+      #history-table-body td:nth-child(2),
+      #restore-table-body td:nth-child(3) {
+        padding-right: 66px !important;
+      }
+
+      /* 门禁恢复列表下的复选框单独成为一行，并放大尺寸 */
+      #restore-table-body td:nth-child(1) {
+        display: inline-block !important;
         width: auto !important;
-      }
-      #tab-content-restore th:nth-child(4),
-      #tab-content-restore td:nth-child(4) {
-        width: 110px !important;
-      }
-      #tab-content-restore th:nth-child(5),
-      #tab-content-restore td:nth-child(5) {
-        width: 55px !important;
+        margin-bottom: 8px;
+        padding: 0 !important;
       }
       .restore-checkbox {
-        width: 14px !important;
-        height: 14px !important;
+        width: 20px !important;
+        height: 20px !important;
+      }
+
+      /* 历史记录修改按钮定制为卡片底部大按钮 */
+      #history-table-body td:nth-child(5) {
+        margin-top: 12px;
+        border-top: 1px solid rgba(255, 255, 255, 0.05) !important;
+        padding-top: 10px !important;
+      }
+      #history-table-body .btn-success {
+        width: 100% !important;
+        padding: 8px !important;
+        font-size: 0.85rem !important;
+      }
+
+      /* 门禁恢复底部提交条在手机上纵向堆叠并拉伸 */
+      #tab-content-restore > .glass-container > div[style*="margin-top: 20px"] {
+        flex-direction: column;
+        align-items: stretch !important;
+        gap: 12px;
+        margin-top: 15px !important;
+      }
+      #btn-submit-restore {
+        width: 100% !important;
+        padding: 10px !important;
+        font-size: 0.95rem !important;
       }
     }
 

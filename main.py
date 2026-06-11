@@ -17,6 +17,53 @@ import zipfile
 DB_PATH = 'peixun.db'
 UPLOAD_DIR = 'uploads'
 
+# 考试题库内存缓存，结构: { exam_type: { "mtime": 12345, "answers": { ... } } }
+EXAM_QUESTIONS_CACHE = {}
+
+def get_exam_questions_answers(exam_type: str) -> dict:
+    EXAM_FILE_MAP = {
+        '普工': '普工试题(1).xlsx',
+        '焊工': '焊工题库(1).xlsx',
+        '探伤': '探伤.xlsx',
+        '高处作业': '高处作业(1).xlsx',
+        '吊装作业': '吊装作业.xlsx',
+        '电工': '电工题库.xlsx',
+        '叉车': '叉车工.xlsx'
+    }
+    file_name = EXAM_FILE_MAP.get(exam_type)
+    if not file_name:
+        raise HTTPException(status_code=400, detail="未知的考试类型")
+        
+    file_path = os.path.join('shiti', file_name)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="题库文件不存在")
+        
+    mtime = os.path.getmtime(file_path)
+    
+    if exam_type in EXAM_QUESTIONS_CACHE:
+        cache_data = EXAM_QUESTIONS_CACHE[exam_type]
+        if cache_data.get('mtime') == mtime:
+            return cache_data.get('answers')
+            
+    wb = openpyxl.load_workbook(file_path, read_only=True) # 使用 read_only 加速解析
+    ws = wb.active
+    shiti_answers = {}
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        if len(row) >= 4 and row[1] and row[3]:
+            question_text = str(row[1]).strip()
+            ans = str(row[3]).strip()
+            if ans in ['对', '正确', '√', 'T', 'True']:
+                ans = '对'
+            elif ans in ['错', '错误', '×', 'F', 'False']:
+                ans = '错'
+            shiti_answers[question_text] = ans
+            
+    EXAM_QUESTIONS_CACHE[exam_type] = {
+        'mtime': mtime,
+        'answers': shiti_answers
+    }
+    return shiti_answers
+
 SECRET_KEY = b"PEIXUN_SYSTEM_SECRET_SIGNING_KEY_2026"
 
 def encrypt_pwd(raw_pwd: str) -> str:
@@ -96,6 +143,9 @@ def init_db():
         
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
+    
+    # 开启 WAL 模式以提升并发读写性能
+    cursor.execute("PRAGMA journal_mode=WAL;")
     
     # 用户表
     cursor.execute('''
@@ -197,6 +247,14 @@ def init_db():
     cursor.execute("INSERT OR IGNORE INTO configs (key, value) VALUES ('exam_start_time', '08:00:00')")
     cursor.execute("INSERT OR IGNORE INTO configs (key, value) VALUES ('exam_end_time', '12:00:00')")
         
+    # 建立索引以优化检索和排序性能
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_records_name ON records (name)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_records_created_at ON records (created_at)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_exam_records_created_at ON exam_records (created_at)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_exam_records_name ON exam_records (name)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_exam_records_company ON exam_records (company)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_users_company ON users (company)")
+    
     conn.commit()
     conn.close()
 
@@ -713,7 +771,7 @@ def get_companies():
 
 # 查看所有已录入的信息（仅管理员，支持按日期区间筛选、工作单位筛选和门禁下载状态排序）
 @app.get("/api/admin/records")
-def get_all_records(start_date: str = None, end_date: str = None, company: str = None, name: str = None, admin = Depends(get_admin_user)):
+def get_all_records(start_date: str = None, end_date: str = None, company: str = None, name: str = None, page: int = 1, limit: int = 20, admin = Depends(get_admin_user)):
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
@@ -752,18 +810,46 @@ def get_all_records(start_date: str = None, end_date: str = None, company: str =
     if conditions:
         where_clause = "WHERE " + " AND ".join(conditions)
         
-    query = f'''
-    SELECT r.*, u.company as company, u.real_name as recorder_name
-    FROM records r 
-    LEFT JOIN users u ON r.user_id = u.id 
-    {where_clause}
-    ORDER BY r.is_gate_downloaded ASC, r.created_at DESC
-    '''
-    
-    cursor.execute(query, params)
+    total = 0
+    if limit > 0:
+        count_query = f'''
+        SELECT COUNT(*) 
+        FROM records r 
+        LEFT JOIN users u ON r.user_id = u.id 
+        {where_clause}
+        '''
+        cursor.execute(count_query, params)
+        total = cursor.fetchone()[0]
+        
+        query = f'''
+        SELECT r.*, u.company as company, u.real_name as recorder_name
+        FROM records r 
+        LEFT JOIN users u ON r.user_id = u.id 
+        {where_clause}
+        ORDER BY r.is_gate_downloaded ASC, r.created_at DESC
+        LIMIT ? OFFSET ?
+        '''
+        offset = (page - 1) * limit
+        cursor.execute(query, params + [limit, offset])
+    else:
+        query = f'''
+        SELECT r.*, u.company as company, u.real_name as recorder_name
+        FROM records r 
+        LEFT JOIN users u ON r.user_id = u.id 
+        {where_clause}
+        ORDER BY r.is_gate_downloaded ASC, r.created_at DESC
+        '''
+        cursor.execute(query, params)
+        
     records = [dict(row) for row in cursor.fetchall()]
     conn.close()
-    return {"code": 200, "data": records}
+    return {
+        "code": 200, 
+        "data": records,
+        "total": total if limit > 0 else len(records),
+        "page": page,
+        "limit": limit
+    }
 
 # 门禁导出 - 仅 CSV 导入表 (并更新已下载状态)
 @app.get("/api/admin/export/gate/csv")
@@ -1583,37 +1669,8 @@ def save_exam_record(data: dict):
         if not name or not company or not exam_type:
             raise HTTPException(status_code=400, detail="缺少必要信息")
             
-        EXAM_FILE_MAP = {
-            '普工': '普工试题(1).xlsx',
-            '焊工': '焊工题库(1).xlsx',
-            '探伤': '探伤.xlsx',
-            '高处作业': '高处作业(1).xlsx',
-            '吊装作业': '吊装作业.xlsx',
-            '电工': '电工题库.xlsx',
-            '叉车': '叉车工.xlsx'
-        }
-        
-        file_name = EXAM_FILE_MAP.get(exam_type)
-        if not file_name:
-            raise HTTPException(status_code=400, detail="未知的考试类型")
-            
-        file_path = os.path.join('shiti', file_name)
-        if not os.path.exists(file_path):
-            raise HTTPException(status_code=404, detail="题库文件不存在")
-            
-        # 1. 在后端重新加载正确答案，确保防作弊安全性
-        wb = openpyxl.load_workbook(file_path)
-        ws = wb.active
-        shiti_answers = {}
-        for row in ws.iter_rows(min_row=2, values_only=True):
-            if len(row) >= 4 and row[1] and row[3]:
-                question_text = str(row[1]).strip()
-                ans = str(row[3]).strip()
-                if ans in ['对', '正确', '√', 'T', 'True']:
-                    ans = '对'
-                elif ans in ['错', '错误', '×', 'F', 'False']:
-                    ans = '错'
-                shiti_answers[question_text] = ans
+        # 1. 在后端重新加载正确答案，确保防作弊安全性（使用缓存优化）
+        shiti_answers = get_exam_questions_answers(exam_type)
                 
         # 2. 对比计分
         correct_count = 0
@@ -1687,28 +1744,39 @@ def save_exam_record(data: dict):
 # 获取答题记录列表（管理员权限）
 @app.get("/api/admin/exam_records")
 def get_exam_records(company: str = '', exam_type: str = '', name: str = '', 
+                     page: int = 1, limit: int = 20,
                      current_user = Depends(get_admin_user)):
     try:
         conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         
-        query = "SELECT * FROM exam_records WHERE 1=1"
+        base_query = "FROM exam_records WHERE 1=1"
         params = []
         
         if company:
-            query += " AND company LIKE ?"
+            base_query += " AND company LIKE ?"
             params.append(f"%{company}%")
         if exam_type:
-            query += " AND exam_type = ?"
+            base_query += " AND exam_type = ?"
             params.append(exam_type)
         if name:
-            query += " AND name LIKE ?"
+            base_query += " AND name LIKE ?"
             params.append(f"%{name}%")
-        
-        query += " ORDER BY created_at DESC"
-        
-        cursor.execute(query, params)
+            
+        total = 0
+        if limit > 0:
+            count_query = f"SELECT COUNT(*) {base_query}"
+            cursor.execute(count_query, params)
+            total = cursor.fetchone()[0]
+            
+            query = f"SELECT * {base_query} ORDER BY created_at DESC LIMIT ? OFFSET ?"
+            offset = (page - 1) * limit
+            cursor.execute(query, params + [limit, offset])
+        else:
+            query = f"SELECT * {base_query} ORDER BY created_at DESC"
+            cursor.execute(query, params)
+            
         records = cursor.fetchall()
         
         result = []
@@ -1727,7 +1795,13 @@ def get_exam_records(company: str = '', exam_type: str = '', name: str = '',
         
         conn.close()
         
-        return {"code": 200, "data": result}
+        return {
+            "code": 200, 
+            "data": result,
+            "total": total if limit > 0 else len(result),
+            "page": page,
+            "limit": limit
+        }
     except Exception as e:
         print(f"获取答题记录失败: {e}")
         raise HTTPException(status_code=500, detail="获取答题记录失败")
