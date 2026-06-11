@@ -982,7 +982,7 @@
                     </div>
                     <div class="mock-form-group" style="margin-bottom: 4px;">
                       <label>民族 *</label>
-                      <input type="text" id="mob-mock-nation" class="mock-input" style="padding:4px; font-size:8px;" value="汉族" readonly>
+                      <input type="text" id="mob-mock-nation" class="mock-input" style="padding:4px; font-size:8px;" placeholder="点击选择民族" readonly>
                     </div>
                     <div class="mock-form-group" style="margin-bottom: 4px;">
                       <label>身份证号 *</label>
@@ -998,11 +998,11 @@
                     </div>
                     <div class="mock-form-group" style="margin-bottom: 4px;">
                       <label>岗位/工种 *</label>
-                      <input type="text" id="mob-mock-job" class="mock-input" style="padding:4px; font-size:8px;" value="电工" readonly>
+                      <input type="text" id="mob-mock-job" class="mock-input" style="padding:4px; font-size:8px;" placeholder="点击选择工种" readonly>
                     </div>
                     <div class="mock-form-group" style="margin-bottom: 4px;">
                       <label>学历 *</label>
-                      <input type="text" id="mob-mock-edu" class="mock-input" style="padding:4px; font-size:8px;" value="大专" readonly>
+                      <input type="text" id="mob-mock-edu" class="mock-input" style="padding:4px; font-size:8px;" placeholder="点击选择学历" readonly>
                     </div>
                   </div>
 
@@ -1182,9 +1182,12 @@
 
       // 3. 手机端录入页重置
       document.getElementById('mob-mock-name').value = '';
+      document.getElementById('mob-mock-nation').value = '';
       document.getElementById('mob-mock-idcard').value = '';
       document.getElementById('mob-mock-phone').value = '';
       document.getElementById('mob-mock-address').value = '';
+      document.getElementById('mob-mock-job').value = '';
+      document.getElementById('mob-mock-edu').value = '';
       document.getElementById('preview-mobile').style.display = 'none';
       document.getElementById('uploader-mobile').querySelector('svg').style.display = 'block';
       document.getElementById('uploader-mobile').querySelector('p').style.display = 'block';
@@ -1352,25 +1355,43 @@
       await sleep(200);
       await typeInput('mob-mock-name', '王五', 150);
 
-      // 3. 身份证号
+      // 3. 选择民族
+      moveCursorToElement('cursor-mobile', 'mob-mock-nation', 'mockup-container-mobile');
+      await sleep(500); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
+      await sleep(200);
+      document.getElementById('mob-mock-nation').value = '汉族';
+
+      // 4. 身份证号
       moveCursorToElement('cursor-mobile', 'mob-mock-idcard', 'mockup-container-mobile');
       await sleep(500); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
       await sleep(200);
       await typeInput('mob-mock-idcard', '110101199505051234', 80);
 
-      // 4. 联系电话
+      // 5. 联系电话
       moveCursorToElement('cursor-mobile', 'mob-mock-phone', 'mockup-container-mobile');
       await sleep(500); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
       await sleep(200);
       await typeInput('mob-mock-phone', '13500001111', 80);
 
-      // 5. 常住地址
+      // 6. 常住地址
       moveCursorToElement('cursor-mobile', 'mob-mock-address', 'mockup-container-mobile');
       await sleep(500); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
       await sleep(200);
       await typeInput('mob-mock-address', '心连心生活区', 100);
 
-      // 6. 确认提交信息
+      // 7. 选择岗位/工种
+      moveCursorToElement('cursor-mobile', 'mob-mock-job', 'mockup-container-mobile');
+      await sleep(500); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
+      await sleep(200);
+      document.getElementById('mob-mock-job').value = '电工';
+
+      // 8. 选择学历
+      moveCursorToElement('cursor-mobile', 'mob-mock-edu', 'mockup-container-mobile');
+      await sleep(500); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
+      await sleep(200);
+      document.getElementById('mob-mock-edu').value = '大专';
+
+      // 9. 确认提交信息
       moveCursorToElement('cursor-mobile', 'mob-mock-submit', 'mockup-container-mobile');
       await sleep(600); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
 
