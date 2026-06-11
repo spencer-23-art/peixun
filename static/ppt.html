@@ -487,6 +487,7 @@
 
     /* ----------------- 电脑端浏览器仿真框 (按照实际client.html呈现) ----------------- */
     .browser-mockup {
+      position: relative;
       width: 530px;
       height: 460px;
       background: #1f2937;
@@ -747,7 +748,7 @@
         </div>
         <div class="slide-right">
           <!-- 手机模拟器 -->
-          <div class="device-mockup">
+          <div class="device-mockup" id="mockup-container-reg">
             <div class="mock-cursor" id="cursor-reg"></div>
             <div class="mock-screen">
               <div class="mock-toast" id="toast-reg">注册申请提交成功！请联系管理员审核。</div>
@@ -820,7 +821,7 @@
         </div>
         <div class="slide-right">
           <!-- 电脑端实际画面仿真框 (加大版，无下拉条) -->
-          <div class="browser-mockup large-browser">
+          <div class="browser-mockup large-browser" id="mockup-container-pc">
             <div class="mock-cursor" id="cursor-pc"></div>
             <div class="browser-topbar">
               <div class="browser-dot red"></div>
@@ -932,7 +933,7 @@
         </div>
         <div class="slide-right">
           <!-- 手机仿真框 (加大版，一次展示全) -->
-          <div class="device-mockup large-mobile">
+          <div class="device-mockup large-mobile" id="mockup-container-mobile">
             <div class="mock-cursor" id="cursor-mobile"></div>
             
             <div class="mock-screen" style="padding: 22px 0 0 0;">
@@ -1107,6 +1108,26 @@
     // ----------------- 仿真演示动画逻辑 -----------------
     const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
+    // 使用物理盒模型动态计算相对容器的绝对定位，并扣除边框(border)造成的偏移，实现 100% 物理精准对准
+    function moveCursorToElement(cursorId, targetId, containerId) {
+      const cursor = document.getElementById(cursorId);
+      const target = document.getElementById(targetId);
+      const container = document.getElementById(containerId);
+      if (!cursor || !target || !container) return;
+      const containerRect = container.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      
+      // 动态获取容器的边框宽度以消除 border 造成的定位偏移量
+      const style = window.getComputedStyle(container);
+      const borderLeft = parseInt(style.borderLeftWidth) || 0;
+      const borderTop = parseInt(style.borderTopWidth) || 0;
+      
+      const leftOffset = targetRect.left - containerRect.left - borderLeft + (targetRect.width / 2);
+      const topOffset = targetRect.top - containerRect.top - borderTop + (targetRect.height / 2);
+      cursor.style.left = leftOffset + 'px';
+      cursor.style.top = topOffset + 'px';
+    }
+
     async function typeInput(elementId, text, delay = 100) {
       const el = document.getElementById(elementId);
       el.value = '';
@@ -1182,30 +1203,29 @@
       const cursor = document.getElementById('cursor-reg');
       const kbd = document.getElementById('kbd-reg');
       cursor.style.display = 'block';
-      cursor.style.left = '20%';
-      cursor.style.top = '10%';
+      cursor.style.left = '30px'; cursor.style.top = '60px';
       await sleep(500);
 
       // 输入姓名
-      cursor.style.left = '45%'; cursor.style.top = '20%';
+      moveCursorToElement('cursor-reg', 'reg-mock-name', 'mockup-container-reg');
       await sleep(400); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
       kbd.classList.add('show'); await sleep(300);
       await typeInput('reg-mock-name', '张三', 150);
 
       // 输入电话
-      cursor.style.left = '45%'; cursor.style.top = '27%';
+      moveCursorToElement('cursor-reg', 'reg-mock-phone', 'mockup-container-reg');
       await sleep(400); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
       await sleep(200);
       await typeInput('reg-mock-phone', '13800138000', 80);
 
       // 输入单位 (iOS无黏滞测试)
-      cursor.style.left = '45%'; cursor.style.top = '34%';
+      moveCursorToElement('cursor-reg', 'reg-mock-company', 'mockup-container-reg');
       await sleep(400); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
       await sleep(200);
       await typeInput('reg-mock-company', '心连心化学工业集团', 120);
 
       // 输入密码
-      cursor.style.left = '45%'; cursor.style.top = '41%';
+      moveCursorToElement('cursor-reg', 'reg-mock-pwd', 'mockup-container-reg');
       await sleep(400); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
       await sleep(200);
       await typeInput('reg-mock-pwd', '123456', 80);
@@ -1213,7 +1233,7 @@
       kbd.classList.remove('show'); await sleep(300);
 
       // 提交
-      cursor.style.left = '50%'; cursor.style.top = '48%';
+      moveCursorToElement('cursor-reg', 'reg-mock-btn', 'mockup-container-reg');
       await sleep(400); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
 
       const submitBtn = document.getElementById('reg-mock-btn');
@@ -1241,11 +1261,11 @@
 
       const cursor = document.getElementById('cursor-pc');
       cursor.style.display = 'block';
-      cursor.style.left = '10%'; cursor.style.top = '10%';
+      cursor.style.left = '30px'; cursor.style.top = '30px';
       await sleep(500);
 
       // 1. 上传电子照片
-      cursor.style.left = '50%'; cursor.style.top = '37%';
+      moveCursorToElement('cursor-pc', 'uploader-pc', 'mockup-container-pc');
       await sleep(500); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
       await sleep(400);
       document.getElementById('uploader-pc').querySelector('svg').style.display = 'none';
@@ -1253,49 +1273,49 @@
       document.getElementById('preview-pc').style.display = 'block';
 
       // 2. 输入姓名
-      cursor.style.left = '32%'; cursor.style.top = '65.5%';
+      moveCursorToElement('cursor-pc', 'pc-mock-name', 'mockup-container-pc');
       await sleep(500); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
       await sleep(200);
       await typeInput('pc-mock-name', '李四', 150);
 
       // 3. 选择民族
-      cursor.style.left = '68%'; cursor.style.top = '65.5%';
+      moveCursorToElement('cursor-pc', 'pc-mock-nation', 'mockup-container-pc');
       await sleep(500); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
       await sleep(200);
       document.getElementById('pc-mock-nation').value = '汉族';
 
       // 4. 输入身份证号
-      cursor.style.left = '32%'; cursor.style.top = '73.5%';
+      moveCursorToElement('cursor-pc', 'pc-mock-idcard', 'mockup-container-pc');
       await sleep(500); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
       await sleep(200);
       await typeInput('pc-mock-idcard', '110101199003072314', 80);
 
       // 5. 输入电话
-      cursor.style.left = '68%'; cursor.style.top = '73.5%';
+      moveCursorToElement('cursor-pc', 'pc-mock-phone', 'mockup-container-pc');
       await sleep(500); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
       await sleep(200);
       await typeInput('pc-mock-phone', '13988889999', 80);
 
       // 6. 输入地址
-      cursor.style.left = '32%'; cursor.style.top = '81.5%';
+      moveCursorToElement('cursor-pc', 'pc-mock-address', 'mockup-container-pc');
       await sleep(500); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
       await sleep(200);
       await typeInput('pc-mock-address', '心连心生活区', 100);
 
       // 7. 选择工种
-      cursor.style.left = '68%'; cursor.style.top = '81.5%';
+      moveCursorToElement('cursor-pc', 'pc-mock-job', 'mockup-container-pc');
       await sleep(500); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
       await sleep(200);
       document.getElementById('pc-mock-job').value = '安全员';
 
       // 8. 选择学历
-      cursor.style.left = '68%'; cursor.style.top = '89.5%';
+      moveCursorToElement('cursor-pc', 'pc-mock-edu', 'mockup-container-pc');
       await sleep(500); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
       await sleep(200);
       document.getElementById('pc-mock-edu').value = '本科';
 
       // 9. 确认提交信息
-      cursor.style.left = '50%'; cursor.style.top = '96%';
+      moveCursorToElement('cursor-pc', 'pc-mock-submit', 'mockup-container-pc');
       await sleep(600); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
 
       document.getElementById('toast-pc').classList.add('show');
@@ -1315,11 +1335,11 @@
 
       const cursor = document.getElementById('cursor-mobile');
       cursor.style.display = 'block';
-      cursor.style.left = '20%'; cursor.style.top = '15%';
+      cursor.style.left = '30px'; cursor.style.top = '30px';
       await sleep(500);
 
       // 1. 选择照片上传/拍照
-      cursor.style.left = '50%'; cursor.style.top = '34.5%';
+      moveCursorToElement('cursor-mobile', 'uploader-mobile', 'mockup-container-mobile');
       await sleep(500); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
       await sleep(400);
       document.getElementById('uploader-mobile').querySelector('svg').style.display = 'none';
@@ -1327,31 +1347,31 @@
       document.getElementById('preview-mobile').style.display = 'block';
 
       // 2. 姓名
-      cursor.style.left = '32%'; cursor.style.top = '50.5%';
+      moveCursorToElement('cursor-mobile', 'mob-mock-name', 'mockup-container-mobile');
       await sleep(500); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
       await sleep(200);
       await typeInput('mob-mock-name', '王五', 150);
 
       // 3. 身份证号
-      cursor.style.left = '32%'; cursor.style.top = '59.5%';
+      moveCursorToElement('cursor-mobile', 'mob-mock-idcard', 'mockup-container-mobile');
       await sleep(500); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
       await sleep(200);
       await typeInput('mob-mock-idcard', '110101199505051234', 80);
 
       // 4. 联系电话
-      cursor.style.left = '68%'; cursor.style.top = '59.5%';
+      moveCursorToElement('cursor-mobile', 'mob-mock-phone', 'mockup-container-mobile');
       await sleep(500); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
       await sleep(200);
       await typeInput('mob-mock-phone', '13500001111', 80);
 
       // 5. 常住地址
-      cursor.style.left = '32%'; cursor.style.top = '68.5%';
+      moveCursorToElement('cursor-mobile', 'mob-mock-address', 'mockup-container-mobile');
       await sleep(500); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
       await sleep(200);
       await typeInput('mob-mock-address', '心连心生活区', 100);
 
       // 6. 确认提交信息
-      cursor.style.left = '50%'; cursor.style.top = '88.5%';
+      moveCursorToElement('cursor-mobile', 'mob-mock-submit', 'mockup-container-mobile');
       await sleep(600); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
 
       document.getElementById('toast-mobile').classList.add('show');
