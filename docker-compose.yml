@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  peixun-app:
+    build: .
+    container_name: peixun-service
+    ports:
+      - "8000:8000" # 冒号左边为宿主机外部端口，若 8000 被旧项目占用，可改为其他空闲端口（如 8080:8000）
+    volumes:
+      - ./uploads:/app/uploads # 挂载图片目录，容器升级重建不丢失照片
+      # 注意：如果需要将 SQLite 数据库文件也挂载出来：
+      # 请先在宿主机根目录下执行 `touch peixun.db` 创建空文件，然后取消下行注释，否则 Docker 会误将其当成文件夹挂载导致报错。
+      # - ./peixun.db:/app/peixun.db
+    restart: always
