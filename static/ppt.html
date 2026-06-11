@@ -1308,8 +1308,8 @@
                 
                 <!-- 搜索条 -->
                 <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px;">
-                  <input type="text" class="mock-input" placeholder="输入姓名搜索同单位员工..." style="width: 140px; padding: 4px 6px; font-size: 8px;" readonly>
-                  <button class="mock-btn" style="width: auto; padding: 4px 8px; margin: 0; background: #4b5563; font-size: 7px;">清除</button>
+                  <input type="text" id="rest-mock-search" class="mock-input" placeholder="输入姓名搜索同单位员工..." style="width: 140px; padding: 4px 6px; font-size: 8px;" readonly>
+                  <button class="mock-btn" id="rest-mock-clear-btn" style="width: auto; padding: 4px 8px; margin: 0; background: #4b5563; font-size: 7px;">清除</button>
                 </div>
 
                 <!-- 仿真表格 -->
@@ -1327,7 +1327,7 @@
                   </thead>
                   <tbody>
                     <!-- 行一：李四 -->
-                    <tr>
+                    <tr id="rest-row-lisi">
                       <td style="text-align: center;">
                         <input type="checkbox" class="rest-row-cb-mock" id="rest-cb-lisi" style="cursor: pointer; width: 10px; height: 10px;">
                       </td>
@@ -1344,7 +1344,7 @@
                       <td>张三</td>
                     </tr>
                     <!-- 行二：王五 -->
-                    <tr>
+                    <tr id="rest-row-wangwu">
                       <td style="text-align: center;">
                         <input type="checkbox" class="rest-row-cb-mock" id="rest-cb-wangwu" style="cursor: pointer; width: 10px; height: 10px;">
                       </td>
@@ -1590,6 +1590,9 @@
       document.getElementById('rest-check-all-mock').checked = false;
       document.getElementById('rest-cb-lisi').checked = false;
       document.getElementById('rest-cb-wangwu').checked = false;
+      document.getElementById('rest-mock-search').value = '';
+      document.getElementById('rest-row-lisi').style.display = 'table-row';
+      document.getElementById('rest-row-wangwu').style.display = 'table-row';
       document.getElementById('rest-select-count-mock').textContent = '0';
       const restSubmitBtn = document.getElementById('rest-btn-submit-mock');
       restSubmitBtn.disabled = true;
@@ -1938,16 +1941,29 @@
       document.getElementById('rest-panel-restore').style.display = 'block';
       await sleep(800);
 
-      // 2. 移动到全选复选框并点击
-      moveCursorToElement('cursor-restore', 'rest-check-all-mock', 'mockup-container-restore');
+      // 2. 点击搜索输入框
+      moveCursorToElement('cursor-restore', 'rest-mock-search', 'mockup-container-restore');
+      await sleep(500); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
+      await sleep(200);
+
+      // 模拟打字搜索 "王" -> "王五"
+      const searchInput = document.getElementById('rest-mock-search');
+      searchInput.value = '王';
+      await sleep(200);
+      searchInput.value = '王五';
+
+      // 列表发生实时过滤，隐藏李四
+      document.getElementById('rest-row-lisi').style.display = 'none';
+      await sleep(800);
+
+      // 3. 移动到王五的复选框并勾选它
+      moveCursorToElement('cursor-restore', 'rest-cb-wangwu', 'mockup-container-restore');
       await sleep(600); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
       await sleep(200);
 
-      // 全选生效，子项复选框勾选，按钮激活，数量变化
-      document.getElementById('rest-check-all-mock').checked = true;
-      document.getElementById('rest-cb-lisi').checked = true;
+      // 复选框勾选，已选择变为1，按钮激活
       document.getElementById('rest-cb-wangwu').checked = true;
-      document.getElementById('rest-select-count-mock').textContent = '2';
+      document.getElementById('rest-select-count-mock').textContent = '1';
       
       const submitBtn = document.getElementById('rest-btn-submit-mock');
       submitBtn.disabled = false;
@@ -1955,7 +1971,7 @@
       submitBtn.style.cursor = 'pointer';
       await sleep(800);
 
-      // 3. 点击“恢复门禁 (恢复申请)”按钮
+      // 4. 点击“恢复门禁 (恢复申请)”按钮
       moveCursorToElement('cursor-restore', 'rest-btn-submit-mock', 'mockup-container-restore');
       await sleep(600); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
       await sleep(300);
@@ -1964,6 +1980,16 @@
       document.getElementById('toast-restore').classList.add('show');
       await sleep(2000);
       document.getElementById('toast-restore').classList.remove('show');
+      
+      // 清空搜索框，显示全部列表，并重置勾选状态，完成整个闭环演示
+      searchInput.value = '';
+      document.getElementById('rest-row-lisi').style.display = 'table-row';
+      document.getElementById('rest-cb-wangwu').checked = false;
+      document.getElementById('rest-select-count-mock').textContent = '0';
+      submitBtn.disabled = true;
+      submitBtn.style.opacity = '0.5';
+      submitBtn.style.cursor = 'not-allowed';
+      
       cursor.style.display = 'none';
 
       await sleep(1000);
