@@ -720,7 +720,7 @@
       </svg>
       培训人员信息录入与门禁系统
     </div>
-    <div class="system-info" id="slide-progress-text">1 / 3</div>
+    <div class="system-info" id="slide-progress-text">1 / 4</div>
   </div>
 
   <!-- PPT 主幻灯片容器 -->
@@ -1015,6 +1015,211 @@
         </div>
       </div>
 
+      <!-- SLIDE 4: 历史记录与修改 (新) -->
+      <div class="slide">
+        <div class="slide-left">
+          <span class="slide-tag">STEP 04</span>
+          <h2>历史记录查询与修改</h2>
+          <p>演示如何查看已录入数据，通过搜索框快速模糊查询，并对已有记录进行修改和保存：</p>
+          <ul class="steps-list" style="margin-bottom: 25px;">
+            <li><strong>列表与模糊搜索：</strong> 点击“历史记录”页签即可查看所有人员，支持输入姓名关键字实时模糊搜索。</li>
+            <li><strong>一键编辑回填：</strong> 点击人员右侧的“修改”按钮，页面将自动切换至录入页，并回填所有基本信息与电子照片。</li>
+            <li><strong>修改重新提交：</strong> 修改任意字段（如地址）后，点击“保存修改信息”即可即时同步更新数据库。</li>
+          </ul>
+          <button class="btn-action" id="btn-play-history" onclick="playHistoryAnimation()">
+            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+              <path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            开始历史与修改演示
+          </button>
+        </div>
+        <div class="slide-right">
+          <!-- 电脑端实际画面仿真框 (加大版，无下拉条) -->
+          <div class="browser-mockup large-browser" id="mockup-container-history">
+            <div class="mock-cursor" id="cursor-history"></div>
+            <div class="browser-topbar">
+              <div class="browser-dot red"></div>
+              <div class="browser-dot yellow"></div>
+              <div class="browser-dot green"></div>
+              <div class="browser-address">http://8.137.13.118:8001/client</div>
+            </div>
+            
+            <div class="browser-screen" style="overflow-y: hidden; padding: 10px 15px;">
+              <div class="mock-toast" id="toast-history">修改信息成功！</div>
+
+              <!-- 实际用户栏 -->
+              <div class="user-info-bar-mock">
+                <div>
+                  <span>录入人员：</span><strong>张三</strong>
+                  <span style="margin-left: 15px;">工作单位：</span><strong>心连心化学工业集团</strong>
+                </div>
+                <div class="btn-logout-mock">退出登录</div>
+              </div>
+              
+              <!-- 页签 -->
+              <div class="admin-nav-mock">
+                <div class="admin-nav-mock-item active" id="hist-nav-form">信息录入</div>
+                <div class="admin-nav-mock-item" id="hist-nav-history">历史记录</div>
+                <div class="admin-nav-mock-item">门禁恢复</div>
+              </div>
+
+              <!-- 区域一：信息录入表单面 (编辑态) -->
+              <div class="form-container-mock" id="hist-panel-form" style="display: block;">
+                <h2 id="hist-form-title">培训人员信息录入</h2>
+                <p class="subtitle" id="hist-form-subtitle">请准确填写您的真实信息并上传照片</p>
+                
+                <div style="display:flex; flex-direction:column; gap:8px;">
+                  <!-- 第一行：照片 -->
+                  <div class="mock-form-group">
+                    <label>第一行：电子照片</label>
+                    <div class="photo-uploader-mock" id="uploader-hist">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" id="uploader-hist-svg">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                      </svg>
+                      <p id="uploader-hist-text">选择照片 / 拍摄现场照</p>
+                      <img src="avatar_demo.png" class="photo-preview-mock" id="preview-hist">
+                    </div>
+                  </div>
+
+                  <!-- 第二行：基本信息网格 -->
+                  <div class="mock-form-group">
+                    <label>第二行：基本与岗位信息</label>
+                    <div class="form-grid-mock">
+                      <div class="mock-form-group">
+                        <label>姓名 *</label>
+                        <input type="text" id="hist-mock-name" class="mock-input" readonly>
+                      </div>
+                      <div class="mock-form-group">
+                        <label>民族 *</label>
+                        <input type="text" id="hist-mock-nation" class="mock-input" placeholder="点击选择民族" readonly>
+                      </div>
+                      <div class="mock-form-group">
+                        <label>身份证号 *</label>
+                        <input type="text" id="hist-mock-idcard" class="mock-input" readonly>
+                      </div>
+                      <div class="mock-form-group">
+                        <label>联系电话 *</label>
+                        <input type="text" id="hist-mock-phone" class="mock-input" readonly>
+                      </div>
+                      <div class="mock-form-group">
+                        <label>常住地址 *</label>
+                        <input type="text" id="hist-mock-address" class="mock-input" readonly>
+                      </div>
+                      <div class="mock-form-group">
+                        <label>岗位/工种 *</label>
+                        <input type="text" id="hist-mock-job" class="mock-input" placeholder="点击选择工种" readonly>
+                      </div>
+                      <div class="mock-form-group">
+                        <label>学历 *</label>
+                        <input type="text" id="hist-mock-edu" class="mock-input" placeholder="点击选择学历" readonly>
+                      </div>
+                    </div>
+                  </div>
+
+                  <button class="mock-btn primary" id="hist-mock-submit" style="margin-top: 5px;">确 认 提 交 信 息</button>
+                </div>
+              </div>
+
+              <!-- 区域二：历史记录数据表 -->
+              <div class="form-container-mock" id="hist-panel-history" style="display: none; padding: 10px;">
+                <h2 style="font-size: 11px;">我录入的历史数据</h2>
+                <p class="subtitle" style="font-size: 7px; margin-bottom: 8px;">显示当前账号已录入的人员，点击修改可进行编辑</p>
+                
+                <!-- 搜索条 -->
+                <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px;">
+                  <input type="text" id="hist-mock-search" class="mock-input" placeholder="输入姓名搜索历史录入..." style="width: 140px; padding: 4px 6px; font-size: 8px;" readonly>
+                  <button class="mock-btn" style="width: auto; padding: 4px 8px; margin: 0; background: #4b5563; font-size: 7px;" id="hist-mock-clear-btn">清除</button>
+                </div>
+
+                <!-- 仿真表格 -->
+                <style>
+                  .mock-table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    font-size: 7px;
+                    color: var(--text-main);
+                  }
+                  .mock-table th, .mock-table td {
+                    border: 1px solid var(--glass-border);
+                    padding: 4px;
+                    text-align: left;
+                  }
+                  .mock-table th {
+                    background: rgba(255,255,255,0.05);
+                    font-weight: 600;
+                  }
+                  .mock-table-img {
+                    width: 20px;
+                    height: 26px;
+                    object-fit: cover;
+                    border-radius: 2px;
+                  }
+                  .mock-edit-btn {
+                    background: var(--success);
+                    color: white;
+                    border: none;
+                    padding: 2px 6px;
+                    border-radius: 3px;
+                    font-size: 6px;
+                    cursor: pointer;
+                  }
+                </style>
+                <table class="mock-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 25px; text-align: center;">照片</th>
+                      <th>人员基本信息</th>
+                      <th>岗位权限与地址</th>
+                      <th style="width: 70px;">录入时间</th>
+                      <th style="width: 40px; text-align: center;">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="hist-table-body-mock">
+                    <!-- 行一：李四 -->
+                    <tr id="hist-row-lisi">
+                      <td style="text-align: center;"><img src="avatar_demo.png" class="mock-table-img"></td>
+                      <td>
+                        <strong>李四</strong> (汉族 · 36岁)<br>
+                        身份证: 110101199003072314<br>
+                        手机: 13988889999
+                      </td>
+                      <td>
+                        <strong>岗位:</strong> 安全员<br>
+                        <strong>地址:</strong> <span id="hist-table-lisi-address">心连心生活区</span>
+                      </td>
+                      <td>2026-06-11<br>10:30:15</td>
+                      <td style="text-align: center;">
+                        <button class="mock-edit-btn" id="hist-btn-edit-lisi">修改</button>
+                      </td>
+                    </tr>
+                    <!-- 行二：王五 -->
+                    <tr id="hist-row-wangwu">
+                      <td style="text-align: center;"><img src="avatar_demo.png" class="mock-table-img" style="filter: hue-rotate(90deg);"></td>
+                      <td>
+                        <strong>王五</strong> (汉族 · 30岁)<br>
+                        身份证: 110101199505051234<br>
+                        手机: 13500001111
+                      </td>
+                      <td>
+                        <strong>岗位:</strong> 电工<br>
+                        <strong>地址:</strong> 心连心生活区
+                      </td>
+                      <td>2026-06-11<br>11:15:42</td>
+                      <td style="text-align: center;">
+                        <button class="mock-edit-btn" id="hist-btn-edit-wangwu">修改</button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -1195,6 +1400,32 @@
       document.getElementById('cursor-mobile').style.display = 'none';
       document.getElementById('btn-play-mobile').disabled = false;
       document.getElementById('btn-play-mobile').style.opacity = '1';
+
+      // 4. 历史记录与修改页重置
+      document.getElementById('hist-nav-form').classList.add('active');
+      document.getElementById('hist-nav-history').classList.remove('active');
+      document.getElementById('hist-panel-form').style.display = 'block';
+      document.getElementById('hist-panel-history').style.display = 'none';
+      document.getElementById('hist-form-title').innerText = '培训人员信息录入';
+      document.getElementById('hist-mock-submit').innerText = '确 认 提 交 信 息';
+      document.getElementById('hist-mock-name').value = '';
+      document.getElementById('hist-mock-nation').value = '';
+      document.getElementById('hist-mock-idcard').value = '';
+      document.getElementById('hist-mock-phone').value = '';
+      document.getElementById('hist-mock-address').value = '';
+      document.getElementById('hist-mock-job').value = '';
+      document.getElementById('hist-mock-edu').value = '';
+      document.getElementById('preview-hist').style.display = 'none';
+      document.getElementById('uploader-hist-svg').style.display = 'block';
+      document.getElementById('uploader-hist-text').style.display = 'block';
+      document.getElementById('hist-mock-search').value = '';
+      document.getElementById('hist-row-lisi').style.display = 'table-row';
+      document.getElementById('hist-row-wangwu').style.display = 'table-row';
+      document.getElementById('hist-table-lisi-address').textContent = '心连心生活区';
+      document.getElementById('toast-history').classList.remove('show');
+      document.getElementById('cursor-history').style.display = 'none';
+      document.getElementById('btn-play-history').disabled = false;
+      document.getElementById('btn-play-history').style.opacity = '1';
     }
 
     // SLIDE 1 注册动画
@@ -1400,6 +1631,113 @@
       cursor.style.display = 'none';
 
       await sleep(3000);
+      btn.disabled = false;
+      btn.style.opacity = '1';
+    }
+
+    // SLIDE 4 历史记录与修改动画
+    async function playHistoryAnimation() {
+      const btn = document.getElementById('btn-play-history');
+      btn.disabled = true;
+      btn.style.opacity = '0.5';
+
+      const cursor = document.getElementById('cursor-history');
+      cursor.style.display = 'block';
+      cursor.style.left = '30px'; cursor.style.top = '30px';
+      await sleep(500);
+
+      // 1. 点击“历史记录”页签
+      moveCursorToElement('cursor-history', 'hist-nav-history', 'mockup-container-history');
+      await sleep(600); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
+      await sleep(200);
+      
+      // 切换到历史记录页签面板
+      document.getElementById('hist-nav-form').classList.remove('active');
+      document.getElementById('hist-nav-history').classList.add('active');
+      document.getElementById('hist-panel-form').style.display = 'none';
+      document.getElementById('hist-panel-history').style.display = 'block';
+      await sleep(600);
+
+      // 2. 点击搜索输入框
+      moveCursorToElement('cursor-history', 'hist-mock-search', 'mockup-container-history');
+      await sleep(500); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
+      await sleep(200);
+      
+      // 模拟打字搜索 "李" -> "李四"
+      const searchInput = document.getElementById('hist-mock-search');
+      searchInput.value = '李';
+      await sleep(200);
+      searchInput.value = '李四';
+      
+      // 列表发生实时模糊过滤
+      document.getElementById('hist-row-wangwu').style.display = 'none';
+      await sleep(800);
+
+      // 3. 点击李四的“修改”按钮
+      moveCursorToElement('cursor-history', 'hist-btn-edit-lisi', 'mockup-container-history');
+      await sleep(600); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
+      await sleep(400);
+
+      // 切换回信息录入表单面板，并回填李四的信息，标题变为“修改培训人员信息”，按钮变为“保存修改信息”
+      document.getElementById('hist-nav-form').classList.add('active');
+      document.getElementById('hist-nav-history').classList.remove('active');
+      document.getElementById('hist-panel-form').style.display = 'block';
+      document.getElementById('hist-panel-history').style.display = 'none';
+      
+      document.getElementById('hist-form-title').textContent = '修改培训人员信息';
+      document.getElementById('hist-mock-submit').textContent = '保 存 修 改 信 息';
+      
+      // 回填数据
+      document.getElementById('uploader-hist-svg').style.display = 'none';
+      document.getElementById('uploader-hist-text').style.display = 'none';
+      document.getElementById('preview-hist').style.display = 'block';
+      
+      document.getElementById('hist-mock-name').value = '李四';
+      document.getElementById('hist-mock-nation').value = '汉族';
+      document.getElementById('hist-mock-idcard').value = '110101199003072314';
+      document.getElementById('hist-mock-phone').value = '13988889999';
+      document.getElementById('hist-mock-address').value = '心连心生活区';
+      document.getElementById('hist-mock-job').value = '安全员';
+      document.getElementById('hist-mock-edu').value = '本科';
+      await sleep(1000);
+
+      // 4. 点击“常住地址”框以修改它
+      moveCursorToElement('cursor-history', 'hist-mock-address', 'mockup-container-history');
+      await sleep(600); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
+      await sleep(200);
+      
+      // 模拟清除原先内容并打字输入新地址 "心连心生活区二期"
+      await typeInput('hist-mock-address', '心连心生活区二期', 80);
+      await sleep(500);
+
+      // 5. 点击“保存修改信息”按钮
+      moveCursorToElement('cursor-history', 'hist-mock-submit', 'mockup-container-history');
+      await sleep(600); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
+      await sleep(300);
+
+      // 显示成功 Toast 提示
+      document.getElementById('toast-history').classList.add('show');
+      
+      // 表格里的地址同步修改成功
+      document.getElementById('hist-table-lisi-address').textContent = '心连心生活区二期';
+      
+      // 延迟一下，自动切回历史记录面板以显示修改后的最终列表
+      await sleep(1500);
+      document.getElementById('toast-history').classList.remove('show');
+      
+      document.getElementById('hist-nav-form').classList.remove('active');
+      document.getElementById('hist-nav-history').classList.add('active');
+      document.getElementById('hist-panel-form').style.display = 'none';
+      document.getElementById('hist-panel-history').style.display = 'block';
+      
+      // 清空搜索框并显示全部列表以确认更新效果
+      searchInput.value = '';
+      document.getElementById('hist-row-lisi').style.display = 'table-row';
+      document.getElementById('hist-row-wangwu').style.display = 'table-row';
+      
+      cursor.style.display = 'none';
+      await sleep(2000);
+      
       btn.disabled = false;
       btn.style.opacity = '1';
     }
