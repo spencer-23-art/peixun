@@ -720,7 +720,11 @@
       </svg>
       培训人员信息录入与门禁系统
     </div>
-    <div class="system-info" id="slide-progress-text">1 / 5</div>
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <button id="btn-toggle-edit" onclick="toggleEditMode()" style="background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border); color: #fff; padding: 4px 10px; font-size: 0.75rem; border-radius: 6px; cursor: pointer; transition: all 0.2s;">编辑文字</button>
+      <button id="btn-save-edit" onclick="savePptChanges()" style="background: var(--success); border: 1px solid rgba(255, 255, 255, 0.1); color: #fff; padding: 4px 10px; font-size: 0.75rem; border-radius: 6px; cursor: pointer; display: none; transition: all 0.2s;">保存修改</button>
+      <div class="system-info" id="slide-progress-text">1 / 5</div>
+    </div>
   </div>
 
   <!-- PPT 主幻灯片容器 -->
@@ -1995,6 +1999,68 @@
       await sleep(1000);
       btn.disabled = false;
       btn.style.opacity = '1';
+    }
+
+    let editMode = false;
+    function toggleEditMode() {
+      editMode = !editMode;
+      // 选取所有需要编辑的文字元素
+      const editableElements = document.querySelectorAll(
+        '.slide-left h2, .slide-left p, .slide-left li, .slide-tag, ' +
+        '.mock-title, .mock-subtitle, .mock-form-group label, .admin-nav-mock-item, ' +
+        '.user-info-bar-mock strong, .user-info-bar-mock span, .mock-table th, ' +
+        '.mock-table td strong, .mock-table td span, .mock-table td'
+      );
+      editableElements.forEach(el => {
+        if (el.children.length === 0 || el.tagName === 'LI' || el.tagName === 'TD' || el.tagName === 'H2' || el.tagName === 'P') {
+          el.contentEditable = editMode;
+          if (editMode) {
+            el.style.outline = '1px dashed #6366f1';
+            el.style.cursor = 'text';
+          } else {
+            el.style.outline = 'none';
+            el.style.cursor = '';
+          }
+        }
+      });
+
+      const editBtn = document.getElementById('btn-toggle-edit');
+      const saveBtn = document.getElementById('btn-save-edit');
+      if (editBtn) {
+        editBtn.textContent = editMode ? '关闭编辑' : '编辑文字';
+        editBtn.style.background = editMode ? 'var(--primary)' : 'rgba(255, 255, 255, 0.05)';
+      }
+      if (saveBtn) {
+        saveBtn.style.display = editMode ? 'inline-block' : 'none';
+      }
+    }
+
+    async function savePptChanges() {
+      if (editMode) {
+        toggleEditMode();
+      }
+      
+      // 重置所有演示状态到最干净的状态
+      resetDemoStates();
+      
+      const htmlContent = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+      const formData = new FormData();
+      formData.append('html_content', htmlContent);
+      
+      try {
+        const response = await fetch('/api/save_ppt', {
+          method: 'POST',
+          body: formData
+        });
+        const result = await response.json();
+        if (response.ok && result.code === 200) {
+          alert('PPT文字保存成功！刷新页面可查看最新更改。');
+        } else {
+          alert('保存失败：' + (result.detail || '未知错误'));
+        }
+      } catch (err) {
+        alert('保存失败，请确认后台 Python 服务是否运行。');
+      }
     }
   </script>
 </body>

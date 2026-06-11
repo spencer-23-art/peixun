@@ -267,6 +267,17 @@ def get_admin_user(current_user = Depends(get_current_user)):
 
 # ---------------- API 接口 ----------------
 
+@app.post("/api/save_ppt")
+def save_ppt(html_content: str = Form(...)):
+    try:
+        static_dir = os.path.abspath("static")
+        ppt_path = os.path.abspath(os.path.join(static_dir, "ppt.html"))
+        with open(ppt_path, "w", encoding="utf-8") as f:
+            f.write(html_content)
+        return {"code": 200, "message": "保存成功！"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"保存失败: {str(e)}")
+
 @app.post("/api/register")
 def register(username: str = Form(...), password: str = Form(...), real_name: str = Form(...), company: str = Form(...)):
     if not real_name.strip():
