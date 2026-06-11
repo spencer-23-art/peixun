@@ -9,7 +9,6 @@ services:
     volumes:
       - ./uploads:/app/uploads # 挂载图片目录，容器升级重建不丢失照片
       - ./static:/app/static   # 挂载静态网页目录，后续 git pull 静态 HTML 可热生效，无需重新构建容器
-      # 注意：如果需要将 SQLite 数据库文件也挂载出来：
-      # 请先在宿主机根目录下执行 `touch peixun.db` 创建空文件，然后取消下行注释，否则 Docker 会误将其当成文件夹挂载导致报错。
-      # - ./peixun.db:/app/peixun.db
+      # 挂载 SQLite 数据库文件，防止容器重建时数据丢失
+      - ./peixun.db:/app/peixun.db
     restart: always
