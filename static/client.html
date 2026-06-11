@@ -1,0 +1,1198 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>培训信息录入系统 - 个人信息录入</title>
+  <link rel="stylesheet" href="/static/css/style.css?v=1.0.6">
+  <style>
+    /* 客户端页面特定样式微调 */
+    .user-info-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--glass-border);
+      padding: 12px 20px;
+      border-radius: 12px;
+      width: 100%;
+      max-width: 650px;
+      margin-bottom: 20px;
+      font-size: 0.9rem;
+    }
+    .user-info-bar span {
+      color: var(--text-muted);
+    }
+    .user-info-bar strong {
+      color: var(--text-main);
+    }
+    .user-info-bar .btn-logout {
+      background: transparent;
+      border: 1px solid var(--danger-color);
+      color: var(--danger-color);
+      padding: 4px 10px;
+      font-size: 0.8rem;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .user-info-bar .btn-logout:hover {
+      background: var(--danger-color);
+      color: white;
+    }
+    .form-container {
+      max-width: 650px;
+    }
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 15px;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .animate-spin {
+      animation: spin 1s linear infinite;
+      width: 32px;
+      height: 32px;
+      margin-bottom: 10px;
+      color: var(--primary-color);
+    }
+
+    @media (max-width: 600px) {
+      .form-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+    }
+
+    /* 覆盖原照片位样式，使其为竖向 3:4 比例，且显示完整 */
+    .photo-uploader {
+      width: 180px;
+      height: 240px;
+      margin: 0 auto 25px auto; /* 居中 */
+    }
+    .photo-preview {
+      object-fit: contain;
+      background-color: rgba(0, 0, 0, 0.4);
+    }
+
+    /* 页签导航 */
+    .admin-nav {
+      display: flex;
+      border-bottom: 1px solid var(--glass-border);
+      margin-bottom: 20px;
+      gap: 10px;
+      width: 100%;
+      max-width: 650px;
+    }
+    .admin-nav-item {
+      padding: 12px 20px;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      font-weight: 600;
+      transition: all 0.2s ease;
+    }
+    .admin-nav-item.active {
+      color: var(--primary-color);
+      border-bottom-color: var(--primary-color);
+    }
+    /* 优化表格在小屏幕下集中紧凑显示，彻底消除水平滚动条 */
+    @media (max-width: 768px) {
+      .table-wrapper {
+        overflow-x: hidden !important;
+      }
+      .table-wrapper table {
+        width: 100% !important;
+        table-layout: fixed !important;
+        min-width: unset !important;
+      }
+      .table-wrapper th, .table-wrapper td {
+        padding: 5px 3px !important;
+        font-size: 0.72rem !important;
+        word-break: break-all !important;
+        white-space: normal !important;
+      }
+      .table-wrapper td div {
+        margin-top: 1px !important;
+      }
+      .table-img {
+        width: 32px !important;
+        height: 40px !important;
+      }
+      
+      /* 历史记录表格移动端列宽限制 */
+      #tab-content-history th:nth-child(1),
+      #tab-content-history td:nth-child(1) {
+        width: 38px !important;
+      }
+      #tab-content-history th:nth-child(2),
+      #tab-content-history td:nth-child(2) {
+        width: auto !important;
+      }
+      #tab-content-history th:nth-child(3),
+      #tab-content-history td:nth-child(3) {
+        width: 100px !important;
+      }
+      #tab-content-history th:nth-child(4),
+      #tab-content-history td:nth-child(4) {
+        width: 70px !important;
+        text-align: center !important;
+      }
+      #tab-content-history th:nth-child(5),
+      #tab-content-history td:nth-child(5) {
+        width: 45px !important;
+      }
+      #tab-content-history .btn-success {
+        padding: 4px 6px !important;
+        font-size: 0.7rem !important;
+      }
+
+      /* 门禁恢复表格移动端列宽限制 */
+      #tab-content-restore th:nth-child(1),
+      #tab-content-restore td:nth-child(1) {
+        width: 25px !important;
+      }
+      #tab-content-restore th:nth-child(2),
+      #tab-content-restore td:nth-child(2) {
+        width: 38px !important;
+      }
+      #tab-content-restore th:nth-child(3),
+      #tab-content-restore td:nth-child(3) {
+        width: auto !important;
+      }
+      #tab-content-restore th:nth-child(4),
+      #tab-content-restore td:nth-child(4) {
+        width: 110px !important;
+      }
+      #tab-content-restore th:nth-child(5),
+      #tab-content-restore td:nth-child(5) {
+        width: 55px !important;
+      }
+      .restore-checkbox {
+        width: 14px !important;
+        height: 14px !important;
+      }
+    }
+
+    /* 提示信息过渡 */
+    .alert {
+      transition: opacity 0.5s ease;
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 用户信息条 -->
+  <div class="user-info-bar">
+    <div>
+      <span>录入人员：</span><strong id="user-name">--</strong>
+      <span style="margin-left: 15px;">工作单位：</span><strong id="user-company">--</strong>
+    </div>
+    <button class="btn-logout" onclick="logout()">退出登录</button>
+  </div>
+
+  <!-- 页签导航 -->
+  <div class="admin-nav">
+    <div class="admin-nav-item active" id="tab-nav-form" onclick="switchTab('form')">信息录入</div>
+    <div class="admin-nav-item" id="tab-nav-history" onclick="switchTab('history')">历史记录</div>
+    <div class="admin-nav-item" id="tab-nav-restore" onclick="switchTab('restore')">门禁恢复</div>
+  </div>
+
+  <!-- 信息录入容器 -->
+  <div id="tab-content-form" style="width: 100%; max-width: 650px;">
+    <div class="glass-container form-container" style="margin-top: 0; max-width: 100%;">
+      <h2 id="form-title">培训人员信息录入</h2>
+      <p class="subtitle">请准确填写您的真实信息并上传照片</p>
+
+      <div class="alert alert-error" id="error-alert"></div>
+      <div class="alert alert-success" id="success-alert"></div>
+
+      <form id="form-record" onsubmit="handleSubmit(event)">
+        <!-- 第一行：照片位 -->
+        <div class="form-group">
+          <label>第一行：电子照片 (点击区域可拍照或上传，系统自动压缩至200K内)</label>
+          <div class="photo-uploader" onclick="document.getElementById('photo-input').click()">
+            <input type="file" id="photo-input" accept="image/*" onchange="handlePhotoChange(event)">
+            <div class="photo-uploader-placeholder" id="uploader-placeholder">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              <p>选择照片 / 拍摄现场照</p>
+            </div>
+            <img src="" id="photo-preview" class="photo-preview" style="display: none;">
+          </div>
+        </div>
+
+        <!-- 第二行：信息录入 -->
+        <div class="form-group">
+          <label>第二行：基本与岗位信息</label>
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="name">姓名 *</label>
+              <input type="text" id="name" class="form-control" placeholder="请输入姓名" required>
+            </div>
+            <div class="form-group">
+              <label for="nation">民族 *</label>
+              <select id="nation" class="form-control" required>
+                <option value="" disabled selected>请选择民族</option>
+                <option value="汉族">汉族</option>
+                <option value="壮族">壮族</option>
+                <option value="维吾尔族">维吾尔族</option>
+                <option value="回族">回族</option>
+                <option value="苗族">苗族</option>
+                <option value="满族">满族</option>
+                <option value="彝族">彝族</option>
+                <option value="土家族">土家族</option>
+                <option value="藏族">藏族</option>
+                <option value="蒙古族">蒙古族</option>
+                <option value="布依族">布依族</option>
+                <option value="侗族">侗族</option>
+                <option value="瑶族">瑶族</option>
+                <option value="白族">白族</option>
+                <option value="哈尼族">哈尼族</option>
+                <option value="朝鲜族">朝鲜族</option>
+                <option value="黎族">黎族</option>
+                <option value="哈萨克族">哈萨克族</option>
+                <option value="傣族">傣族</option>
+                <option value="畲族">畲族</option>
+                <option value="傈僳族">傈僳族</option>
+                <option value="东乡族">东乡族</option>
+                <option value="仡佬族">仡佬族</option>
+                <option value="拉祜族">拉祜族</option>
+                <option value="佤族">佤族</option>
+                <option value="水族">水族</option>
+                <option value="纳西族">纳西族</option>
+                <option value="羌族">羌族</option>
+                <option value="土族">土族</option>
+                <option value="仫佬族">仫佬族</option>
+                <option value="锡伯族">锡伯族</option>
+                <option value="柯尔克孜族">柯尔克孜族</option>
+                <option value="景颇族">景颇族</option>
+                <option value="达斡尔族">达斡尔族</option>
+                <option value="撒拉族">撒拉族</option>
+                <option value="布朗族">布朗族</option>
+                <option value="毛南族">毛南族</option>
+                <option value="塔吉克族">塔吉克族</option>
+                <option value="普米族">普米族</option>
+                <option value="阿昌族">阿昌族</option>
+                <option value="怒族">怒族</option>
+                <option value="鄂温克族">鄂温克族</option>
+                <option value="京族">京族</option>
+                <option value="基诺族">基诺族</option>
+                <option value="德昂族">德昂族</option>
+                <option value="保安族">保安族</option>
+                <option value="俄罗斯族">俄罗斯族</option>
+                <option value="裕固族">裕固族</option>
+                <option value="乌孜别克族">乌孜别克族</option>
+                <option value="门巴族">门巴族</option>
+                <option value="鄂伦春族">鄂伦春族</option>
+                <option value="独龙族">独龙族</option>
+                <option value="赫哲族">赫哲族</option>
+                <option value="高山族">高山族</option>
+                <option value="珞巴族">珞巴族</option>
+                <option value="塔塔尔族">塔塔尔族</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="id_card">身份证号 *</label>
+              <input type="text" id="id_card" class="form-control" placeholder="请输入18位身份证号" required pattern="[0-9]{10}[01][0-9]{6}[0-9xX]">
+            </div>
+            <div class="form-group">
+              <label for="phone">联系电话 *</label>
+              <input type="text" id="phone" class="form-control" placeholder="请输入联系电话" required>
+            </div>
+            <div class="form-group">
+              <label for="address">常住地址 *</label>
+              <input type="text" id="address" class="form-control" placeholder="请输入当前常住详细地址" required>
+            </div>
+            <div class="form-group">
+              <label for="job">岗位/工种 *</label>
+              <select id="job" class="form-control" required>
+                <option value="" disabled selected>请选择岗位/工种</option>
+                <option value="普工">普工</option>
+                <option value="木工">木工</option>
+                <option value="泥工">泥工</option>
+                <option value="钢筋工">钢筋工</option>
+                <option value="电焊工">电焊工</option>
+                <option value="电工">电工</option>
+                <option value="安拆工">安拆工</option>
+                <option value="塔吊司机">塔吊司机</option>
+                <option value="吊车司机">吊车司机</option>
+                <option value="信号工">信号工</option>
+                <option value="电梯司机">电梯司机</option>
+                <option value="管理人员">管理人员</option>
+                <option value="安全员">安全员</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="education">学历 *</label>
+              <select id="education" class="form-control" required>
+                <option value="" disabled selected>请选择学历</option>
+                <option value="初中">初中</option>
+                <option value="高中/中专">高中/中专</option>
+                <option value="大专">大专</option>
+                <option value="本科">本科</option>
+                <option value="硕士/研究生">硕士/研究生</option>
+                <option value="博士">博士</option>
+              </select>
+            </div>
+            <div class="form-group" style="display: none;">
+              <label for="region_auth">区域权限</label>
+              <select id="region_auth" class="form-control">
+                <option value="" selected>请选择区域权限</option>
+                <option value="三元肥">三元肥</option>
+                <option value="尿素塔">尿素塔</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <button type="submit" id="btn-submit" class="btn btn-primary" style="margin-top: 15px;">确 认 提 交 信 息</button>
+        <button type="button" id="btn-cancel-edit" class="btn btn-secondary" style="margin-top: 10px; display: none;" onclick="cancelEdit()">取 消 修 改</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- 历史记录容器 -->
+  <div id="tab-content-history" style="display: none; width: 100%; max-width: 900px; margin-bottom: 30px;">
+    <div class="glass-container" style="max-width: 100%; margin-top: 0; padding: 20px;">
+      <h2>我录入的历史数据</h2>
+      <p class="subtitle">显示当前账号已录入的人员，点击修改可进行编辑</p>
+      
+      <!-- 搜索栏 -->
+      <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 15px;">
+        <input type="text" id="history-search-name" class="form-control" placeholder="输入姓名搜索历史录入..." style="width: auto; padding: 6px 12px; margin-bottom: 0; min-width: 200px;" oninput="handleHistorySearch()">
+        <button class="btn btn-secondary" style="width: auto; padding: 6px 12px;" onclick="clearHistorySearch()">清除搜索</button>
+      </div>
+
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 60px; text-align: center;">照片</th>
+              <th style="min-width: 200px;">人员基本信息</th>
+              <th style="min-width: 200px;">岗位权限与地址</th>
+              <th style="width: 140px;">录入时间</th>
+              <th style="width: 80px; text-align: center;">操作</th>
+            </tr>
+          </thead>
+          <tbody id="history-table-body">
+            <!-- 动态渲染 -->
+          </tbody>
+        </table>
+      </div>
+      <div id="history-no-data" class="no-data" style="display: none;">暂无已录入的历史记录</div>
+    </div>
+  </div>
+
+  <!-- 门禁恢复容器 -->
+  <div id="tab-content-restore" style="display: none; width: 100%; max-width: 900px; margin-bottom: 30px;">
+    <div class="glass-container" style="max-width: 100%; margin-top: 0; padding: 20px;">
+      <h2>本单位人员门禁恢复</h2>
+      <p class="subtitle">在此可检索并选择您工作单位下的所有人进行门禁恢复申请。已选择的人员会自动保留勾选，不受搜索条件更改的影响。</p>
+      
+      <!-- 搜索栏 -->
+      <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 15px;">
+        <input type="text" id="restore-search-name" class="form-control" placeholder="输入姓名搜索同单位员工..." style="width: auto; padding: 6px 12px; margin-bottom: 0; min-width: 200px;" oninput="handleRestoreSearch()">
+        <button class="btn btn-secondary" style="width: auto; padding: 6px 12px;" onclick="clearRestoreSearch()">清除搜索</button>
+      </div>
+
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 40px; text-align: center;"><input type="checkbox" id="restore-check-all" onchange="toggleRestoreSelectAll(this)" style="width: 18px; height: 18px; cursor: pointer;"></th>
+              <th style="width: 60px; text-align: center;">照片</th>
+              <th style="min-width: 200px;">人员基本信息</th>
+              <th style="min-width: 200px;">权限与常住地址</th>
+              <th style="width: 120px;">录入人</th>
+            </tr>
+          </thead>
+          <tbody id="restore-table-body">
+            <!-- 动态渲染 -->
+          </tbody>
+        </table>
+      </div>
+      <div id="restore-no-data" class="no-data" style="display: none;">暂无符合条件的人员信息</div>
+
+      <div style="margin-top: 20px; display: flex; align-items: center; justify-content: space-between;">
+        <span style="font-size: 0.9rem; color: var(--text-muted);">已选择 <strong id="restore-select-count" style="color: var(--primary-color);">0</strong> 人</span>
+        <button class="btn btn-primary" id="btn-submit-restore" onclick="submitRestoreGate()" style="width: auto; padding: 8px 20px;">恢复门禁 (恢复申请)</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- 图片放大预览模态框 -->
+  <div id="image-modal" class="modal" onclick="closeModal()">
+    <img class="modal-content" id="modal-img">
+  </div>
+
+  <script>
+    function getSessionItem(key) {
+      return sessionStorage.getItem(key) || localStorage.getItem(key);
+    }
+
+    const token = getSessionItem('token');
+    const expires = localStorage.getItem('token_expires');
+
+    // 鉴权，必须为有效会话且未过期
+    if (!token || (localStorage.getItem('token') && expires && Number(expires) < Date.now())) {
+      localStorage.clear();
+      sessionStorage.clear();
+      window.location.href = '/login';
+    }
+
+
+
+    let userSavedFields = null; // 缓存服务端回填字段
+
+    // 异步加载用户数据与上一次填写的字段
+    async function fetchUserStatus() {
+      try {
+        const response = await fetch('/api/user/status', {
+          headers: { 'Authorization': token }
+        });
+        const result = await response.json();
+        if (response.ok && result.code === 200) {
+          const userData = result.data;
+          // 渲染头部信息
+          document.getElementById('user-name').innerText = userData.real_name || '--';
+          document.getElementById('user-company').innerText = userData.company || '--';
+          
+          // 缓存并回填字段（民族、地址、岗位、学历、区域）
+          userSavedFields = userData.saved_fields;
+          fillSavedFields();
+        }
+      } catch (err) {
+        console.error('获取用户信息失败', err);
+      }
+    }
+
+    // 回填被自动保存的字段
+    function fillSavedFields() {
+      if (userSavedFields) {
+        if (userSavedFields.nation) document.getElementById('nation').value = userSavedFields.nation;
+        if (userSavedFields.address) document.getElementById('address').value = userSavedFields.address;
+        if (userSavedFields.job) document.getElementById('job').value = userSavedFields.job;
+        if (userSavedFields.education) document.getElementById('education').value = userSavedFields.education;
+        if (userSavedFields.region_auth) document.getElementById('region_auth').value = userSavedFields.region_auth;
+      }
+    }
+
+    // 初始化获取用户信息
+    fetchUserStatus();
+
+    let compressedPhotoBlob = null; 
+    let currentEditRecordId = null;
+    let historyData = [];
+
+    let alertTimeout = null;
+    let alertFadeTimeout = null;
+    const errorAlert = document.getElementById('error-alert');
+    const successAlert = document.getElementById('success-alert');
+
+    function showAlert(type, msg) {
+      clearTimeout(alertTimeout);
+      clearTimeout(alertFadeTimeout);
+
+      errorAlert.style.display = 'none';
+      errorAlert.style.opacity = '1';
+      successAlert.style.display = 'none';
+      successAlert.style.opacity = '1';
+
+      const targetAlert = (type === 'error') ? errorAlert : successAlert;
+      targetAlert.innerText = msg;
+      targetAlert.style.display = 'block';
+
+      // 2秒后开始淡出，2.5秒时完全隐藏
+      alertTimeout = setTimeout(() => {
+        targetAlert.style.opacity = '0';
+        alertFadeTimeout = setTimeout(() => {
+          targetAlert.style.display = 'none';
+          targetAlert.style.opacity = '1';
+        }, 500);
+      }, 2000);
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // 页签切换逻辑
+    let activeTab = 'form';
+    function switchTab(tab) {
+      activeTab = tab;
+      document.getElementById('tab-nav-form').classList.remove('active');
+      document.getElementById('tab-nav-history').classList.remove('active');
+      const navRestore = document.getElementById('tab-nav-restore');
+      if (navRestore) navRestore.classList.remove('active');
+      
+      document.getElementById('tab-content-form').style.display = 'none';
+      document.getElementById('tab-content-history').style.display = 'none';
+      const contentRestore = document.getElementById('tab-content-restore');
+      if (contentRestore) contentRestore.style.display = 'none';
+
+      if (tab === 'form') {
+        document.getElementById('tab-nav-form').classList.add('active');
+        document.getElementById('tab-content-form').style.display = 'block';
+      } else if (tab === 'history') {
+        document.getElementById('tab-nav-history').classList.add('active');
+        document.getElementById('tab-content-history').style.display = 'block';
+        loadHistory();
+      } else if (tab === 'restore') {
+        if (navRestore) navRestore.classList.add('active');
+        if (contentRestore) contentRestore.style.display = 'block';
+        loadRestoreRecords();
+      }
+    }
+
+    let selectedRestoreRecordsMap = new Map();
+    let lastFilteredRestoreRecords = [];
+    let restoreSearchTimeout = null;
+    let historySearchTimeout = null;
+
+    // 加载本单位人员列表
+    async function loadRestoreRecords() {
+      const tbody = document.getElementById('restore-table-body');
+      const searchName = document.getElementById('restore-search-name').value.trim();
+      
+      if (!searchName) {
+        lastFilteredRestoreRecords = [];
+        renderRestoreRecords();
+        return;
+      }
+
+      if (tbody) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">加载中...</td></tr>';
+      }
+      try {
+        let url = '/api/user/company_records';
+        if (searchName) {
+          url += '?name=' + encodeURIComponent(searchName);
+        }
+        const response = await fetch(url, {
+          headers: { 'Authorization': token }
+        });
+        const result = await response.json();
+        if (response.ok && result.code === 200) {
+          lastFilteredRestoreRecords = result.data || [];
+          renderRestoreRecords();
+        } else {
+          if (tbody) {
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--danger-color);">${result.detail || '获取同单位人员失败'}</td></tr>`;
+          }
+        }
+      } catch (err) {
+        if (tbody) {
+          tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--danger-color);">网络错误，无法加载</td></tr>';
+        }
+      }
+    }
+
+    // 渲染本单位人员列表，并合并已勾选保留人员
+    function renderRestoreRecords() {
+      const tbody = document.getElementById('restore-table-body');
+      const noData = document.getElementById('restore-no-data');
+      if (!tbody) return;
+      tbody.innerHTML = '';
+
+      const mergedMap = new Map();
+      selectedRestoreRecordsMap.forEach((val, key) => {
+        mergedMap.set(key, val);
+      });
+      lastFilteredRestoreRecords.forEach(r => {
+        mergedMap.set(r.id, r);
+      });
+
+      const finalRecords = Array.from(mergedMap.values());
+      finalRecords.sort((a, b) => {
+        const timeA = (a.created_at && typeof a.created_at === 'string') ? new Date(a.created_at.replace(' ', 'T') + 'Z').getTime() : 0;
+        const timeB = (b.created_at && typeof b.created_at === 'string') ? new Date(b.created_at.replace(' ', 'T') + 'Z').getTime() : 0;
+        return timeB - timeA;
+      });
+
+      const searchName = document.getElementById('restore-search-name').value.trim();
+      if (finalRecords.length === 0) {
+        if (!searchName) {
+          noData.innerText = '请输入姓名搜索同单位员工进行门禁恢复';
+        } else {
+          noData.innerText = '暂无符合条件的人员信息';
+        }
+        noData.style.display = 'block';
+        document.getElementById('restore-check-all').checked = false;
+        updateRestoreCount();
+        return;
+      }
+      noData.style.display = 'none';
+
+      finalRecords.forEach(r => {
+        const tr = document.createElement('tr');
+        const isChecked = selectedRestoreRecordsMap.has(r.id);
+        const checkedAttr = isChecked ? 'checked' : '';
+        const safePhotoPath = r.photo_path ? r.photo_path.replace(/\\/g, '/') : '';
+
+        tr.innerHTML = `
+          <td style="text-align: center;">
+            <input type="checkbox" class="restore-checkbox" value="${r.id}" ${checkedAttr} onchange="handleSingleRestoreCheckboxChange(this, ${r.id})" onclick="event.stopPropagation()" style="width: 18px; height: 18px; cursor: pointer;">
+          </td>
+          <td style="text-align: center;">
+            <img src="/${safePhotoPath}" class="table-img" onclick="previewImage('/${safePhotoPath}')" style="width:40px; height:50px; object-fit:cover; border-radius:4px;">
+          </td>
+          <td>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <strong>${escapeHtml(r.name)}</strong>
+            </div>
+            <div style="font-size:0.8rem;color:var(--text-muted);margin-top:4px;">${escapeHtml(r.gender)} · ${r.age || 0}岁</div>
+            <div style="font-family:monospace;font-size:0.85rem;color:var(--text-main);font-weight:600;margin-top:4px;">身份证: ${escapeHtml(r.id_card)}</div>
+            <div style="font-size:0.8rem;color:var(--text-muted);margin-top:2px;">手机: ${escapeHtml(r.phone)}</div>
+          </td>
+          <td>
+            <div style="font-weight:600;color:var(--text-main);font-size:0.9rem;">权限: ${escapeHtml(r.region_auth)}</div>
+            <div style="font-size:0.8rem;color:var(--text-muted);margin-top:4px;white-space:normal;word-break:break-all;max-width:280px;" title="${escapeHtml(r.address)}">地址: <span style="color:var(--text-main);">${escapeHtml(r.address)}</span></div>
+          </td>
+          <td>
+            <div style="font-size:0.85rem;color:var(--text-main);">${escapeHtml(r.recorder_name || '--')}</div>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      updateRestoreCheckAllState();
+      updateRestoreCount();
+    }
+
+    // 搜索框输入防抖
+    function handleRestoreSearch() {
+      clearTimeout(restoreSearchTimeout);
+      restoreSearchTimeout = setTimeout(() => {
+        loadRestoreRecords();
+      }, 300);
+    }
+
+    function clearRestoreSearch() {
+      document.getElementById('restore-search-name').value = '';
+      loadRestoreRecords();
+    }
+
+    // 单个 checkbox 状态变更
+    function handleSingleRestoreCheckboxChange(el, id) {
+      if (el.checked) {
+        let record = lastFilteredRestoreRecords.find(r => r.id === id) || selectedRestoreRecordsMap.get(id);
+        if (record) {
+          selectedRestoreRecordsMap.set(id, record);
+        }
+      } else {
+        selectedRestoreRecordsMap.delete(id);
+      }
+      renderRestoreRecords();
+    }
+
+    // 更新全选 checkbox 状态
+    function updateRestoreCheckAllState() {
+      const checkboxes = document.querySelectorAll('.restore-checkbox');
+      if (checkboxes.length === 0) {
+        document.getElementById('restore-check-all').checked = false;
+        return;
+      }
+      let allChecked = true;
+      checkboxes.forEach(cb => {
+        if (!cb.checked) {
+          allChecked = false;
+        }
+      });
+      document.getElementById('restore-check-all').checked = allChecked;
+    }
+
+    // 全选/全不选切换
+    function toggleRestoreSelectAll(el) {
+      const checkboxes = document.querySelectorAll('.restore-checkbox');
+      checkboxes.forEach(cb => {
+        cb.checked = el.checked;
+        const id = parseInt(cb.value);
+        if (el.checked) {
+          let record = lastFilteredRestoreRecords.find(r => r.id === id) || selectedRestoreRecordsMap.get(id);
+          if (record) {
+            selectedRestoreRecordsMap.set(id, record);
+          }
+        } else {
+          selectedRestoreRecordsMap.delete(id);
+        }
+      });
+      renderRestoreRecords();
+    }
+
+    // 更新已选择数量和按钮状态
+    function updateRestoreCount() {
+      const count = selectedRestoreRecordsMap.size;
+      document.getElementById('restore-select-count').innerText = count;
+      const btn = document.getElementById('btn-submit-restore');
+      if (count === 0) {
+        btn.disabled = true;
+        btn.style.opacity = '0.5';
+        btn.style.cursor = 'not-allowed';
+      } else {
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.style.cursor = 'pointer';
+      }
+    }
+
+    // 提交门禁恢复申请
+    async function submitRestoreGate() {
+      if (selectedRestoreRecordsMap.size === 0) {
+        alert('请先勾选需要恢复门禁的培训人员！');
+        return;
+      }
+      const names = Array.from(selectedRestoreRecordsMap.values()).map(r => r.name).join(', ');
+      if (!confirm(`确认要为以下人员提交门禁恢复申请吗？\n${names}`)) {
+        return;
+      }
+      const ids = Array.from(selectedRestoreRecordsMap.keys()).join(',');
+      const formData = new FormData();
+      formData.append('ids', ids);
+
+      try {
+        const response = await fetch('/api/user/record/restore_gate', {
+          method: 'POST',
+          headers: { 'Authorization': token },
+          body: formData
+        });
+        const result = await response.json();
+        if (response.ok && result.code === 200) {
+          alert('门禁恢复申请提交成功！');
+          selectedRestoreRecordsMap.clear();
+          loadRestoreRecords();
+        } else {
+          alert(result.detail || '提交门禁恢复申请失败');
+        }
+      } catch (err) {
+        alert('提交恢复申请出现网络错误');
+      }
+    }
+
+    // 拉取历史记录列表
+    async function loadHistory() {
+      const tbody = document.getElementById('history-table-body');
+      const noData = document.getElementById('history-no-data');
+      if (!tbody) return;
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">加载中...</td></tr>';
+      
+      const searchName = document.getElementById('history-search-name').value.trim();
+      try {
+        let url = '/api/records';
+        if (searchName) {
+          url += '?name=' + encodeURIComponent(searchName);
+        }
+        const response = await fetch(url, {
+          headers: {
+            'Authorization': token
+          }
+        });
+        const result = await response.json();
+        if (response.ok) {
+          historyData = result.data || [];
+          if (historyData.length === 0) {
+            noData.style.display = 'block';
+            tbody.innerHTML = '';
+            return;
+          }
+          noData.style.display = 'none';
+          tbody.innerHTML = '';
+          historyData.forEach(row => {
+            const tr = document.createElement('tr');
+            let timeStr = row.created_at || '';
+            if (timeStr) {
+              timeStr = timeStr.replace('T', '<br>').substring(0, 23);
+            }
+            const safePhotoPath = row.photo_path ? row.photo_path.replace(/\\/g, '/') : '';
+            tr.innerHTML = `
+              <td style="text-align: center;"><img src="/${safePhotoPath}" class="table-img" onclick="previewImage('/${safePhotoPath}')" style="width:40px; height:50px; object-fit:cover; border-radius:4px;"></td>
+              <td>
+                <div style="display:flex;align-items:center;gap:6px;">
+                  <strong>${escapeHtml(row.name)}</strong>
+                </div>
+                <div style="font-size:0.8rem;color:var(--text-muted);margin-top:4px;">${escapeHtml(row.gender)} · ${row.age || 0}岁</div>
+                <div style="font-family:monospace;font-size:0.85rem;color:var(--text-main);font-weight:600;margin-top:4px;">身份证: ${escapeHtml(row.id_card)}</div>
+                <div style="font-size:0.8rem;color:var(--text-muted);margin-top:2px;">手机: ${escapeHtml(row.phone)}</div>
+              </td>
+              <td>
+                <div style="font-weight:600;color:var(--text-main);font-size:0.9rem;">岗位: ${escapeHtml(row.job)}</div>
+                <div style="font-size:0.8rem;color:var(--text-muted);margin-top:4px;">权限: ${escapeHtml(row.region_auth)}</div>
+                <div style="font-size:0.8rem;color:var(--text-muted);margin-top:6px;white-space:normal;word-break:break-all;max-width:280px;" title="${escapeHtml(row.address)}">地址: <span style="color:var(--text-main);">${escapeHtml(row.address)}</span></div>
+              </td>
+              <td>
+                <div style="font-size:0.85rem;color:var(--text-main);">${timeStr}</div>
+              </td>
+              <td style="text-align: center;">
+                <div class="action-row" style="justify-content: center;">
+                  <button class="btn btn-success" style="padding: 4px 8px; font-size: 0.8rem; width: auto;" onclick="editRecord(${row.id})">修改</button>
+                </div>
+              </td>
+            `;
+            tbody.appendChild(tr);
+          });
+        } else {
+          tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--danger-color);">${result.detail || '获取历史失败'}</td></tr>`;
+        }
+      } catch (err) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--danger-color);">网络错误，无法加载</td></tr>';
+      }
+    }
+
+    // 搜索框输入防抖 (历史记录)
+    function handleHistorySearch() {
+      clearTimeout(historySearchTimeout);
+      historySearchTimeout = setTimeout(() => {
+        loadHistory();
+      }, 300);
+    }
+
+    function clearHistorySearch() {
+      document.getElementById('history-search-name').value = '';
+      loadHistory();
+    }
+
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return '';
+      const text = String(str);
+      return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    // 点击“修改”进入编辑模式
+    function editRecord(id) {
+      const record = historyData.find(r => r.id === id);
+      if (!record) return;
+
+      currentEditRecordId = id;
+
+      // 回填表单数据
+      document.getElementById('name').value = record.name;
+      document.getElementById('nation').value = record.nation;
+      document.getElementById('id_card').value = record.id_card;
+      document.getElementById('phone').value = record.phone;
+      document.getElementById('address').value = record.address;
+      // 动态处理 job 选项以支持历史脏数据的兼容回填
+      const jobSelect = document.getElementById('job');
+      const jobVal = record.job;
+      
+      // 清理之前编辑可能遗留的临时 option
+      const tempJobOption = jobSelect.querySelector('option[data-temp="true"]');
+      if (tempJobOption) {
+        tempJobOption.remove();
+      }
+
+      let jobExists = false;
+      for (let i = 0; i < jobSelect.options.length; i++) {
+        if (jobSelect.options[i].value === jobVal) {
+          jobExists = true;
+          break;
+        }
+      }
+      if (!jobExists && jobVal) {
+        const opt = document.createElement('option');
+        opt.value = jobVal;
+        opt.text = jobVal + ' (历史数据)';
+        opt.setAttribute('data-temp', 'true');
+        jobSelect.appendChild(opt);
+      }
+      jobSelect.value = jobVal;
+
+      document.getElementById('education').value = record.education;
+
+      // 动态处理 region_auth 选项以支持历史脏数据的兼容回填
+      const regionSelect = document.getElementById('region_auth');
+      const val = record.region_auth;
+      
+      // 清理之前编辑可能遗留的临时 option
+      const tempOption = regionSelect.querySelector('option[data-temp="true"]');
+      if (tempOption) {
+        tempOption.remove();
+      }
+
+      let exists = false;
+      for (let i = 0; i < regionSelect.options.length; i++) {
+        if (regionSelect.options[i].value === val) {
+          exists = true;
+          break;
+        }
+      }
+      if (!exists && val) {
+        const opt = document.createElement('option');
+        opt.value = val;
+        opt.text = val + ' (历史数据)';
+        opt.setAttribute('data-temp', 'true');
+        regionSelect.appendChild(opt);
+      }
+      regionSelect.value = val;
+
+      // 回填照片预览
+      const placeholder = document.getElementById('uploader-placeholder');
+      const preview = document.getElementById('photo-preview');
+      preview.src = '/' + record.photo_path;
+      preview.style.display = 'block';
+      placeholder.style.display = 'none';
+      compressedPhotoBlob = null; 
+
+      placeholder.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+        <p>重新选择照片 / 拍摄（不选则保持原图）</p>
+      `;
+
+      // UI文案微调
+      document.getElementById('form-title').innerText = '修改培训人员信息';
+      document.getElementById('btn-submit').innerText = '保 存 修 改 信 息';
+      document.getElementById('btn-cancel-edit').style.display = 'block';
+
+      switchTab('form');
+    }
+
+    // 取消编辑
+    function cancelEdit() {
+      currentEditRecordId = null;
+      document.getElementById('form-record').reset();
+
+      // 清理 job 临时 option
+      const jobSelect = document.getElementById('job');
+      const tempJobOption = jobSelect.querySelector('option[data-temp="true"]');
+      if (tempJobOption) {
+        tempJobOption.remove();
+      }
+
+      // 清理 region_auth 临时 option
+      const regionSelect = document.getElementById('region_auth');
+      const tempOption = regionSelect.querySelector('option[data-temp="true"]');
+      if (tempOption) {
+        tempOption.remove();
+      }
+
+      // 重置照片预览
+      compressedPhotoBlob = null;
+      document.getElementById('photo-preview').style.display = 'none';
+      const placeholder = document.getElementById('uploader-placeholder');
+      placeholder.style.display = 'flex';
+      placeholder.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+        <p>选择照片 / 拍摄现场照</p>
+      `;
+
+      document.getElementById('form-title').innerText = '培训人员信息录入';
+      document.getElementById('btn-submit').innerText = '确 认 提交 信 息';
+      document.getElementById('btn-cancel-edit').style.display = 'none';
+
+      // 重新回填缓存的字段
+      fillSavedFields();
+
+
+    }
+
+    // 模态框预览大图
+    function previewImage(src) {
+      const modal = document.getElementById('image-modal');
+      const modalImg = document.getElementById('modal-img');
+      modal.style.display = 'flex';
+      modalImg.src = src;
+    }
+
+    function closeModal() {
+      document.getElementById('image-modal').style.display = 'none';
+    }
+
+    function handlePhotoChange(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      if (!file.type.startsWith('image/')) {
+        showAlert('error', '所选文件不是有效的图片！');
+        return;
+      }
+
+      const placeholder = document.getElementById('uploader-placeholder');
+      const preview = document.getElementById('photo-preview');
+      
+      placeholder.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="animate-spin">
+          <circle cx="12" cy="12" r="10" stroke-opacity="0.25"></circle>
+          <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4"></path>
+        </svg>
+        <p>正在自动压缩照片(限制200K内)...</p>
+      `;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+          let width = img.width;
+          let height = img.height;
+          const MAX_PIXELS = 1200; 
+          
+          if (width > height) {
+            if (width > MAX_PIXELS) {
+              height = Math.round((height * MAX_PIXELS) / width);
+              width = MAX_PIXELS;
+            }
+          } else {
+            if (height > MAX_PIXELS) {
+              width = Math.round((width * MAX_PIXELS) / height);
+              height = MAX_PIXELS;
+            }
+          }
+
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+
+          let quality = 0.9;
+          
+          function compressLoop() {
+            canvas.toBlob((blob) => {
+              if (blob.size <= 200 * 1024 || quality <= 0.1) {
+                compressedPhotoBlob = blob;
+                const blobUrl = URL.createObjectURL(blob);
+                preview.src = blobUrl;
+                preview.style.display = 'block';
+                placeholder.style.display = 'none';
+                console.log(`压缩成功！原图大小: ${(file.size/1024).toFixed(1)}KB, 压缩后大小: ${(blob.size/1024).toFixed(1)}KB, 压缩率: ${quality}`);
+              } else {
+                quality -= 0.15;
+                compressLoop();
+              }
+            }, 'image/jpeg', quality);
+          }
+          
+          compressLoop();
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    async function handleSubmit(e) {
+      e.preventDefault();
+      
+      if (currentEditRecordId === null && !compressedPhotoBlob) {
+        showAlert('error', '请先上传您的照片！');
+        return;
+      }
+
+      const idCard = document.getElementById('id_card').value.trim();
+      if (idCard.length !== 18 || (idCard[10] !== '0' && idCard[10] !== '1')) {
+        showAlert('error', '身份证号格式不正确（必须为18位且第11位是0或1）！');
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('name', document.getElementById('name').value);
+      formData.append('nation', document.getElementById('nation').value);
+      formData.append('id_card', idCard);
+      formData.append('phone', document.getElementById('phone').value);
+      formData.append('address', document.getElementById('address').value);
+      formData.append('job', document.getElementById('job').value);
+      formData.append('education', document.getElementById('education').value);
+      formData.append('region_auth', document.getElementById('region_auth').value);
+      
+      if (compressedPhotoBlob) {
+        formData.append('photo', compressedPhotoBlob, 'photo.jpg');
+      }
+
+      let url = '/api/record';
+      if (currentEditRecordId !== null) {
+        url = '/api/record/update';
+        formData.append('record_id', currentEditRecordId);
+      }
+
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Authorization': token
+          },
+          body: formData
+        });
+
+        const result = await response.json();
+        if (response.ok) {
+          const isEdit = currentEditRecordId !== null;
+          showAlert('success', isEdit ? '修改信息成功！' : '提交录入信息成功！');
+          
+          // 提交成功，把当前的配置缓存起来，方便在 reset 后能够立即回填，并成为下次自动填充的源
+          userSavedFields = {
+            nation: document.getElementById('nation').value,
+            address: document.getElementById('address').value,
+            job: document.getElementById('job').value,
+            education: document.getElementById('education').value,
+            region_auth: document.getElementById('region_auth').value
+          };
+
+          // 重置状态
+          currentEditRecordId = null;
+          document.getElementById('form-title').innerText = '培训人员信息录入';
+          document.getElementById('btn-submit').innerText = '确 认 提 交 信 息';
+          document.getElementById('btn-cancel-edit').style.display = 'none';
+
+          document.getElementById('form-record').reset();
+          
+          
+          // 清理 job 临时 option
+          const jobSelect = document.getElementById('job');
+          const tempJobOption = jobSelect.querySelector('option[data-temp="true"]');
+          if (tempJobOption) {
+            tempJobOption.remove();
+          }
+
+          // 清理 region_auth 临时 option
+          const regionSelect = document.getElementById('region_auth');
+          const tempOption = regionSelect.querySelector('option[data-temp="true"]');
+          if (tempOption) {
+            tempOption.remove();
+          }
+          
+          // 重置照片选择器
+          compressedPhotoBlob = null;
+          document.getElementById('photo-preview').style.display = 'none';
+          const placeholder = document.getElementById('uploader-placeholder');
+          placeholder.style.display = 'flex';
+          placeholder.innerHTML = `
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            <p>选择照片 / 拍摄现场照</p>
+          `;
+          
+          // 回填字段
+          fillSavedFields();
+
+
+
+          // 若在历史页签，重载数据
+          if (activeTab === 'history') {
+            loadHistory();
+          }
+        } else {
+          showAlert('error', result.detail || '提交录入数据失败，请重试');
+        }
+      } catch (err) {
+        showAlert('error', '网络连接错误，无法提交');
+      }
+    }
+
+    function logout() {
+      localStorage.clear();
+      sessionStorage.clear();
+      window.location.href = '/login';
+    }
+  </script>
+</body>
+</html>

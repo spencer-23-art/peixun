@@ -1,0 +1,1545 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>培训信息录入系统 - 管理后台</title>
+  <link rel="stylesheet" href="/static/css/style.css?v=1.0.6">
+  <style>
+    /* 针对后台页面的布局微调 */
+    .admin-container {
+      max-width: 1200px;
+      width: 100%;
+      margin-bottom: 40px;
+    }
+    .header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+      max-width: 1200px;
+      margin-bottom: 20px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--glass-border);
+      padding: 15px 30px;
+      border-radius: 12px;
+    }
+    .header-bar h2 {
+      margin-bottom: 0;
+      font-size: 1.4rem;
+    }
+    .header-bar .user-info {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      font-size: 0.9rem;
+    }
+    .btn-logout {
+      background: transparent;
+      border: 1px solid var(--danger-color);
+      color: var(--danger-color);
+      padding: 5px 12px;
+      font-size: 0.85rem;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .btn-logout:hover {
+      background: var(--danger-color);
+      color: white;
+    }
+    .no-data {
+      text-align: center;
+      padding: 40px;
+      color: var(--text-muted);
+      font-style: italic;
+    }
+    /* 强制表格文字单行显示，不换行 */
+    .table-wrapper th, .table-wrapper td {
+      white-space: nowrap;
+    }
+    /* 置灰已下载过的行，并稍微降低对比度 */
+    .downloaded-row {
+      opacity: 0.5;
+      filter: grayscale(40%);
+      background-color: rgba(255, 255, 255, 0.02) !important;
+    }
+    /* 表格超长文本省略号处理 */
+    .table-ellipsis {
+      max-width: 180px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    /* 提示信息渐变过渡 */
+    .alert {
+      transition: opacity 0.5s ease;
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 后台头部栏 -->
+  <div class="header-bar">
+    <h2>培训信息后台管理中心</h2>
+    <div class="user-info">
+      <span>当前管理员：<strong>系统管理员</strong></span>
+      <button class="btn-logout" onclick="logout()">退出后台</button>
+    </div>
+  </div>
+
+  <!-- 管理面板 -->
+  <div class="glass-container admin-container">
+    <div class="header-actions">
+      <div class="admin-logo">数据一览与配置</div>
+      <div class="export-btns">
+        <button class="btn btn-primary" id="btn-export-excel" onclick="exportData('excel')">
+          <svg style="width:16px;height:16px;margin-right:6px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+          下载 Excel 报表
+        </button>
+        <button class="btn btn-success" id="btn-export-gate" onclick="exportData('gate')" style="margin-left: 8px;">
+          <svg style="width:16px;height:16px;margin-right:6px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><polyline points="9 11 12 14 22 4"></polyline><polyline points="21 12 21 21 3 21 3 3 12 3"></polyline></svg>
+          门禁下载 (CSV+照片)
+        </button>
+        <button class="btn btn-success" id="btn-export-restore" onclick="exportRestoreData()" style="margin-left: 8px; display: none; background: #818cf8; border-color: #818cf8;">
+          <svg style="width:16px;height:16px;margin-right:6px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><polyline points="9 11 12 14 22 4"></polyline><polyline points="21 12 21 21 3 21 3 3 12 3"></polyline></svg>
+          下载门禁恢复 (CSV+照片)
+        </button>
+      </div>
+    </div>
+
+    <!-- 导航菜单 -->
+    <div class="admin-nav">
+      <div class="admin-nav-item active" id="nav-records" onclick="switchAdminTab('records')">已录入培训数据</div>
+      <div class="admin-nav-item" id="nav-pending" onclick="switchAdminTab('pending')">注册用户管理</div>
+      <div class="admin-nav-item" id="nav-restore" onclick="switchAdminTab('restore')">门禁恢复管理</div>
+      <div class="admin-nav-item" id="nav-exam" onclick="switchAdminTab('exam')">在线答题</div>
+      <div class="admin-nav-item" id="nav-config" onclick="switchAdminTab('config')">系统配置</div>
+    </div>
+
+    <div class="alert alert-error" id="admin-error-alert"></div>
+    <div class="alert alert-success" id="admin-success-alert"></div>
+
+    <!-- TAB 1: 已录入培训数据 -->
+    <div class="tab-content active" id="admin-content-records">
+      
+      <!-- 日期与单位区间筛选器 -->
+      <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 15px; flex-wrap: wrap;">
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+          <span style="font-size: 0.9rem; color: var(--text-muted);">上传日期范围：</span>
+          <input type="date" id="filter-start-date" class="form-control" style="width: auto; padding: 6px 12px; margin-bottom: 0;" onchange="handleDateFilterChange()">
+          <span style="font-size: 0.9rem; color: var(--text-muted);">至</span>
+          <input type="date" id="filter-end-date" class="form-control" style="width: auto; padding: 6px 12px; margin-bottom: 0;" onchange="handleDateFilterChange()">
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 0.9rem; color: var(--text-muted);">工作单位：</span>
+          <select id="filter-company" class="form-control" style="width: auto; padding: 6px 36px 6px 12px; margin-bottom: 0; min-width: 150px;" onchange="handleCompanyFilterChange()">
+            <option value="">全部单位</option>
+          </select>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 0.9rem; color: var(--text-muted);">姓名搜索：</span>
+          <input type="text" id="filter-name" class="form-control" placeholder="输入姓名搜索..." style="width: auto; padding: 6px 12px; margin-bottom: 0; min-width: 130px;" oninput="handleNameSearch()">
+        </div>
+        <button class="btn btn-secondary" style="width: auto; padding: 6px 12px;" onclick="clearDateFilter()">清除筛选</button>
+      </div>
+
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 40px; text-align: center;"><input type="checkbox" id="check-all" onchange="toggleSelectAll(this)" style="width: 18px; height: 18px; cursor: pointer;"></th>
+              <th style="width: 60px; text-align: center;">照片</th>
+              <th>人员基本信息</th>
+              <th>工作单位与岗位权限 / 地址</th>
+              <th>录入时间与人员</th>
+              <th style="width: 80px; text-align: center;">操作</th>
+            </tr>
+          </thead>
+          <tbody id="records-tbody">
+            <!-- 动态生成数据 -->
+          </tbody>
+        </table>
+        <div id="records-no-data" class="no-data" style="display: none;">暂无已录入的培训人员信息</div>
+      </div>
+    </div>
+
+    <!-- TAB 2: 注册用户管理 -->
+    <div class="tab-content" id="admin-content-pending">
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>申请账号 (电话)</th>
+              <th>真实姓名</th>
+              <th>工作单位</th>
+              <th>当前状态</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="pending-tbody">
+            <!-- 动态生成审批数据 -->
+          </tbody>
+        </table>
+        <div id="pending-no-data" class="no-data" style="display: none;">暂无普通注册用户数据</div>
+      </div>
+    </div>
+    <!-- TAB 3: 门禁恢复管理 -->
+    <div class="tab-content" id="admin-content-restore">
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 40px; text-align: center;"><input type="checkbox" id="restore-check-all" onchange="toggleRestoreSelectAll(this)" style="width: 18px; height: 18px; cursor: pointer;"></th>
+              <th style="width: 60px; text-align: center;">照片</th>
+              <th>人员基本信息</th>
+              <th>工作单位与岗位权限 / 地址</th>
+              <th>申请时间与人员</th>
+            </tr>
+          </thead>
+          <tbody id="restore-tbody">
+            <!-- 动态生成恢复数据 -->
+          </tbody>
+        </table>
+        <div id="restore-no-data" class="no-data" style="display: none;">暂无门禁恢复申请数据</div>
+      </div>
+    </div>
+
+    <!-- TAB 4: 在线答题 -->
+    <div class="tab-content" id="admin-content-exam">
+      <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 15px; flex-wrap: wrap;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 0.9rem; color: var(--text-muted);">工作单位：</span>
+          <select id="exam-filter-company" class="form-control" style="width: auto; padding: 6px 36px 6px 12px; margin-bottom: 0; min-width: 150px;" onchange="loadExamRecords()">
+            <option value="">全部单位</option>
+          </select>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 0.9rem; color: var(--text-muted);">考试科目：</span>
+          <select id="exam-filter-type" class="form-control" style="width: auto; padding: 6px 36px 6px 12px; margin-bottom: 0; min-width: 120px;" onchange="loadExamRecords()">
+            <option value="">全部科目</option>
+            <option value="普工">普工</option>
+            <option value="焊工">焊工</option>
+            <option value="探伤">探伤</option>
+            <option value="高处作业">高处作业</option>
+            <option value="吊装作业">吊装作业</option>
+            <option value="电工">电工</option>
+            <option value="叉车">叉车</option>
+          </select>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 0.9rem; color: var(--text-muted);">姓名搜索：</span>
+          <input type="text" id="exam-filter-name" class="form-control" placeholder="输入姓名搜索..." style="width: auto; padding: 6px 12px; margin-bottom: 0; min-width: 130px;" oninput="handleExamNameSearch()">
+        </div>
+        <button class="btn btn-secondary" style="width: auto; padding: 6px 12px;" onclick="clearExamFilter()">清除筛选</button>
+      </div>
+
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>姓名</th>
+              <th>工作单位</th>
+              <th>考试科目</th>
+              <th>得分</th>
+              <th>是否通过</th>
+              <th>答题时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="exam-tbody">
+            <!-- 动态生成答题数据 -->
+          </tbody>
+        </table>
+        <div id="exam-no-data" class="no-data" style="display: none;">暂无答题记录</div>
+      </div>
+    </div>
+    
+    <!-- TAB 5: 系统配置 -->
+    <div class="tab-content" id="admin-content-config">
+      <div class="glass-container" style="max-width: 500px; margin: 20px auto; padding: 30px; border: 1px solid var(--glass-border); border-radius: 12px; background: rgba(255, 255, 255, 0.02);">
+        <h3 style="margin-bottom: 20px; font-size: 1.25rem; color: var(--text-main); border-bottom: 1px solid var(--glass-border); padding-bottom: 12px;">考试开放时段设置</h3>
+        <div class="form-group" style="margin-bottom: 20px; text-align: left;">
+          <label for="cfg-start-time" style="display: block; margin-bottom: 8px; font-size: 0.9rem; color: var(--text-muted);">每日答题开始时间：</label>
+          <input type="time" id="cfg-start-time" class="form-control" style="width: 100%; box-sizing: border-box;" required>
+        </div>
+        <div class="form-group" style="margin-bottom: 25px; text-align: left;">
+          <label for="cfg-end-time" style="display: block; margin-bottom: 8px; font-size: 0.9rem; color: var(--text-muted);">每日答题截止时间：</label>
+          <input type="time" id="cfg-end-time" class="form-control" style="width: 100%; box-sizing: border-box;" required>
+        </div>
+        <div style="text-align: left;">
+          <button class="btn btn-primary" onclick="saveSystemConfig()" style="width: auto; padding: 10px 24px; font-size: 0.95rem;">保存配置</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 图片放大查看模态框 -->
+  <div id="img-modal" class="modal" onclick="closeModal()">
+    <img id="modal-img" class="modal-content" src="">
+  </div>
+
+  <!-- 修改用户模态框 -->
+  <div id="edit-user-modal" class="modal" onclick="closeEditUserModal()">
+    <div class="glass-container" style="max-width: 400px; margin-top: 0; padding: 25px; position: relative;" onclick="event.stopPropagation()">
+      <h3 style="margin-bottom: 15px; text-align: left; background: linear-gradient(to right, #ffffff, #c7d2fe); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">修改用户信息</h3>
+      <input type="hidden" id="edit-user-id">
+      <div class="form-group" style="margin-bottom: 15px;">
+        <label for="edit-user-username">手机号 / 账号 *</label>
+        <input type="text" id="edit-user-username" class="form-control" required>
+      </div>
+      <div class="form-group" style="margin-bottom: 15px;">
+        <label for="edit-user-realname">真实姓名 *</label>
+        <input type="text" id="edit-user-realname" class="form-control" required>
+      </div>
+      <div class="form-group" style="margin-bottom: 20px;">
+        <label for="edit-user-password">新密码 (留空表示不修改)</label>
+        <input type="password" id="edit-user-password" class="form-control" placeholder="请输入新密码">
+      </div>
+      <div style="display: flex; gap: 10px;">
+        <button class="btn btn-primary" onclick="submitEditUser()" style="width: auto; padding: 8px 16px;">保存修改</button>
+        <button class="btn btn-secondary" onclick="closeEditUserModal()" style="width: auto; padding: 8px 16px;">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 答题详情模态框 -->
+  <div id="exam-detail-modal" class="modal" onclick="closeExamDetailModal()">
+    <div class="glass-container" style="max-width: 700px; margin-top: 0; padding: 25px; position: relative; max-height: 80vh; overflow-y: auto;" onclick="event.stopPropagation()">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h3 style="background: linear-gradient(to right, #ffffff, #c7d2fe); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">答题详情</h3>
+        <button class="btn btn-secondary" onclick="closeExamDetailModal()" style="width: auto; padding: 6px 12px;">关闭</button>
+      </div>
+      <div id="exam-detail-content"></div>
+    </div>
+  </div>
+
+  <script>
+    function getSessionItem(key) {
+      return sessionStorage.getItem(key) || localStorage.getItem(key);
+    }
+
+    const token = getSessionItem('token');
+    const role = getSessionItem('role');
+    const expires = localStorage.getItem('token_expires');
+
+    // 鉴权，必须为管理员且未过期
+    if (!token || role !== 'admin' || (localStorage.getItem('token') && expires && Number(expires) < Date.now())) {
+      localStorage.clear();
+      sessionStorage.clear();
+      window.location.href = '/login';
+    }
+
+    const errorAlert = document.getElementById('admin-error-alert');
+    const successAlert = document.getElementById('admin-success-alert');
+
+    let alertTimeout = null;
+    let alertFadeTimeout = null;
+
+    function showAlert(type, msg) {
+      clearTimeout(alertTimeout);
+      clearTimeout(alertFadeTimeout);
+      
+      errorAlert.style.display = 'none';
+      errorAlert.style.opacity = '1';
+      successAlert.style.display = 'none';
+      successAlert.style.opacity = '1';
+
+      const targetAlert = (type === 'error') ? errorAlert : successAlert;
+      targetAlert.innerText = msg;
+      targetAlert.style.display = 'block';
+
+      // 2秒后开始淡化
+      alertTimeout = setTimeout(() => {
+        targetAlert.style.opacity = '0';
+        alertFadeTimeout = setTimeout(() => {
+          targetAlert.style.display = 'none';
+          targetAlert.style.opacity = '1';
+        }, 500);
+      }, 2000);
+    }
+
+    let filterStartDate = '';
+    let filterEndDate = '';
+    let filterCompany = '';
+    let filterName = '';
+    
+    // 跨筛选的选中记忆状态机
+    let selectedRecordsMap = new Map();
+    let deselectedRecordIds = new Set();
+    let lastFilteredRecords = [];
+
+    function switchAdminTab(tab) {
+      document.querySelectorAll('.admin-nav-item').forEach(function(item) { item.classList.remove('active'); });
+      document.querySelectorAll('.tab-content').forEach(function(content) { content.classList.remove('active'); });
+
+      var btnExcel = document.getElementById('btn-export-excel');
+      var btnGate = document.getElementById('btn-export-gate');
+      var btnRestore = document.getElementById('btn-export-restore');
+
+      if (tab === 'records') {
+        document.getElementById('nav-records').classList.add('active');
+        document.getElementById('admin-content-records').classList.add('active');
+        if (btnExcel) btnExcel.style.display = 'inline-flex';
+        if (btnGate) btnGate.style.display = 'inline-flex';
+        if (btnRestore) btnRestore.style.display = 'none';
+        loadRecords();
+      } else if (tab === 'pending') {
+        document.getElementById('nav-pending').classList.add('active');
+        document.getElementById('admin-content-pending').classList.add('active');
+        if (btnExcel) btnExcel.style.display = 'none';
+        if (btnGate) btnGate.style.display = 'none';
+        if (btnRestore) btnRestore.style.display = 'none';
+        loadPendingUsers();
+      } else if (tab === 'restore') {
+        document.getElementById('nav-restore').classList.add('active');
+        document.getElementById('admin-content-restore').classList.add('active');
+        if (btnExcel) btnExcel.style.display = 'none';
+        if (btnGate) btnGate.style.display = 'none';
+        if (btnRestore) btnRestore.style.display = 'inline-flex';
+        loadRestoreRecords();
+      } else if (tab === 'exam') {
+        document.getElementById('nav-exam').classList.add('active');
+        document.getElementById('admin-content-exam').classList.add('active');
+        if (btnExcel) btnExcel.style.display = 'none';
+        if (btnGate) btnGate.style.display = 'none';
+        if (btnRestore) btnRestore.style.display = 'none';
+        loadExamRecords();
+        loadExamCompanyOptions();
+      } else if (tab === 'config') {
+        document.getElementById('nav-config').classList.add('active');
+        document.getElementById('admin-content-config').classList.add('active');
+        if (btnExcel) btnExcel.style.display = 'none';
+        if (btnGate) btnGate.style.display = 'none';
+        if (btnRestore) btnRestore.style.display = 'none';
+        loadSystemConfig();
+      }
+    }
+
+    var selectedRestoreRecordsMap = new Map();
+    var deselectedRestoreRecordIds = new Set();
+    var lastFilteredRestoreRecords = [];
+
+    async function loadRestoreRecords() {
+      var debugDiv = document.getElementById('restore-no-data');
+      if (debugDiv) { debugDiv.style.display = 'block'; debugDiv.innerText = '正在加载门禁恢复数据...'; }
+      try {
+        var response = await fetch('/api/admin/restore_records', {
+          headers: { 'Authorization': token }
+        });
+        var result = await response.json();
+        console.log('[RESTORE] API response code:', result.code, 'data count:', (result.data || []).length);
+        if (debugDiv) { debugDiv.innerText = 'API返回: code=' + result.code + ', 数据条数=' + (result.data || []).length; }
+        if (response.ok && result.code === 200) {
+          lastFilteredRestoreRecords = result.data || [];
+          lastFilteredRestoreRecords.forEach(function(r) {
+            if (!selectedRestoreRecordsMap.has(r.id) && !deselectedRestoreRecordIds.has(r.id)) {
+              if (r.is_restore_downloaded === 0) {
+                selectedRestoreRecordsMap.set(r.id, r);
+              }
+            }
+          });
+          renderRestoreRecords();
+        } else {
+          console.error('[RESTORE] API error:', result);
+          if (debugDiv) { debugDiv.style.display = 'block'; debugDiv.innerText = 'API错误: ' + JSON.stringify(result); }
+          showAlert('error', result.detail || '加载门禁恢复记录失败');
+        }
+      } catch (err) {
+        console.error('[RESTORE] loadRestoreRecords exception:', err);
+        if (debugDiv) { debugDiv.style.display = 'block'; debugDiv.innerText = '加载异常: ' + err.message; }
+        showAlert('error', '获取门禁恢复记录出现网络错误');
+      }
+      checkRestoreRecordsNotification();
+    }
+
+    function renderRestoreRecords() {
+      console.log('[RESTORE] renderRestoreRecords called');
+      var tbody = document.getElementById('restore-tbody');
+      var noData = document.getElementById('restore-no-data');
+      if (!tbody) { console.error('[RESTORE] tbody not found'); return; }
+      try {
+        tbody.innerHTML = '';
+        var mergedMap = new Map();
+        selectedRestoreRecordsMap.forEach(function(val, key) { mergedMap.set(key, val); });
+        lastFilteredRestoreRecords.forEach(function(r) { mergedMap.set(r.id, r); });
+        var finalRecords = Array.from(mergedMap.values());
+        console.log('[RESTORE] finalRecords count:', finalRecords.length);
+        finalRecords.sort(function(a, b) {
+          if ((a.is_restore_downloaded || 0) !== (b.is_restore_downloaded || 0)) {
+            return (a.is_restore_downloaded || 0) - (b.is_restore_downloaded || 0);
+          }
+          var tA = 0, tB = 0;
+          try { tA = a.created_at ? new Date(a.created_at.replace(' ', 'T') + 'Z').getTime() : 0; } catch(e) {}
+          try { tB = b.created_at ? new Date(b.created_at.replace(' ', 'T') + 'Z').getTime() : 0; } catch(e) {}
+          return tB - tA;
+        });
+        if (finalRecords.length === 0) {
+          noData.style.display = 'block';
+          document.getElementById('restore-check-all').checked = false;
+          return;
+        }
+        noData.style.display = 'none';
+        for (var i = 0; i < finalRecords.length; i++) {
+          var r = finalRecords[i];
+          try {
+            var tr = document.createElement('tr');
+            if (r.is_restore_downloaded === 1) tr.classList.add('downloaded-row');
+            var isChecked = selectedRestoreRecordsMap.has(r.id);
+            var checkedAttr = isChecked ? 'checked' : '';
+            var sp = r.photo_path ? String(r.photo_path).replace(/\\/g, '/') : '';
+            
+            var h = '';
+            h += '<td style="text-align:center;"><input type="checkbox" class="restore-record-checkbox" value="' + r.id + '" ' + checkedAttr + ' onchange="handleSingleRestoreCheckboxChange(this,' + r.id + ')" onclick="event.stopPropagation()" style="width:18px;height:18px;cursor:pointer;"></td>';
+            h += '<td style="text-align:center;"><img src="/' + sp + '" class="table-img" onclick="zoomImage(this.src)"></td>';
+            h += '<td>';
+            h += '  <div style="display:flex;align-items:center;gap:6px;">';
+            h += '    <strong style="font-weight:700;font-size:0.95rem;color:var(--text-main);">' + escapeHtml(r.name) + '</strong>';
+            h += '    <span class="badge" style="padding:1px 6px;font-size:0.75rem;background:rgba(99,102,241,0.1);color:#818cf8;">' + escapeHtml(r.education) + '</span>';
+            h += '  </div>';
+            var ageStyle = (r.age >= 60) ? 'style="color:#ff0000;font-weight:bold;"' : '';
+            h += '  <div style="font-size:0.8rem;color:var(--text-muted);margin-top:4px;">' + escapeHtml(r.gender) + ' &middot; <span ' + ageStyle + '>' + (r.age || 0) + '岁</span> &middot; ' + escapeHtml(r.nation) + '</div>';
+            h += '  <div style="font-family:monospace;font-size:0.85rem;color:var(--text-main);font-weight:600;margin-top:4px;">身份证: ' + escapeHtml(r.id_card) + '</div>';
+            h += '  <div style="font-size:0.8rem;color:var(--text-muted);margin-top:2px;">手机: ' + escapeHtml(r.phone) + '</div>';
+            h += '</td>';
+            h += '<td>';
+            h += '  <div style="font-weight:600;color:var(--text-main);font-size:0.9rem;">' + escapeHtml(r.company || '暂无单位') + '</div>';
+            h += '  <div style="font-size:0.8rem;color:var(--text-muted);margin-top:4px;">岗位: ' + escapeHtml(r.job) + ' | 区域权限: ' + escapeHtml(r.region_auth || '无') + '</div>';
+            h += '  <div style="font-size:0.8rem;color:var(--text-muted);margin-top:6px;white-space:normal;word-break:break-all;max-width:320px;" title="' + escapeHtml(r.address) + '">地址: <span style="color:var(--text-main);">' + escapeHtml(r.address) + '</span></div>';
+            h += '</td>';
+            h += '<td>';
+            h += '  <div style="font-size:0.85rem;color:var(--text-main);">' + formatTime(r.created_at) + '</div>';
+            h += '  <div style="font-size:0.8rem;color:var(--text-muted);margin-top:4px;">提交人: ' + escapeHtml(r.recorder_name || '--') + '</div>';
+            h += '</td>';
+            tr.innerHTML = h;
+            tbody.appendChild(tr);
+          } catch (rowErr) {
+            console.error('[RESTORE] Row ' + i + ' error:', rowErr);
+          }
+        }
+        updateRestoreCheckAllState();
+      } catch (e) {
+        console.error('[RESTORE] FATAL:', e);
+        tbody.innerHTML = '<tr><td colspan="5" style="color:red;padding:20px;">渲染错误: ' + e.message + '</td></tr>';
+      }
+    }
+
+    // 单个 checkbox 状态改变
+    function handleSingleRestoreCheckboxChange(el, id) {
+      if (el.checked) {
+        let record = lastFilteredRestoreRecords.find(r => r.id === id) || selectedRestoreRecordsMap.get(id);
+        if (record) {
+          selectedRestoreRecordsMap.set(id, record);
+        }
+        deselectedRestoreRecordIds.delete(id);
+      } else {
+        selectedRestoreRecordsMap.delete(id);
+        deselectedRestoreRecordIds.add(id);
+      }
+      renderRestoreRecords();
+    }
+
+    // 表头全选框状态
+    function updateRestoreCheckAllState() {
+      const checkboxes = document.querySelectorAll('.restore-record-checkbox');
+      if (checkboxes.length === 0) {
+        document.getElementById('restore-check-all').checked = false;
+        return;
+      }
+      let allChecked = true;
+      checkboxes.forEach(cb => {
+        if (!cb.checked) {
+          allChecked = false;
+        }
+      });
+      document.getElementById('restore-check-all').checked = allChecked;
+    }
+
+    // 全选/全不选操作
+    function toggleRestoreSelectAll(el) {
+      const checkboxes = document.querySelectorAll('.restore-record-checkbox');
+      checkboxes.forEach(cb => {
+        cb.checked = el.checked;
+        const id = parseInt(cb.value);
+        if (el.checked) {
+          let record = lastFilteredRestoreRecords.find(r => r.id === id) || selectedRestoreRecordsMap.get(id);
+          if (record) {
+            selectedRestoreRecordsMap.set(id, record);
+          }
+          deselectedRestoreRecordIds.delete(id);
+        } else {
+          selectedRestoreRecordsMap.delete(id);
+          deselectedRestoreRecordIds.add(id);
+        }
+      });
+      renderRestoreRecords();
+    }
+
+    // 下载恢复数据一键包
+    function exportRestoreData() {
+      if (selectedRestoreRecordsMap.size === 0) {
+        alert('请先勾选需要恢复门禁的培训人员！');
+        return;
+      }
+      const ids = Array.from(selectedRestoreRecordsMap.keys()).join(',');
+      
+      // 1. 下载 CSV 文件
+      const csvUrl = '/api/admin/export/restore/csv?ids=' + encodeURIComponent(ids);
+      downloadFileWithToken(csvUrl, '恢复人员导入表.csv', false);
+
+      // 2. 下载照片包并联动刷新状态
+      const photosUrl = '/api/admin/export/restore/photos?ids=' + encodeURIComponent(ids);
+      
+      fetch(photosUrl, {
+        headers: { 'Authorization': token }
+      })
+      .then(response => {
+        if (!response.ok) {
+          throw new Error('下载失败，无权限或服务端异常');
+        }
+        return response.blob();
+      })
+      .then(blob => {
+        const blobUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = '恢复人员照片.zip';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+
+        // 将选中的记录从选中集与反选集清除，并触发局部刷新
+        const downloadedIds = ids.split(',').map(Number);
+        downloadedIds.forEach(id => {
+          selectedRestoreRecordsMap.delete(id);
+          deselectedRestoreRecordIds.delete(id);
+        });
+
+        showAlert('success', '门禁恢复数据下载成功！已自动分开保存 CSV 导入表和照片包。');
+        setTimeout(() => {
+          loadRestoreRecords();
+        }, 500);
+      })
+      .catch(err => {
+        showAlert('error', err.message);
+      });
+    }
+
+    // 0. 加载所有已审核通过且未删除的单位列表
+    async function loadCompanies() {
+      try {
+        const response = await fetch('/api/admin/companies', {
+          headers: { 'Authorization': token }
+        });
+        const result = await response.json();
+        if (response.ok && result.code === 200) {
+          const select = document.getElementById('filter-company');
+          const currentVal = select.value;
+          
+          select.innerHTML = '<option value="">全部单位</option>';
+          result.data.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c;
+            opt.innerText = c;
+            if (c === currentVal) {
+              opt.selected = true;
+            }
+            select.appendChild(opt);
+          });
+          
+          filterCompany = select.value;
+        }
+      } catch (err) {
+        console.error('加载单位列表发生网络错误', err);
+      }
+    }
+
+    // 1. 加载已录入的数据
+    async function loadRecords() {
+      try {
+        let url = '/api/admin/records?';
+        if (filterStartDate) {
+          url += 'start_date=' + encodeURIComponent(filterStartDate) + '&';
+        }
+        if (filterEndDate) {
+          url += 'end_date=' + encodeURIComponent(filterEndDate) + '&';
+        }
+        if (filterCompany) {
+          url += 'company=' + encodeURIComponent(filterCompany) + '&';
+        }
+        if (filterName) {
+          url += 'name=' + encodeURIComponent(filterName) + '&';
+        }
+        
+        const response = await fetch(url, {
+          headers: { 'Authorization': token }
+        });
+        const result = await response.json();
+        
+        if (response.ok && result.code === 200) {
+          lastFilteredRecords = result.data;
+          
+          // 首次加载或重新加载时，对于未下载且之前没有选中/反选历史的数据，默认加入选中集
+          lastFilteredRecords.forEach(r => {
+            if (!selectedRecordsMap.has(r.id) && !deselectedRecordIds.has(r.id)) {
+              if (r.is_gate_downloaded === 0) {
+                selectedRecordsMap.set(r.id, r);
+              }
+            }
+          });
+          
+          // 执行渲染
+          renderRecords();
+        } else {
+          showAlert('error', result.detail || '加载录入信息失败');
+        }
+      } catch (err) {
+        showAlert('error', '获取已录入数据出现网络错误');
+      }
+      checkRestoreRecordsNotification();
+    }
+
+    // 1.5 渲染表格
+    function renderRecords() {
+      const tbody = document.getElementById('records-tbody');
+      const noData = document.getElementById('records-no-data');
+      if (!tbody) return;
+      tbody.innerHTML = '';
+      
+      // 仅使用当前筛选出的最新数据渲染，不受之前跨筛选选中记录的影响，只显示当前筛选条件内的全部人员
+      const finalRecords = [...lastFilteredRecords];
+      
+      // 重新按“已下载门禁变灰排后，未下载置顶；内部按时间降序”规则排序
+      finalRecords.sort((a, b) => {
+        if (a.is_gate_downloaded !== b.is_gate_downloaded) {
+          return a.is_gate_downloaded - b.is_gate_downloaded; // ASC (0 排在 1 前面)
+        }
+        return new Date(b.created_at.replace(' ', 'T') + 'Z') - new Date(a.created_at.replace(' ', 'T') + 'Z');
+      });
+      
+      if (finalRecords.length === 0) {
+        noData.style.display = 'block';
+        document.getElementById('check-all').checked = false;
+        return;
+      }
+      noData.style.display = 'none';
+      
+      finalRecords.forEach(r => {
+        const tr = document.createElement('tr');
+        if (r.is_gate_downloaded === 1) {
+          tr.classList.add('downloaded-row');
+        }
+        
+        const isChecked = selectedRecordsMap.has(r.id);
+        const checkedAttr = isChecked ? 'checked' : '';
+        const safePhotoPath = r.photo_path ? r.photo_path.replace(/\\/g, '/') : '';
+
+        // 动态构建区域权限下拉选项
+        let optionsHtml = '';
+        const standardOptions = ["三元肥", "尿素塔"];
+        const curVal = r.region_auth || '';
+        let hasSelected = false;
+        
+        standardOptions.forEach(opt => {
+          const isSel = (opt === curVal);
+          if (isSel) hasSelected = true;
+          optionsHtml += `<option value="${opt}" ${isSel ? 'selected' : ''}>${opt}</option>`;
+        });
+        
+        if (!hasSelected && curVal) {
+          optionsHtml += `<option value="${escapeHtml(curVal)}" selected>${escapeHtml(curVal)} (历史数据)</option>`;
+        }
+        
+        tr.innerHTML = `
+          <td style="text-align: center;"><input type="checkbox" class="record-checkbox" value="${r.id}" ${checkedAttr} onchange="handleSingleCheckboxChange(this, ${r.id})" onclick="event.stopPropagation()" style="width: 18px; height: 18px; cursor: pointer;"></td>
+          <td style="text-align: center;"><img src="/${safePhotoPath}" class="table-img" onclick="zoomImage('/${safePhotoPath}')"></td>
+          <td>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <strong style="font-weight: 700; font-size: 0.95rem; color: var(--text-main);">${escapeHtml(r.name)}</strong>
+              <span class="badge" style="padding: 1px 6px; font-size: 0.75rem; background: rgba(99,102,241,0.1); color:#818cf8;">${escapeHtml(r.education)}</span>
+            </div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">
+              ${escapeHtml(r.gender)} · <span style="${r.age >= 60 ? 'color:#ff0000;font-weight:bold;' : ''}">${r.age}岁</span> · ${escapeHtml(r.nation)}
+            </div>
+            <div style="font-family: monospace; font-size: 0.85rem; color: var(--text-main); font-weight: 600; margin-top: 4px;">身份证: ${escapeHtml(r.id_card)}</div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">手机: ${escapeHtml(r.phone)}</div>
+          </td>
+          <td>
+            <div style="font-weight: 600; color: var(--text-main); font-size: 0.9rem;">${escapeHtml(r.company || '暂无单位')}</div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap;">
+              <span>岗位: ${escapeHtml(r.job)}</span>
+              <span style="color: var(--glass-border);">|</span>
+              <span style="display: inline-flex; align-items: center; gap: 4px;">
+                权限:
+                <select class="form-control" style="width: auto; padding: 2px 24px 2px 6px; font-size: 0.75rem; height: 24px; line-height: 20px; background-size: 10px; margin-bottom: 0; min-width: 85px;" id="region-select-${r.id}" onchange="handleRegionSelectChange(this, ${r.id}, '${escapeHtml(curVal)}')">
+                  ${optionsHtml}
+                </select>
+                <button class="btn btn-primary" style="display: none; width: auto; padding: 2px 6px; font-size: 0.75rem; height: 24px; min-height: 24px;" id="region-btn-${r.id}" onclick="updateRecordRegion(${r.id})">确认</button>
+              </span>
+            </div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 6px; white-space: normal; word-break: break-all; max-width: 320px;" title="${escapeHtml(r.address)}">地址: <span style="color: var(--text-main);">${escapeHtml(r.address)}</span></div>
+          </td>
+          <td>
+            <div style="font-size: 0.85rem; color: var(--text-main);">${formatTime(r.created_at)}</div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">录入人: ${escapeHtml(r.recorder_name || '系统管理员')}</div>
+          </td>
+          <td style="text-align: center;">
+            <button class="btn btn-danger" style="padding: 4px 8px; font-size: 0.8rem; width: auto;" onclick="deleteRecord(${r.id})">删除</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+      
+      updateCheckAllState();
+    }
+
+    // 筛选日期变化
+    function handleDateFilterChange() {
+      filterStartDate = document.getElementById('filter-start-date').value;
+      filterEndDate = document.getElementById('filter-end-date').value;
+      loadRecords();
+    }
+
+    // 筛选单位变化
+    function handleCompanyFilterChange() {
+      filterCompany = document.getElementById('filter-company').value;
+      loadRecords();
+    }
+
+    let searchTimeout = null;
+    // 姓名实时搜索（带300ms防抖）
+    function handleNameSearch() {
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(() => {
+        filterName = document.getElementById('filter-name').value;
+        loadRecords();
+      }, 300);
+    }
+
+    // 清除筛选日期、单位与姓名，并重置选中状态
+    function clearDateFilter() {
+      document.getElementById('filter-start-date').value = '';
+      document.getElementById('filter-end-date').value = '';
+      document.getElementById('filter-company').value = '';
+      document.getElementById('filter-name').value = '';
+      filterStartDate = '';
+      filterEndDate = '';
+      filterCompany = '';
+      filterName = '';
+      
+      // 清空所有勾选历史状态，重新应用默认勾选
+      selectedRecordsMap.clear();
+      deselectedRecordIds.clear();
+      
+      loadRecords();
+    }
+
+    // 单个复选框改变事件
+    function handleSingleCheckboxChange(el, id) {
+      if (el.checked) {
+        // 从当前筛选出的缓存中查找，如果不在，那应该在选中历史中
+        let record = lastFilteredRecords.find(r => r.id === id) || selectedRecordsMap.get(id);
+        if (record) {
+          selectedRecordsMap.set(id, record);
+        }
+        deselectedRecordIds.delete(id);
+      } else {
+        selectedRecordsMap.delete(id);
+        deselectedRecordIds.add(id);
+      }
+      
+      // 改变后直接在前端渲染，若取消勾选了被强制保留的行，该行会立刻在列表中消失！
+      renderRecords();
+    }
+
+    // 根据当前页面的勾选情况更新表头全选框的状态
+    function updateCheckAllState() {
+      const checkboxes = document.querySelectorAll('.record-checkbox');
+      if (checkboxes.length === 0) {
+        document.getElementById('check-all').checked = false;
+        return;
+      }
+      
+      let allChecked = true;
+      checkboxes.forEach(cb => {
+        if (!cb.checked) {
+          allChecked = false;
+        }
+      });
+      document.getElementById('check-all').checked = allChecked;
+    }
+
+    // 全选/全不选控制（仅影响当前页面上显示出的数据行）
+    function toggleSelectAll(el) {
+      const checkboxes = document.querySelectorAll('.record-checkbox');
+      checkboxes.forEach(cb => {
+        cb.checked = el.checked;
+        const id = parseInt(cb.value);
+        if (el.checked) {
+          let record = lastFilteredRecords.find(r => r.id === id) || selectedRecordsMap.get(id);
+          if (record) {
+            selectedRecordsMap.set(id, record);
+          }
+          deselectedRecordIds.delete(id);
+        } else {
+          selectedRecordsMap.delete(id);
+          deselectedRecordIds.add(id);
+        }
+      });
+      renderRecords();
+    }
+
+    // 2. 加载注册用户审批与管理列表
+    async function loadPendingUsers() {
+      try {
+        const response = await fetch('/api/admin/pending', {
+          headers: { 'Authorization': token }
+        });
+        const result = await response.json();
+        
+        const tbody = document.getElementById('pending-tbody');
+        const noData = document.getElementById('pending-no-data');
+        tbody.innerHTML = '';
+        
+        if (response.ok && result.code === 200) {
+          const users = result.data;
+          if (users.length === 0) {
+            noData.style.display = 'block';
+            return;
+          }
+          noData.style.display = 'none';
+          
+          users.forEach(u => {
+            const tr = document.createElement('tr');
+            
+            let statusBadge = '';
+            let actionButtons = '';
+            
+            if (u.status === 'pending') {
+              statusBadge = '<span class="badge badge-pending">待审批</span>';
+              actionButtons = `
+                <button class="btn btn-success" style="padding: 4px 8px; font-size: 0.8rem; width: auto;" onclick="handleApprove(${u.id}, 'approved')">通过</button>
+                <button class="btn btn-danger" style="padding: 4px 8px; font-size: 0.8rem; width: auto; margin-left: 4px;" onclick="handleApprove(${u.id}, 'rejected')">拒绝</button>
+                <button class="btn btn-primary" style="padding: 4px 8px; font-size: 0.8rem; width: auto; margin-left: 4px;" onclick="openEditUserModal(${u.id}, '${escapeHtml(u.username)}', '${escapeHtml(u.real_name)}')">修改</button>
+                <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 0.8rem; width: auto; margin-left: 4px; background: var(--danger-color); color: white;" onclick="handleDeleteUser(${u.id})">删除</button>
+              `;
+            } else if (u.status === 'approved') {
+              statusBadge = '<span class="badge badge-approved">已通过</span>';
+              actionButtons = `
+                <button class="btn btn-primary" style="padding: 4px 8px; font-size: 0.8rem; width: auto;" onclick="openEditUserModal(${u.id}, '${escapeHtml(u.username)}', '${escapeHtml(u.real_name)}')">修改</button>
+                <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 0.8rem; width: auto; margin-left: 4px; background: var(--danger-color); color: white;" onclick="handleDeleteUser(${u.id})">删除</button>
+              `;
+            } else if (u.status === 'rejected') {
+              statusBadge = '<span class="badge badge-rejected">已拒绝</span>';
+              actionButtons = `
+                <button class="btn btn-primary" style="padding: 4px 8px; font-size: 0.8rem; width: auto;" onclick="openEditUserModal(${u.id}, '${escapeHtml(u.username)}', '${escapeHtml(u.real_name)}')">修改</button>
+                <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 0.8rem; width: auto; margin-left: 4px; background: var(--danger-color); color: white;" onclick="handleDeleteUser(${u.id})">删除</button>
+              `;
+            }
+            
+            tr.innerHTML = `
+              <td><strong>${escapeHtml(u.username)}</strong></td>
+              <td>${escapeHtml(u.real_name)}</td>
+              <td>${escapeHtml(u.company)}</td>
+              <td>${statusBadge}</td>
+              <td>
+                <div class="action-row">
+                  ${actionButtons}
+                </div>
+              </td>
+            `;
+            tbody.appendChild(tr);
+          });
+        } else {
+          showAlert('error', result.detail || '加载用户管理列表失败');
+        }
+      } catch (err) {
+        showAlert('error', '获取用户列表时网络错误');
+      }
+      checkRestoreRecordsNotification();
+    }
+
+    // 3. 用户审批逻辑
+    async function handleApprove(userId, action) {
+      const formData = new FormData();
+      formData.append('user_id', userId);
+      formData.append('action', action);
+
+      try {
+        const response = await fetch('/api/admin/approve', {
+          method: 'POST',
+          headers: { 'Authorization': token },
+          body: formData
+        });
+
+        const result = await response.json();
+        if (response.ok && result.code === 200) {
+          showAlert('success', action === 'approved' ? '已同意该用户的注册申请！' : '已拒绝该用户的注册申请！');
+          loadPendingUsers();
+        } else {
+          showAlert('error', result.detail || '审批操作失败');
+        }
+      } catch (err) {
+        showAlert('error', '提交审批操作出现网络错误');
+      }
+    }
+
+    // 3.5. 删除用户逻辑
+    async function handleDeleteUser(userId) {
+      if (!confirm('确定要删除该用户吗？删除后该用户将彻底无法再登录系统。')) {
+        return;
+      }
+      const formData = new FormData();
+      formData.append('user_id', userId);
+
+      try {
+        const response = await fetch('/api/admin/user/delete', {
+          method: 'POST',
+          headers: { 'Authorization': token },
+          body: formData
+        });
+
+        const result = await response.json();
+        if (response.ok && result.code === 200) {
+          showAlert('success', '该注册用户已成功删除！');
+          loadPendingUsers();
+        } else {
+          showAlert('error', result.detail || '删除用户失败');
+        }
+      } catch (err) {
+        showAlert('error', '删除用户操作出现网络错误');
+      }
+    }
+
+    // 删除人员记录逻辑
+    async function deleteRecord(recordId) {
+      if (!confirm('确定要删除该人员的所有培训记录和照片吗？此操作无法撤销。')) {
+        return;
+      }
+      const formData = new FormData();
+      formData.append('record_id', recordId);
+
+      try {
+        const response = await fetch('/api/admin/record/delete', {
+          method: 'POST',
+          headers: { 'Authorization': token },
+          body: formData
+        });
+
+        const result = await response.json();
+        if (response.ok && result.code === 200) {
+          showAlert('success', '人员记录已成功删除！');
+          
+          // 从勾选历史中也移除
+          selectedRecordsMap.delete(recordId);
+          deselectedRecordIds.delete(recordId);
+          
+          loadRecords(); // 重新加载列表
+        } else {
+          showAlert('error', result.detail || '删除人员记录失败');
+        }
+      } catch (err) {
+        showAlert('error', '删除操作出现网络错误');
+      }
+    }
+
+    // 带有 Token 鉴权的通用文件下载辅助函数
+    function downloadFileWithToken(url, filename, shouldRefreshList) {
+      return fetch(url, {
+        headers: { 'Authorization': token }
+      })
+      .then(response => {
+        if (!response.ok) {
+          throw new Error('下载失败，无权限或服务端异常');
+        }
+        return response.blob();
+      })
+      .then(blob => {
+        const blobUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        
+        if (shouldRefreshList) {
+          const urlParams = new URLSearchParams(url.split('?')[1]);
+          const ids = urlParams.get('ids');
+          if (ids) {
+            const downloadedIds = ids.split(',').map(Number);
+            downloadedIds.forEach(id => {
+              selectedRecordsMap.delete(id);
+              deselectedRecordIds.delete(id);
+            });
+          }
+          
+          showAlert('success', '门禁数据下载成功！已自动分开保存 CSV 导入表和照片包。');
+          setTimeout(() => {
+            loadRecords();
+          }, 500);
+        } else {
+          showAlert('success', '文件下载成功！');
+        }
+      })
+      .catch(err => {
+        showAlert('error', err.message);
+      });
+    }
+
+    // 4. 一键导出/下载数据 (支持跨筛选条件的 selectedRecordsMap)
+    function exportData(format) {
+      if (selectedRecordsMap.size === 0) {
+        alert('请先勾选需要导出的培训人员记录！');
+        return;
+      }
+      
+      const ids = Array.from(selectedRecordsMap.keys()).join(',');
+      
+      if (format === 'excel') {
+        const url = '/api/admin/export/excel?ids=' + encodeURIComponent(ids);
+        downloadFileWithToken(url, '培训人员信息表.xlsx', false);
+      } else if (format === 'gate') {
+        // 1. 下载 CSV 文件（此接口会同时更新已下载状态，故传入 shouldRefreshList 为 true）
+        const csvUrl = '/api/admin/export/gate/csv?ids=' + encodeURIComponent(ids);
+        downloadFileWithToken(csvUrl, '培训人员导入表.csv', true);
+
+        // 2. 下载照片包
+        const photosUrl = '/api/admin/export/gate/photos?ids=' + encodeURIComponent(ids);
+        downloadFileWithToken(photosUrl, '培训人员照片.zip', false);
+      }
+    }
+
+    // 辅助函数：放大照片
+    function zoomImage(src) {
+      const modal = document.getElementById('img-modal');
+      const modalImg = document.getElementById('modal-img');
+      modalImg.src = src;
+      modal.style.display = 'flex';
+    }
+
+    function closeModal() {
+      document.getElementById('img-modal').style.display = 'none';
+    }
+
+    // 打开修改用户模态框
+    function openEditUserModal(id, username, realname) {
+      document.getElementById('edit-user-id').value = id;
+      document.getElementById('edit-user-username').value = username;
+      document.getElementById('edit-user-realname').value = realname;
+      document.getElementById('edit-user-password').value = ''; // 密码框默认留空
+      
+      const modal = document.getElementById('edit-user-modal');
+      modal.style.display = 'flex';
+    }
+
+    // 关闭修改用户模态框
+    function closeEditUserModal() {
+      document.getElementById('edit-user-modal').style.display = 'none';
+    }
+
+    // 提交保存修改普通用户
+    async function submitEditUser() {
+      const id = document.getElementById('edit-user-id').value;
+      const username = document.getElementById('edit-user-username').value.trim();
+      const realname = document.getElementById('edit-user-realname').value.trim();
+      const password = document.getElementById('edit-user-password').value;
+
+      if (!username) {
+        alert('手机号/账号不能为空！');
+        return;
+      }
+      if (!realname) {
+        alert('真实姓名不能为空！');
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('user_id', id);
+      formData.append('username', username);
+      formData.append('real_name', realname);
+      if (password) {
+        formData.append('password', password);
+      }
+
+      try {
+        const response = await fetch('/api/admin/user/update', {
+          method: 'POST',
+          headers: { 'Authorization': token },
+          body: formData
+        });
+        const result = await response.json();
+        if (response.ok && result.code === 200) {
+          showAlert('success', '用户信息修改成功！');
+          closeEditUserModal();
+          loadPendingUsers(); // 重新加载用户列表
+        } else {
+          alert(result.detail || '修改用户信息失败');
+        }
+      } catch (err) {
+        alert('修改用户信息时出现网络错误');
+      }
+    }
+
+    // 辅助安全转义
+    function escapeHtml(text) {
+      if (text === null || text === undefined) return '';
+      const str = String(text);
+      const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+      };
+      return str.replace(/[&<>"']/g, m => map[m]);
+    }
+
+    // 时间格式化
+    function formatTime(isoStr) {
+      if (!isoStr) return '';
+      const d = new Date(isoStr.replace(' ', 'T') + 'Z');
+      if (isNaN(d.getTime())) return isoStr;
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    }
+
+    // 监听下拉框变化动态显示/隐藏“确认”按钮
+    function handleRegionSelectChange(selectEl, id, originalVal) {
+      const btn = document.getElementById(`region-btn-${id}`);
+      if (!btn) return;
+      if (selectEl.value !== originalVal) {
+        btn.style.display = 'inline-block';
+      } else {
+        btn.style.display = 'none';
+      }
+    }
+
+    // 管理员修改人员区域权限
+    async function updateRecordRegion(id) {
+      const selectEl = document.getElementById(`region-select-${id}`);
+      if (!selectEl) return;
+      const newVal = selectEl.value;
+
+      if (!confirm('确定要将该人员的区域权限更改为 "' + newVal + '" 吗？')) {
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('record_id', id);
+      formData.append('region_auth', newVal);
+
+      try {
+        const response = await fetch('/api/admin/record/update_region', {
+          method: 'POST',
+          headers: { 'Authorization': token },
+          body: formData
+        });
+        const result = await response.json();
+        if (response.ok && result.code === 200) {
+          // 局部更新缓存中的数据，防止重载导致勾选状态全部丢失
+          // 1. 更新 lastFilteredRecords 中对应 record 的 region_auth
+          const record = lastFilteredRecords.find(r => r.id === id);
+          if (record) record.region_auth = newVal;
+          // 2. 更新 selectedRecordsMap 中对应 record 的 region_auth
+          const selectedRecord = selectedRecordsMap.get(id);
+          if (selectedRecord) selectedRecord.region_auth = newVal;
+          
+          // 重新在前端重新渲染即可，无需重新网络请求 loadRecords()，以防重载列表导致管理员的勾选购物车被重置！
+          renderRecords();
+        } else {
+          showAlert('error', result.detail || '更改区域权限失败');
+        }
+      } catch (err) {
+        showAlert('error', '更改区域权限时网络错误');
+      }
+    }
+
+    function logout() {
+      localStorage.clear();
+      sessionStorage.clear();
+      window.location.href = '/login';
+    }
+
+    // 检测是否有未下载的新门禁恢复申请，并控制彩色边框
+    async function checkRestoreRecordsNotification() {
+      try {
+        const response = await fetch('/api/admin/restore_records', {
+          headers: { 'Authorization': token }
+        });
+        const result = await response.json();
+        if (response.ok && result.code === 200) {
+          const records = result.data || [];
+          const hasNewRestore = records.some(r => r.is_restore_downloaded === 0);
+          const navRestore = document.getElementById('nav-restore');
+          if (navRestore) {
+            if (hasNewRestore) {
+              navRestore.classList.add('glow-restore-tab');
+            } else {
+              navRestore.classList.remove('glow-restore-tab');
+            }
+          }
+        }
+      } catch (err) {
+        console.error('检测新门禁恢复失败', err);
+      }
+    }
+
+    // 首次进入默认加载数据
+    async function initPage() {
+      await loadCompanies();
+      await loadRecords();
+    }
+    initPage();
+    checkRestoreRecordsNotification();
+
+    // 在线答题相关函数
+    let examFilterName = '';
+
+    function formatDateTime(dateStr) {
+      if (!dateStr) return '';
+      try {
+        var date = new Date(dateStr);
+        var year = date.getFullYear();
+        var month = String(date.getMonth() + 1).padStart(2, '0');
+        var day = String(date.getDate()).padStart(2, '0');
+        var hours = String(date.getHours()).padStart(2, '0');
+        var minutes = String(date.getMinutes()).padStart(2, '0');
+        var seconds = String(date.getSeconds()).padStart(2, '0');
+        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+      } catch (e) {
+        return dateStr;
+      }
+    }
+
+    async function loadExamRecords() {
+      const company = document.getElementById('exam-filter-company').value;
+      const examType = document.getElementById('exam-filter-type').value;
+      const name = examFilterName;
+      
+      var debugDiv = document.getElementById('exam-no-data');
+      if (debugDiv) { debugDiv.style.display = 'block'; debugDiv.innerText = '正在加载答题记录...'; }
+      
+      try {
+        var url = '/api/admin/exam_records';
+        var params = [];
+        if (company) params.push('company=' + encodeURIComponent(company));
+        if (examType) params.push('exam_type=' + encodeURIComponent(examType));
+        if (name) params.push('name=' + encodeURIComponent(name));
+        if (params.length > 0) url += '?' + params.join('&');
+        
+        var response = await fetch(url, {
+          headers: { 'Authorization': token }
+        });
+        var result = await response.json();
+        
+        if (response.ok && result.code === 200) {
+          renderExamRecords(result.data);
+        } else {
+          showAlert('error', result.message || '加载答题记录失败');
+          if (debugDiv) { debugDiv.style.display = 'block'; debugDiv.innerText = '加载答题记录失败'; }
+        }
+      } catch (err) {
+        console.error('加载答题记录失败', err);
+        if (debugDiv) { debugDiv.style.display = 'block'; debugDiv.innerText = '加载失败: ' + err.message; }
+      }
+    }
+
+    function renderExamRecords(records) {
+      var tbody = document.getElementById('exam-tbody');
+      var noDataDiv = document.getElementById('exam-no-data');
+      
+      if (!tbody || !noDataDiv) return;
+      
+      if (!records || records.length === 0) {
+        tbody.innerHTML = '';
+        noDataDiv.style.display = 'block';
+        noDataDiv.innerText = '暂无答题记录';
+        return;
+      }
+      
+      noDataDiv.style.display = 'none';
+      
+      tbody.innerHTML = records.map(function(record) {
+        var isPass = record.score >= 90;
+        
+        // 判断是否为当天答题
+        var isToday = false;
+        if (record.created_at) {
+          try {
+            var recordDateStr = record.created_at.split(' ')[0] || '';
+            var today = new Date();
+            var year = today.getFullYear();
+            var month = String(today.getMonth() + 1).padStart(2, '0');
+            var day = String(today.getDate()).padStart(2, '0');
+            var todayStr = year + '-' + month + '-' + day;
+            if (recordDateStr === todayStr) {
+              isToday = true;
+            }
+          } catch (e) {
+            console.error('解析答题日期错误:', e);
+          }
+        }
+        
+        var rowClassAttr = !isToday ? ' class="downloaded-row"' : '';
+        
+        return '<tr' + rowClassAttr + '>' +
+          '<td>' + escapeHtml(record.name) + '</td>' +
+          '<td>' + escapeHtml(record.company) + '</td>' +
+          '<td>' + escapeHtml(record.exam_type) + '</td>' +
+          '<td style="font-weight: 600; color: ' + (isPass ? '#10b981' : '#ef4444') + ';">' + record.score + '分</td>' +
+          '<td>' + (isPass ? '<span style="color: #10b981; font-weight: 600;">通过</span>' : '<span style="color: #ef4444; font-weight: 600;">未通过</span>') + '</td>' +
+          '<td>' + formatDateTime(record.created_at) + '</td>' +
+          '<td><button class="btn btn-primary" style="padding: 4px 10px; font-size: 0.85rem;" onclick="viewExamDetail(' + record.id + ')">查看详情</button></td>' +
+          '</tr>';
+      }).join('');
+    }
+
+    async function loadExamCompanyOptions() {
+      try {
+        var response = await fetch('/api/companies', {
+          headers: { 'Authorization': token }
+        });
+        var result = await response.json();
+        
+        if (response.ok && result.code === 200) {
+          var select = document.getElementById('exam-filter-company');
+          if (select && result.data && result.data.length > 0) {
+            result.data.forEach(function(c) {
+              var option = document.createElement('option');
+              option.value = c.name;
+              option.textContent = c.name;
+              select.appendChild(option);
+            });
+          }
+        }
+      } catch (err) {
+        console.error('加载公司选项失败', err);
+      }
+    }
+
+    function handleExamNameSearch() {
+      examFilterName = document.getElementById('exam-filter-name').value.trim();
+      loadExamRecords();
+    }
+
+    function clearExamFilter() {
+      document.getElementById('exam-filter-company').value = '';
+      document.getElementById('exam-filter-type').value = '';
+      document.getElementById('exam-filter-name').value = '';
+      examFilterName = '';
+      loadExamRecords();
+    }
+
+    async function viewExamDetail(recordId) {
+      try {
+        var response = await fetch('/api/admin/exam_record_detail/' + recordId, {
+          headers: { 'Authorization': token }
+        });
+        var result = await response.json();
+        
+        if (response.ok && result.code === 200) {
+          renderExamDetail(result.data);
+          document.getElementById('exam-detail-modal').style.display = 'flex';
+        } else {
+          showAlert('error', result.message || '获取答题详情失败');
+        }
+      } catch (err) {
+        console.error('获取答题详情失败', err);
+        showAlert('error', '获取答题详情失败');
+      }
+    }
+
+    function renderExamDetail(data) {
+      var container = document.getElementById('exam-detail-content');
+      if (!container || !data) return;
+      
+      var details = data.details || [];
+      var isPass = data.score >= 90;
+      
+      var html = '<div style="margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1);">' +
+        '<div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; font-size: 0.95rem;">' +
+        '<div><strong>姓名：</strong>' + escapeHtml(data.name) + '</div>' +
+        '<div><strong>工作单位：</strong>' + escapeHtml(data.company) + '</div>' +
+        '<div><strong>考试科目：</strong>' + escapeHtml(data.exam_type) + '</div>' +
+        '<div><strong>得分：</strong><span style="color: ' + (isPass ? '#10b981' : '#ef4444') + ';">' + data.score + '分</span></div>' +
+        '<div><strong>是否通过：</strong>' + (isPass ? '<span style="color: #10b981;">通过</span>' : '<span style="color: #ef4444;">未通过</span>') + '</div>' +
+        '<div><strong>用时：</strong>' + data.duration + '</div>' +
+        '</div>' +
+        '</div>' +
+        '<h4 style="margin-bottom: 15px; color: var(--text-muted);">答题详情</h4>';
+      
+      html += details.map(function(item, idx) {
+        var isCorrect = item.is_correct === 1;
+        return '<div style="background: rgba(255,255,255,0.03); border-radius: 8px; padding: 12px; margin-bottom: 10px;">' +
+          '<div style="display: flex; align-items: flex-start; gap: 10px;">' +
+          '<span style="display: inline-flex; background: ' + (isCorrect ? '#10b981' : '#ef4444') + '; color: white; width: 24px; height: 24px; border-radius: 50%; align-items: center; justify-content: center; font-size: 0.8rem; flex-shrink: 0;">' + (idx + 1) + '</span>' +
+          '<div style="flex: 1;">' +
+          '<p style="margin-bottom: 8px; line-height: 1.5;">' + escapeHtml(item.question) + '</p>' +
+          '<div style="font-size: 0.9rem;">' +
+          '<span style="color: var(--text-muted);">您的答案：</span>' +
+          '<span style="color: ' + (isCorrect ? '#ef4444' : '#10b981') + '; margin-left: 8px;">' + escapeHtml(item.user_answer) + '</span>' +
+          '<span style="color: var(--text-muted); margin-left: 15px;">正确答案：</span>' +
+          '<span style="color: #10b981; margin-left: 8px;">' + escapeHtml(item.correct_answer) + '</span>' +
+          '<span style="margin-left: 15px; color: ' + (isCorrect ? '#10b981' : '#ef4444') + '; font-weight: 600;">' + (isCorrect ? '回答正确' : '回答错误') + '</span>' +
+          '</div>' +
+          '</div>' +
+          '</div>' +
+          '</div>';
+      }).join('');
+      
+      container.innerHTML = html;
+    }
+
+    function closeExamDetailModal() {
+      document.getElementById('exam-detail-modal').style.display = 'none';
+    }
+
+    async function loadSystemConfig() {
+      try {
+        const response = await fetch('/api/admin/config', {
+          headers: { 'Authorization': token }
+        });
+        const result = await response.json();
+        if (response.ok && result.code === 200) {
+          document.getElementById('cfg-start-time').value = result.data.exam_start_time;
+          document.getElementById('cfg-end-time').value = result.data.exam_end_time;
+        } else {
+          showAlert('error', '加载系统配置失败');
+        }
+      } catch (err) {
+        showAlert('error', '获取配置时网络错误');
+      }
+    }
+
+    async function saveSystemConfig() {
+      const startTime = document.getElementById('cfg-start-time').value;
+      const endTime = document.getElementById('cfg-end-time').value;
+      if (!startTime || !endTime) {
+        alert('请选择完整的时间范围！');
+        return;
+      }
+      
+      const formData = new FormData();
+      formData.append('start_time', startTime);
+      formData.append('end_time', endTime);
+      
+      try {
+        const response = await fetch('/api/admin/config', {
+          method: 'POST',
+          headers: { 'Authorization': token },
+          body: formData
+        });
+        const result = await response.json();
+        if (response.ok && result.code === 200) {
+          showAlert('success', '系统配置保存成功！');
+        } else {
+          alert(result.detail || '保存配置失败');
+        }
+      } catch (err) {
+        alert('保存配置时出现网络错误');
+      }
+    }
+  </script>
+</body>
+</html>

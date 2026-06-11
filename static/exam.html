@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>培训信息录入系统 - 在线答题</title>
+  <link rel="stylesheet" href="/static/css/style.css?v=1.0.7">
+  <style>
+    /* 答题页面特定样式 */
+    .exam-container {
+      max-width: 800px;
+      width: 100%;
+    }
+    .exam-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 25px;
+      padding-bottom: 15px;
+      border-bottom: 1px solid var(--glass-border);
+      flex-wrap: wrap;
+      gap: 15px;
+    }
+    .exam-title {
+      font-size: 1.2rem;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+    .exam-progress {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+    .progress-bar {
+      width: 150px;
+      height: 8px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--primary-color), var(--accent-color));
+      border-radius: 4px;
+      transition: width 0.3s ease;
+    }
+    .question-card {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--glass-border);
+      border-radius: 14px;
+      padding: 20px;
+      margin-bottom: 20px;
+      transition: all 0.3s ease;
+    }
+    .question-card:hover {
+      border-color: rgba(99, 102, 241, 0.4);
+    }
+    .question-number {
+      display: inline-flex;
+      background: var(--primary-color);
+      color: white;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.9rem;
+      font-weight: 600;
+      margin-right: 12px;
+      flex-shrink: 0;
+    }
+    .question-text {
+      font-size: 1.05rem;
+      line-height: 1.6;
+      color: var(--text-main);
+      margin-bottom: 20px;
+    }
+    .option-list {
+      display: flex;
+      gap: 15px;
+      justify-content: center;
+    }
+    .option-item {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 15px 40px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 2px solid var(--glass-border);
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-size: 1.1rem;
+      font-weight: 600;
+      min-width: 100px;
+    }
+    .option-item:hover {
+      border-color: var(--primary-color);
+      background: rgba(79, 70, 229, 0.1);
+    }
+    .option-item.selected {
+      border-color: var(--primary-color);
+      background: rgba(79, 70, 229, 0.2);
+      box-shadow: 0 0 15px rgba(79, 70, 229, 0.3);
+    }
+    .option-item.selected.correct {
+      border-color: var(--accent-color);
+      background: rgba(16, 185, 129, 0.2);
+      box-shadow: 0 0 15px rgba(16, 185, 129, 0.3);
+    }
+    .option-item.selected.wrong {
+      border-color: var(--danger-color);
+      background: rgba(239, 68, 68, 0.2);
+      box-shadow: 0 0 15px rgba(239, 68, 68, 0.3);
+    }
+    .exam-actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 25px;
+      padding-top: 20px;
+      border-top: 1px solid var(--glass-border);
+    }
+    .btn-exam {
+      width: auto;
+      min-width: 100px;
+    }
+    .timer {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+    .timer svg {
+      width: 20px;
+      height: 20px;
+    }
+    .question-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 20px;
+      justify-content: center;
+    }
+    .nav-item {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      border: 1px solid var(--glass-border);
+      background: rgba(255, 255, 255, 0.03);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .nav-item:hover {
+      border-color: var(--primary-color);
+    }
+    .nav-item.current {
+      background: var(--primary-color);
+      color: white;
+      border-color: var(--primary-color);
+    }
+    .nav-item.answered {
+      background: var(--accent-color);
+      color: white;
+      border-color: var(--accent-color);
+    }
+    .result-container {
+      text-align: center;
+      padding: 40px 20px;
+    }
+    .result-icon {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 20px;
+      font-size: 2.5rem;
+    }
+    .result-icon.pass {
+      background: rgba(16, 185, 129, 0.2);
+      color: var(--accent-color);
+    }
+    .result-icon.fail {
+      background: rgba(239, 68, 68, 0.2);
+      color: var(--danger-color);
+    }
+    .result-score {
+      font-size: 2.5rem;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+    .result-message {
+      font-size: 1.1rem;
+      margin-bottom: 25px;
+    }
+    .result-details {
+      text-align: left;
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 25px;
+    }
+    .detail-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--glass-border);
+    }
+    .detail-row:last-child {
+      border-bottom: none;
+    }
+    .hidden {
+      display: none !important;
+    }
+    /* 答案正确/错误标记 */
+    .answer-mark {
+      display: inline-block;
+      margin-left: 10px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+    .answer-mark.correct {
+      background: rgba(16, 185, 129, 0.2);
+      color: var(--accent-color);
+    }
+    .answer-mark.wrong {
+      background: rgba(239, 68, 68, 0.2);
+      color: var(--danger-color);
+    }
+    @media (max-width: 600px) {
+      .option-list {
+        flex-direction: column;
+      }
+      .option-item {
+        width: 100%;
+      }
+      .exam-header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .progress-bar {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- 开始页面 -->
+  <div class="glass-container exam-container" id="start-panel">
+    <h2>在线考试系统</h2>
+    <p class="subtitle">请填写个人信息并选择考试科目</p>
+    
+    <div class="alert alert-error" id="start-error"></div>
+    
+    <form id="start-form" onsubmit="startExam(event)">
+      <div class="form-group">
+        <label for="exam-name">姓名 *</label>
+        <input type="text" id="exam-name" class="form-control" placeholder="请输入您的姓名" required>
+      </div>
+      
+      <div class="form-group">
+        <label for="exam-company">工作单位 *</label>
+        <select id="exam-company" class="form-control" required>
+          <option value="">请选择工作单位</option>
+        </select>
+      </div>
+      
+      <div class="form-group">
+        <label for="exam-type">考试科目 *</label>
+        <select id="exam-type" class="form-control" required>
+          <option value="">请选择考试科目</option>
+          <option value="普工">普工</option>
+          <option value="焊工">焊工</option>
+          <option value="探伤">探伤</option>
+          <option value="高处作业">高处作业</option>
+          <option value="吊装作业">吊装作业</option>
+          <option value="电工">电工</option>
+          <option value="叉车">叉车</option>
+        </select>
+      </div>
+      
+      <button type="submit" class="btn btn-primary" style="margin-top: 20px;">开始答题</button>
+    </form>
+  </div>
+
+  <!-- 答题页面 -->
+  <div class="glass-container exam-container hidden" id="exam-panel">
+    <div class="exam-header">
+      <div class="exam-title" id="exam-title"></div>
+      <div class="exam-progress">
+        <span id="question-counter">1/25</span>
+        <div class="progress-bar">
+          <div class="progress-fill" id="progress-fill"></div>
+        </div>
+        <div class="timer">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+          </svg>
+          <span id="timer">30:00</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="question-container"></div>
+
+    <div class="question-nav" id="question-nav"></div>
+
+    <div class="exam-actions">
+      <button class="btn btn-secondary btn-exam" id="btn-prev" onclick="prevQuestion()">上一题</button>
+      <button class="btn btn-warning btn-exam" id="btn-submit" onclick="submitExam()">交卷</button>
+      <button class="btn btn-primary btn-exam" id="btn-next" onclick="nextQuestion()">下一题</button>
+    </div>
+  </div>
+
+  <!-- 结果页面 -->
+  <div class="glass-container exam-container hidden" id="result-panel">
+    <div class="result-container">
+      <div class="result-icon" id="result-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+      </div>
+      <div class="result-score" id="result-score">0</div>
+      <div class="result-message" id="result-message"></div>
+      
+      <div class="result-details">
+        <div class="detail-row">
+          <span>姓名：</span>
+          <strong id="detail-name"></strong>
+        </div>
+        <div class="detail-row">
+          <span>工作单位：</span>
+          <strong id="detail-company"></strong>
+        </div>
+        <div class="detail-row">
+          <span>考试科目：</span>
+          <strong id="detail-exam"></strong>
+        </div>
+        <div class="detail-row">
+          <span>答题数：</span>
+          <strong id="detail-answered"></strong>
+        </div>
+        <div class="detail-row">
+          <span>正确数：</span>
+          <strong id="detail-correct"></strong>
+        </div>
+        <div class="detail-row">
+          <span>用时：</span>
+          <strong id="detail-time"></strong>
+        </div>
+      </div>
+
+      <button class="btn btn-primary" onclick="restartExam()">重新答题</button>
+    </div>
+  </div>
+
+  <script>
+    // 考试状态
+    let examData = {
+      name: '',
+      company: '',
+      examType: '',
+      questions: [],
+      answers: {},
+      currentIndex: 0,
+      startTime: 0,
+      timeLimit: 30 * 60, // 30分钟
+      remainingTime: 0,
+      timerInterval: null
+    };
+
+    // 试题文件映射
+    const examFileMap = {
+      '普工': '普工试题(1).xlsx',
+      '焊工': '焊工题库(1).xlsx',
+      '探伤': '探伤.xlsx',
+      '高处作业': '高处作业(1).xlsx',
+      '吊装作业': '吊装作业.xlsx',
+      '电工': '电工题库.xlsx',
+      '叉车': '叉车工.xlsx'
+    };
+
+    // 显示/隐藏面板
+    function showPanel(panelId) {
+      document.querySelectorAll('.glass-container').forEach(panel => {
+        panel.classList.add('hidden');
+      });
+      document.getElementById(panelId).classList.remove('hidden');
+    }
+
+    // 开始考试
+    async function startExam(e) {
+      e.preventDefault();
+      
+      const name = document.getElementById('exam-name').value;
+      const company = document.getElementById('exam-company').value;
+      const examType = document.getElementById('exam-type').value;
+      
+      if (!name || !company || !examType) {
+        document.getElementById('start-error').textContent = '请填写完整信息';
+        document.getElementById('start-error').style.display = 'block';
+        return;
+      }
+      
+      document.getElementById('start-error').style.display = 'none';
+      
+      examData.name = name;
+      examData.company = company;
+      examData.examType = examType;
+      examData.answers = {};
+      examData.currentIndex = 0;
+      examData.startTime = Date.now();
+      examData.remainingTime = examData.timeLimit;
+      
+      try {
+        // 加载试题
+        await loadQuestions(examType);
+        
+        // 初始化计时器
+        startTimer();
+        
+        // 显示答题页面
+        showPanel('exam-panel');
+        document.getElementById('exam-title').textContent = `${examType}安全知识考试`;
+        renderQuestion();
+        renderQuestionNav();
+      } catch (error) {
+        console.error('加载试题失败:', error);
+        alert('加载试题失败，请稍后重试');
+      }
+    }
+
+    // 加载工作单位选项
+    async function loadCompanies() {
+      const select = document.getElementById('exam-company');
+      try {
+        const response = await fetch('/api/companies');
+        console.log('加载工作单位响应状态:', response.status);
+        
+        const result = await response.json();
+        console.log('加载工作单位数据:', result);
+        
+        if (result.code === 200 && result.data && result.data.length > 0) {
+          select.innerHTML = '<option value="">请选择工作单位</option>';
+          
+          result.data.forEach(function(company) {
+            const option = document.createElement('option');
+            option.value = company;
+            option.textContent = company;
+            select.appendChild(option);
+          });
+          console.log('工作单位加载成功，共', result.data.length, '个单位');
+        } else {
+          // 如果没有数据，显示默认选项
+          select.innerHTML = `
+            <option value="">请选择工作单位</option>
+            <option value="四川华庭">四川华庭</option>
+            <option value="测试建筑工程有限公司">测试建筑工程有限公司</option>
+          `;
+          console.log('工作单位数据为空，使用默认选项');
+        }
+      } catch (error) {
+        console.error('加载工作单位失败:', error);
+        // 加载失败时使用默认选项
+        select.innerHTML = `
+          <option value="">请选择工作单位</option>
+          <option value="四川华庭">四川华庭</option>
+          <option value="测试建筑工程有限公司">测试建筑工程有限公司</option>
+        `;
+      }
+    }
+
+    // 页面加载完成后初始化
+    document.addEventListener('DOMContentLoaded', function() {
+      loadCompanies();
+    });
+
+    // 加载试题
+    async function loadQuestions(examType) {
+      const fileName = examFileMap[examType];
+      if (!fileName) {
+        throw new Error('未找到对应试题文件');
+      }
+      
+      const response = await fetch(`/api/get_questions?file=${encodeURIComponent(fileName)}`);
+      const result = await response.json();
+      
+      if (result.code === 200) {
+        // 随机抽取25道题
+        const allQuestions = result.data;
+        const shuffled = allQuestions.sort(() => Math.random() - 0.5);
+        examData.questions = shuffled.slice(0, 25);
+      } else {
+        throw new Error(result.message || '加载试题失败');
+      }
+    }
+
+    // 渲染题目
+    function renderQuestion() {
+      const container = document.getElementById('question-container');
+      const question = examData.questions[examData.currentIndex];
+      
+      if (!question) {
+        container.innerHTML = '<p class="no-data">暂无题目</p>';
+        return;
+      }
+      
+      const selectedAnswer = examData.answers[examData.currentIndex];
+      
+      container.innerHTML = `
+        <div class="question-card">
+          <div style="display: flex; align-items: flex-start;">
+            <span class="question-number">${examData.currentIndex + 1}</span>
+            <div class="question-text">${question.question}</div>
+          </div>
+          <div class="option-list">
+            <div class="option-item ${selectedAnswer === '对' ? 'selected' : ''}" onclick="selectAnswer('对')">
+              ✓ 对
+            </div>
+            <div class="option-item ${selectedAnswer === '错' ? 'selected' : ''}" onclick="selectAnswer('错')">
+              ✗ 错
+            </div>
+          </div>
+        </div>
+      `;
+      
+      // 更新计数器和进度
+      document.getElementById('question-counter').textContent = 
+        `${examData.currentIndex + 1}/${examData.questions.length}`;
+      document.getElementById('progress-fill').style.width = 
+        `${((examData.currentIndex + 1) / examData.questions.length) * 100}%`;
+    }
+
+    // 渲染题目导航
+    function renderQuestionNav() {
+      const nav = document.getElementById('question-nav');
+      nav.innerHTML = examData.questions.map((_, idx) => {
+        const isCurrent = idx === examData.currentIndex;
+        const isAnswered = examData.answers[idx] !== undefined;
+        return `
+          <div class="nav-item ${isCurrent ? 'current' : ''} ${isAnswered && !isCurrent ? 'answered' : ''}" 
+               onclick="goToQuestion(${idx})">
+            ${idx + 1}
+          </div>
+        `;
+      }).join('');
+    }
+
+    // 选择答案
+    function selectAnswer(option) {
+      examData.answers[examData.currentIndex] = option;
+      renderQuestion();
+      renderQuestionNav();
+    }
+
+    // 上一题
+    function prevQuestion() {
+      if (examData.currentIndex > 0) {
+        examData.currentIndex--;
+        renderQuestion();
+        renderQuestionNav();
+      }
+    }
+
+    // 下一题
+    function nextQuestion() {
+      if (examData.currentIndex < examData.questions.length - 1) {
+        examData.currentIndex++;
+        renderQuestion();
+        renderQuestionNav();
+      }
+    }
+
+    // 跳转到指定题目
+    function goToQuestion(index) {
+      examData.currentIndex = index;
+      renderQuestion();
+      renderQuestionNav();
+    }
+
+    // 开始计时器
+    function startTimer() {
+      if (examData.timerInterval) {
+        clearInterval(examData.timerInterval);
+      }
+      
+      examData.timerInterval = setInterval(() => {
+        examData.remainingTime--;
+        
+        const minutes = Math.floor(examData.remainingTime / 60);
+        const seconds = examData.remainingTime % 60;
+        document.getElementById('timer').textContent = 
+          `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        
+        if (examData.remainingTime <= 0) {
+          submitExam();
+        }
+      }, 1000);
+    }
+
+    // 提交考试
+    async function submitExam() {
+      if (examData.timerInterval) {
+        clearInterval(examData.timerInterval);
+      }
+      
+      // 提取用户的答卷列表发送给后端
+      const answersToSend = examData.questions.map((question, idx) => {
+        return {
+          question: question.question,
+          user_answer: examData.answers[idx] || ''
+        };
+      });
+      
+      // 计算用时
+      const elapsedSeconds = Math.floor((Date.now() - examData.startTime) / 1000);
+      const elapsedMinutes = Math.floor(elapsedSeconds / 60);
+      const elapsedSecs = elapsedSeconds % 60;
+      const duration = `${elapsedMinutes}分${elapsedSecs}秒`;
+      
+      let score = 0;
+      let correctCount = 0;
+      let totalCount = examData.questions.length;
+      
+      // 保存答题记录到服务器，由后端统一判分以防作弊
+      try {
+        const response = await fetch('/api/save_exam_record', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            name: examData.name,
+            company: examData.company,
+            exam_type: examData.examType,
+            duration: duration,
+            answers: answersToSend
+          })
+        });
+        const result = await response.json();
+        console.log('答题记录保存结果:', result);
+        if (result.code === 200 && result.data) {
+          score = result.data.score;
+          correctCount = result.data.correct_count;
+          totalCount = result.data.total_count || totalCount;
+        } else {
+          alert('成绩保存失败: ' + (result.message || '服务器判分异常'));
+        }
+      } catch (error) {
+        console.error('保存答题记录失败:', error);
+        alert('提交考卷网络错误，请稍后重试');
+      }
+      
+      // 更新结果页面
+      document.getElementById('result-score').textContent = `${score}分`;
+      document.getElementById('detail-name').textContent = examData.name;
+      document.getElementById('detail-company').textContent = examData.company;
+      document.getElementById('detail-exam').textContent = examData.examType;
+      document.getElementById('detail-answered').textContent = 
+        `${Object.keys(examData.answers).length}/${totalCount}`;
+      document.getElementById('detail-correct').textContent = correctCount;
+      document.getElementById('detail-time').textContent = duration;
+      
+      // 设置结果状态
+      const isPass = score >= 90;
+      const icon = document.getElementById('result-icon');
+      const message = document.getElementById('result-message');
+      
+      if (isPass) {
+        icon.className = 'result-icon pass';
+        icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+        message.textContent = '恭喜您！考试通过！';
+        message.style.color = 'var(--accent-color)';
+      } else {
+        icon.className = 'result-icon fail';
+        icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+        message.textContent = '很遗憾，考试未通过（及格线90分），请重试';
+        message.style.color = 'var(--danger-color)';
+      }
+      
+      showPanel('result-panel');
+    }
+
+    // 重新答题
+    function restartExam() {
+      document.getElementById('start-form').reset();
+      showPanel('start-panel');
+    }
+  </script>
+</body>
+</html>

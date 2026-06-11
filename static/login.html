@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>培训信息录入系统 - 登录/注册</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+  <div class="glass-container">
+    <h2>培训信息录入系统</h2>
+    <p class="subtitle">请登录或注册您的账号</p>
+    
+    <div class="alert alert-error" id="error-alert"></div>
+    <div class="alert alert-success" id="success-alert"></div>
+
+    <div class="tab-header">
+      <button class="tab-btn active" id="tab-login" onclick="switchTab('login')">用户登录</button>
+      <button class="tab-btn" id="tab-register" onclick="switchTab('register')">新用户注册</button>
+    </div>
+
+    <!-- 登录模块 -->
+    <div class="tab-content active" id="content-login">
+      <form id="form-login" onsubmit="handleLogin(event)">
+        <div class="form-group">
+          <label for="login-phone">登录账号</label>
+          <input type="text" id="login-phone" class="form-control" placeholder="请输入手机号或管理员账号" required>
+        </div>
+        <div class="form-group">
+          <label for="login-password">登录密码</label>
+          <input type="password" id="login-password" class="form-control" placeholder="请输入密码" required>
+        </div>
+        <label class="remember-container">
+          <input type="checkbox" id="login-remember">
+          <span>保持登录（1个月内免登录）</span>
+        </label>
+        <button type="submit" class="btn btn-primary" style="margin-top: 10px;">立 即 登 录</button>
+      </form>
+    </div>
+
+    <!-- 注册模块 -->
+    <div class="tab-content" id="content-register">
+      <form id="form-register" onsubmit="handleRegister(event)">
+        <div class="form-group">
+          <label for="reg-name">真实姓名 *</label>
+          <input type="text" id="reg-name" class="form-control" placeholder="请输入您的姓名" required minlength="2">
+        </div>
+        <div class="form-group">
+          <label for="reg-phone">联系电话 *</label>
+          <input type="text" id="reg-phone" class="form-control" placeholder="请输入您的11位手机号" required pattern="[0-9]{11}">
+        </div>
+        <div class="form-group">
+          <label for="reg-company">工作单位 *</label>
+          <input type="text" id="reg-company" class="form-control" placeholder="请填写您当前工作的完整单位名称" required minlength="4">
+        </div>
+        <div class="form-group">
+          <label for="reg-password">登录密码 *</label>
+          <input type="password" id="reg-password" class="form-control" placeholder="请设置登录密码" required minlength="6">
+        </div>
+        <button type="submit" class="btn btn-success" style="margin-top: 10px;">提 交 注 册 申 请</button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    function getLoginSession() {
+      // 先检查 sessionStorage
+      let token = sessionStorage.getItem('token');
+      let role = sessionStorage.getItem('role');
+      let realName = sessionStorage.getItem('real_name');
+      let company = sessionStorage.getItem('company');
+      
+      if (token) {
+        return { token, role, realName, company };
+      }
+      
+      // 再检查 localStorage
+      token = localStorage.getItem('token');
+      role = localStorage.getItem('role');
+      realName = localStorage.getItem('real_name');
+      company = localStorage.getItem('company');
+      const expires = localStorage.getItem('token_expires');
+      
+      if (token) {
+        if (expires && Number(expires) < Date.now()) {
+          // 已过期，清除
+          localStorage.removeItem('token');
+          localStorage.removeItem('role');
+          localStorage.removeItem('real_name');
+          localStorage.removeItem('company');
+          localStorage.removeItem('token_expires');
+          return null;
+        }
+        return { token, role, realName, company };
+      }
+      return null;
+    }
+
+    // 检查是否保持登录或当前有有效会话
+    const session = getLoginSession();
+    if (session) {
+      if (session.role === 'admin') {
+        window.location.href = '/admin';
+      } else {
+        window.location.href = '/client';
+      }
+    }
+
+    const errorAlert = document.getElementById('error-alert');
+    const successAlert = document.getElementById('success-alert');
+
+    function showAlert(type, msg) {
+      errorAlert.style.display = 'none';
+      successAlert.style.display = 'none';
+      if (type === 'error') {
+        errorAlert.innerText = msg;
+        errorAlert.style.display = 'block';
+      } else {
+        successAlert.innerText = msg;
+        successAlert.style.display = 'block';
+      }
+      // 5秒后自动隐藏
+      setTimeout(() => {
+        errorAlert.style.display = 'none';
+        successAlert.style.display = 'none';
+      }, 6000);
+    }
+
+    function switchTab(tab) {
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+
+      if (tab === 'login') {
+        document.getElementById('tab-login').classList.add('active');
+        document.getElementById('content-login').classList.add('active');
+      } else {
+        document.getElementById('tab-register').classList.add('active');
+        document.getElementById('content-register').classList.add('active');
+      }
+    }
+
+    async function handleLogin(e) {
+      e.preventDefault();
+      const phone = document.getElementById('login-phone').value;
+      const password = document.getElementById('login-password').value;
+      const remember = document.getElementById('login-remember').checked;
+
+      const formData = new FormData();
+      formData.append('username', phone);
+      formData.append('password', password);
+
+      try {
+        const response = await fetch('/api/login', {
+          method: 'POST',
+          body: formData
+        });
+
+        const result = await response.json();
+        if (response.ok) {
+          if (result.code === 200) {
+            showAlert('success', '登录成功！正在跳转...');
+            
+            // 清除旧的存储，防止混合状态
+            localStorage.clear();
+            sessionStorage.clear();
+
+            const storage = remember ? localStorage : sessionStorage;
+            storage.setItem('token', result.data.token);
+            storage.setItem('role', result.data.role);
+            storage.setItem('real_name', result.data.real_name);
+            storage.setItem('company', result.data.company);
+            
+            if (remember) {
+              // 保持登录 1 个月
+              const expiry = Date.now() + 30 * 24 * 60 * 60 * 1000;
+              localStorage.setItem('token_expires', expiry);
+            }
+            
+            setTimeout(() => {
+              if (result.data.role === 'admin') {
+                window.location.href = '/admin';
+              } else {
+                window.location.href = '/client';
+              }
+            }, 1000);
+          } else {
+            showAlert('error', result.message);
+          }
+        } else {
+          showAlert('error', result.detail || '用户名或密码错误');
+        }
+      } catch (err) {
+        showAlert('error', '服务器连接失败，请检查网络');
+      }
+    }
+
+    async function handleRegister(e) {
+      e.preventDefault();
+      const name = document.getElementById('reg-name').value;
+      const phone = document.getElementById('reg-phone').value;
+      const company = document.getElementById('reg-company').value;
+      const password = document.getElementById('reg-password').value;
+
+      const formData = new FormData();
+      formData.append('username', phone);
+      formData.append('password', password);
+      formData.append('real_name', name);
+      formData.append('company', company);
+
+      try {
+        const response = await fetch('/api/register', {
+          method: 'POST',
+          body: formData
+        });
+
+        const result = await response.json();
+        if (response.ok) {
+          showAlert('success', result.message || '注册申请提交成功！请联系管理员审核。');
+          document.getElementById('form-register').reset();
+          setTimeout(() => {
+            switchTab('login');
+          }, 3000);
+        } else {
+          showAlert('error', result.detail || '注册申请提交失败');
+        }
+      } catch (err) {
+        showAlert('error', '服务器连接失败，请检查网络');
+      }
+    }
+  </script>
+</body>
+</html>
