@@ -39,7 +39,7 @@
       align-items: center;
     }
 
-    /* 动态柔焦发光球背景 */
+    /* 柔焦发光球背景 */
     .bg-glow-container {
       position: absolute;
       width: 100%;
@@ -54,7 +54,7 @@
       position: absolute;
       border-radius: 50%;
       filter: blur(120px);
-      opacity: 0.35;
+      opacity: 0.3;
       animation: float 25s infinite alternate ease-in-out;
     }
     .glow-ball-1 {
@@ -63,7 +63,6 @@
       background: radial-gradient(circle, var(--primary), transparent 70%);
       top: -100px;
       left: -100px;
-      animation-delay: 0s;
     }
     .glow-ball-2 {
       width: 600px;
@@ -72,14 +71,6 @@
       bottom: -150px;
       right: -100px;
       animation-delay: -5s;
-    }
-    .glow-ball-3 {
-      width: 400px;
-      height: 400px;
-      background: radial-gradient(circle, #ec4899, transparent 70%);
-      top: 40%;
-      left: 50%;
-      animation-delay: -10s;
     }
 
     @keyframes float {
@@ -93,8 +84,8 @@
       position: relative;
       width: 90%;
       max-width: 1300px;
-      height: 80vh;
-      min-height: 600px;
+      height: 82vh;
+      min-height: 620px;
       background: rgba(13, 18, 33, 0.45);
       border: 1px solid var(--glass-border);
       border-radius: 24px;
@@ -116,7 +107,7 @@
       min-width: 100%;
       width: 100%;
       height: 100%;
-      padding: 60px;
+      padding: 50px 60px;
       display: flex;
       flex-direction: row;
       align-items: center;
@@ -163,37 +154,31 @@
       margin-bottom: 20px;
       letter-spacing: 1.5px;
     }
-    .slide h1 {
-      font-size: 2.8rem;
-      font-weight: 700;
-      line-height: 1.25;
-      margin-bottom: 20px;
-      background: linear-gradient(135deg, #ffffff 40%, #a5b4fc);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
     .slide h2 {
       font-size: 2.2rem;
       font-weight: 600;
       margin-bottom: 15px;
       color: #fff;
+      background: linear-gradient(135deg, #ffffff 60%, #a5b4fc);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
     }
     .slide p {
       font-size: 1.05rem;
       line-height: 1.6;
       color: var(--text-muted);
-      margin-bottom: 25px;
+      margin-bottom: 20px;
     }
 
-    /* 步骤指示器列表 */
+    /* 步骤列表 */
     .steps-list {
       list-style-type: none;
     }
     .steps-list li {
       display: flex;
       align-items: flex-start;
-      margin-bottom: 16px;
-      font-size: 1.05rem;
+      margin-bottom: 14px;
+      font-size: 1rem;
       color: var(--text-main);
       opacity: 0.85;
     }
@@ -205,11 +190,11 @@
       background: rgba(16, 185, 129, 0.15);
       border: 1px solid var(--success);
       color: var(--success);
-      width: 22px;
-      height: 22px;
+      width: 20px;
+      height: 20px;
       border-radius: 50%;
       margin-right: 12px;
-      font-size: 0.75rem;
+      font-size: 0.7rem;
       font-weight: bold;
       flex-shrink: 0;
       margin-top: 2px;
@@ -237,434 +222,15 @@
       transform: translateY(-2px);
       box-shadow: 0 6px 24px rgba(99, 102, 241, 0.45);
     }
-    .btn-action:active {
-      transform: translateY(1px);
-    }
     .btn-action svg {
       width: 18px;
       height: 18px;
     }
 
-    /* 演示用设备仿真框（手机） */
-    .device-mockup {
-      width: 280px;
-      height: 540px;
-      background: #000;
-      border: 10px solid #1f2937;
-      border-radius: 40px;
-      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
-      position: relative;
-      overflow: hidden;
-    }
-    /* 手机刘海 */
-    .device-mockup::before {
-      content: "";
-      position: absolute;
-      top: 0;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 120px;
-      height: 20px;
-      background: #1f2937;
-      border-bottom-left-radius: 15px;
-      border-bottom-right-radius: 15px;
-      z-index: 20;
-    }
-    /* 模拟手机屏幕内容 */
-    .mock-screen {
-      width: 100%;
-      height: 100%;
-      background: #111827;
-      padding: 30px 20px 20px;
-      display: flex;
-      flex-direction: column;
-      font-size: 11px;
-      position: relative;
-    }
-    .mock-header {
-      text-align: center;
-      margin-bottom: 20px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-      padding-bottom: 8px;
-    }
-    .mock-title {
-      font-size: 13px;
-      font-weight: 600;
-      color: #fff;
-    }
-    .mock-subtitle {
-      font-size: 9px;
-      color: var(--text-muted);
-      margin-top: 2px;
-    }
-    .mock-form-group {
-      margin-bottom: 12px;
-      position: relative;
-    }
-    .mock-form-group label {
-      display: block;
-      color: #9ca3af;
-      margin-bottom: 4px;
-      font-size: 9px;
-    }
-    .mock-input {
-      width: 100%;
-      background: rgba(255, 255, 255, 0.04);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 6px;
-      padding: 6px 8px;
-      color: #fff;
-      font-size: 10px;
-      outline: none;
-      transition: border-color 0.2s;
-    }
-    .mock-input:focus {
-      border-color: var(--primary);
-    }
-    .mock-btn {
-      width: 100%;
-      background: var(--success);
-      color: white;
-      border: none;
-      padding: 8px;
-      border-radius: 6px;
-      font-weight: bold;
-      font-size: 10px;
-      cursor: pointer;
-      margin-top: 8px;
-      position: relative;
-      overflow: hidden;
-    }
-    .mock-btn.primary {
-      background: var(--primary);
-    }
-    .mock-btn span.loading-spinner {
-      display: none;
-      width: 12px;
-      height: 12px;
-      border: 2px solid rgba(255,255,255,0.3);
-      border-top-color: white;
-      border-radius: 50%;
-      animation: spin 0.8s infinite linear;
-      position: absolute;
-      left: calc(50% - 6px);
-      top: calc(50% - 6px);
-    }
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-
-    /* 模拟键盘 */
-    .mock-keyboard {
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      width: 100%;
-      background: #1f2937;
-      padding: 6px 4px 20px;
-      transform: translateY(100%);
-      transition: transform 0.3s cubic-bezier(0.25, 1, 0.5, 1);
-      z-index: 10;
-      border-top: 1px solid rgba(255,255,255,0.05);
-    }
-    .mock-keyboard.show {
-      transform: translateY(0);
-    }
-    .mock-kbd-row {
-      display: flex;
-      justify-content: center;
-      margin-bottom: 4px;
-      gap: 3px;
-    }
-    .mock-key {
-      background: rgba(255, 255, 255, 0.15);
-      color: white;
-      padding: 6px 0;
-      text-align: center;
-      border-radius: 4px;
-      font-size: 11px;
-      flex: 1;
-      max-width: 24px;
-      box-shadow: 0 1px 0 rgba(0,0,0,0.3);
-      transition: background 0.1s;
-    }
-    .mock-key.active {
-      background: var(--primary);
-    }
-    .mock-key.wide {
-      max-width: 50px;
-      font-size: 9px;
-    }
-    .mock-key.space {
-      max-width: 120px;
-    }
-
-    /* 模拟光标 */
-    .mock-cursor {
-      position: absolute;
-      width: 18px;
-      height: 18px;
-      background: rgba(255, 255, 255, 0.25);
-      border: 2px solid white;
-      border-radius: 50%;
-      pointer-events: none;
-      z-index: 99;
-      transform: translate(-50%, -50%);
-      box-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
-      display: none;
-      transition: left 0.6s cubic-bezier(0.25, 1, 0.5, 1), top 0.6s cubic-bezier(0.25, 1, 0.5, 1);
-    }
-    .mock-cursor.clicking {
-      transform: translate(-50%, -50%) scale(0.75);
-      background: rgba(239, 68, 68, 0.6);
-      border-color: #ef4444;
-      box-shadow: 0 0 15px rgba(239, 68, 68, 0.9);
-    }
-
-    /* 模拟弹窗通知 */
-    .mock-toast {
-      position: absolute;
-      top: 40px;
-      left: 10px;
-      right: 10px;
-      background: rgba(16, 185, 129, 0.95);
-      color: white;
-      padding: 8px 12px;
-      border-radius: 8px;
-      text-align: center;
-      font-weight: 600;
-      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
-      transform: translateY(-50px);
-      opacity: 0;
-      transition: all 0.3s;
-      z-index: 15;
-      font-size: 10px;
-    }
-    .mock-toast.show {
-      transform: translateY(0);
-      opacity: 1;
-    }
-
-    /* 演示用设备仿真框（桌面端浏览器） */
-    .browser-mockup {
-      width: 500px;
-      height: 380px;
-      background: #1f2937;
-      border-radius: 12px;
-      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
-      border: 1px solid var(--glass-border);
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-    }
-    .browser-topbar {
-      height: 30px;
-      background: rgba(0, 0, 0, 0.2);
-      display: flex;
-      align-items: center;
-      padding: 0 12px;
-      gap: 6px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    }
-    .browser-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-    }
-    .browser-dot.red { background: #ef4444; }
-    .browser-dot.yellow { background: #f59e0b; }
-    .browser-dot.green { background: #10b981; }
-    .browser-address {
-      flex: 1;
-      background: rgba(255, 255, 255, 0.05);
-      border-radius: 4px;
-      margin: 0 15px;
-      height: 18px;
-      display: flex;
-      align-items: center;
-      padding-left: 8px;
-      font-size: 9px;
-      color: var(--text-muted);
-    }
-    .browser-screen {
-      flex: 1;
-      background: #111827;
-      padding: 15px 20px;
-      font-size: 11px;
-      position: relative;
-      display: flex;
-      gap: 15px;
-    }
-    .browser-form {
-      flex: 1.2;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-    .browser-preview {
-      flex: 0.8;
-      border: 1px dashed rgba(255, 255, 255, 0.1);
-      border-radius: 8px;
-      background: rgba(255, 255, 255, 0.02);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      position: relative;
-      padding: 10px;
-    }
-    .avatar-preview-img {
-      width: 80px;
-      height: 100px;
-      border-radius: 6px;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      object-fit: cover;
-      display: none;
-      animation: fadeIn 0.4s;
-    }
-    @keyframes fadeIn {
-      from { opacity: 0; transform: scale(0.9); }
-      to { opacity: 1; transform: scale(1); }
-    }
-    .upload-placeholder {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      color: var(--text-muted);
-      font-size: 9px;
-    }
-    .upload-placeholder svg {
-      width: 24px;
-      height: 24px;
-      margin-bottom: 4px;
-      color: var(--primary);
-    }
-
-    /* 预览生成的门禁卡 */
-    .qr-card-preview {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(13, 18, 33, 0.95);
-      border-radius: 8px;
-      border: 1px solid var(--primary);
-      box-shadow: 0 10px 20px var(--primary-glow);
-      display: none;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 15px;
-      animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1);
-    }
-    @keyframes slideUp {
-      from { transform: translateY(20px); opacity: 0; }
-      to { transform: translateY(0); opacity: 1; }
-    }
-    .qr-card-title {
-      font-size: 11px;
-      font-weight: bold;
-      color: var(--accent);
-      margin-bottom: 8px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-    .qr-card-grid {
-      display: flex;
-      width: 100%;
-      gap: 10px;
-      align-items: center;
-      margin-bottom: 8px;
-    }
-    .qr-card-avatar {
-      width: 50px;
-      height: 65px;
-      border-radius: 4px;
-      object-fit: cover;
-      border: 1px solid rgba(255,255,255,0.1);
-    }
-    .qr-card-info {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      font-size: 8px;
-      text-align: left;
-    }
-    .qr-card-info span {
-      color: var(--text-muted);
-    }
-    .qr-card-info strong {
-      color: #fff;
-    }
-    .qr-card-code {
-      width: 60px;
-      height: 60px;
-      background: white;
-      padding: 4px;
-      border-radius: 4px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-    }
-    .qr-card-code img {
-      width: 100%;
-      height: 100%;
-    }
-
-    /* 流程图动画样式 */
-    .flow-diagram {
-      width: 90%;
-      max-width: 450px;
-      height: 250px;
-      position: relative;
-    }
-    .flow-node {
-      position: absolute;
-      width: 100px;
-      padding: 10px;
-      background: var(--card-bg);
-      border: 1px solid var(--glass-border);
-      border-radius: 12px;
-      text-align: center;
-      font-size: 0.85rem;
-      font-weight: 600;
-      box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3);
-      z-index: 2;
-    }
-    .flow-node.primary {
-      border-color: var(--primary);
-      box-shadow: 0 0 15px var(--primary-glow);
-    }
-    .flow-node.accent {
-      border-color: var(--accent);
-      box-shadow: 0 0 15px var(--accent-glow);
-    }
-    .flow-node-1 { top: 20px; left: calc(50% - 50px); }
-    .flow-node-2 { bottom: 20px; left: 20px; }
-    .flow-node-3 { bottom: 20px; right: 20px; }
-    .flow-arrow-svg {
-      position: absolute;
-      width: 100%;
-      height: 100%;
-      top: 0;
-      left: 0;
-      z-index: 1;
-    }
-    .flow-path {
-      stroke-dasharray: 8;
-      animation: dash 20s linear infinite;
-    }
-    @keyframes dash {
-      to { stroke-dashoffset: -1000; }
-    }
-
     /* 翻页控制栏 */
     .controls-container {
       position: absolute;
-      bottom: 25px;
+      bottom: 20px;
       left: 50%;
       transform: translateX(-50%);
       display: flex;
@@ -690,9 +256,6 @@
       border-color: var(--primary);
       transform: scale(1.05);
     }
-    .nav-arrow:active {
-      transform: scale(0.95);
-    }
     .nav-arrow svg {
       width: 20px;
       height: 20px;
@@ -715,14 +278,14 @@
       background: var(--primary);
     }
 
-    /* 顶部导航状态条 */
+    /* 顶部导航条 */
     .top-status-bar {
       width: 90%;
       max-width: 1300px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 15px;
+      margin-bottom: 12px;
       padding: 0 10px;
     }
     .logo-area {
@@ -746,148 +309,434 @@
       color: var(--text-muted);
     }
 
-    /* 首尾页特色样式 */
-    .hero-title {
-      font-size: 3.5rem !important;
-      margin-bottom: 25px !important;
-      line-height: 1.15 !important;
+    /* ----------------- 手机仿真框 ----------------- */
+    .device-mockup {
+      width: 290px;
+      height: 550px;
+      background: #000;
+      border: 10px solid #1f2937;
+      border-radius: 38px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+      position: relative;
+      overflow: hidden;
     }
-    .accent-text {
-      background: linear-gradient(90deg, var(--primary), var(--accent));
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      font-weight: bold;
+    .device-mockup::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 120px;
+      height: 18px;
+      background: #1f2937;
+      border-bottom-left-radius: 12px;
+      border-bottom-right-radius: 12px;
+      z-index: 20;
     }
-    .shortcut-tip {
-      margin-top: 30px;
-      font-size: 0.85rem;
+    .mock-screen {
+      width: 100%;
+      height: 100%;
+      background: #111827;
+      padding: 25px 15px 15px;
+      display: flex;
+      flex-direction: column;
+      font-size: 10px;
+      position: relative;
+    }
+    .mock-header {
+      text-align: center;
+      margin-bottom: 15px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      padding-bottom: 6px;
+    }
+    .mock-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: #fff;
+    }
+    .mock-subtitle {
+      font-size: 8px;
       color: var(--text-muted);
-      border-left: 2px solid var(--primary);
-      padding-left: 12px;
+      margin-top: 2px;
     }
+    .mock-form-group {
+      margin-bottom: 10px;
+      position: relative;
+    }
+    .mock-form-group label {
+      display: block;
+      color: #9ca3af;
+      margin-bottom: 3px;
+      font-size: 8px;
+    }
+    .mock-input {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 6px;
+      padding: 5px 8px;
+      color: #fff;
+      font-size: 9px;
+      outline: none;
+    }
+    .mock-btn {
+      width: 100%;
+      background: var(--success);
+      color: white;
+      border: none;
+      padding: 8px;
+      border-radius: 6px;
+      font-weight: bold;
+      font-size: 9px;
+      cursor: pointer;
+      margin-top: 5px;
+      position: relative;
+    }
+    .mock-btn.primary {
+      background: var(--primary);
+    }
+    .mock-spinner {
+      display: none;
+      width: 10px;
+      height: 10px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.8s infinite linear;
+      position: absolute;
+      left: calc(50% - 5px);
+      top: calc(50% - 5px);
+    }
+
+    /* 模拟键盘 */
+    .mock-keyboard {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      background: #1f2937;
+      padding: 6px 4px 15px;
+      transform: translateY(100%);
+      transition: transform 0.3s ease;
+      z-index: 10;
+      border-top: 1px solid rgba(255,255,255,0.05);
+    }
+    .mock-keyboard.show { transform: translateY(0); }
+    .mock-kbd-row {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 3px;
+      gap: 3px;
+    }
+    .mock-key {
+      background: rgba(255, 255, 255, 0.15);
+      color: white;
+      padding: 5px 0;
+      text-align: center;
+      border-radius: 4px;
+      font-size: 10px;
+      flex: 1;
+      max-width: 22px;
+    }
+    .mock-key.active { background: var(--primary); }
+    .mock-key.wide { max-width: 45px; font-size: 8px; }
+    .mock-key.space { max-width: 110px; }
+
+    /* 模拟光标 */
+    .mock-cursor {
+      position: absolute;
+      width: 16px;
+      height: 16px;
+      background: rgba(255, 255, 255, 0.25);
+      border: 2px solid white;
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 99;
+      transform: translate(-50%, -50%);
+      box-shadow: 0 0 8px rgba(255, 255, 255, 0.8);
+      display: none;
+      transition: left 0.6s cubic-bezier(0.25, 1, 0.5, 1), top 0.6s cubic-bezier(0.25, 1, 0.5, 1);
+    }
+    .mock-cursor.clicking {
+      transform: translate(-50%, -50%) scale(0.75);
+      background: rgba(239, 68, 68, 0.6);
+      border-color: #ef4444;
+    }
+
+    .mock-toast {
+      position: absolute;
+      top: 40px;
+      left: 10px;
+      right: 10px;
+      background: rgba(16, 185, 129, 0.95);
+      color: white;
+      padding: 7px 10px;
+      border-radius: 6px;
+      text-align: center;
+      font-weight: 600;
+      transform: translateY(-50px);
+      opacity: 0;
+      transition: all 0.3s;
+      z-index: 15;
+      font-size: 9px;
+    }
+    .mock-toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    /* ----------------- 电脑端浏览器仿真框 (按照实际client.html呈现) ----------------- */
+    .browser-mockup {
+      width: 530px;
+      height: 460px;
+      background: #1f2937;
+      border-radius: 12px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
+      border: 1px solid var(--glass-border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .browser-topbar {
+      height: 28px;
+      background: rgba(0, 0, 0, 0.2);
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      gap: 5px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .browser-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .browser-dot.red { background: #ef4444; }
+    .browser-dot.yellow { background: #f59e0b; }
+    .browser-dot.green { background: #10b981; }
+    .browser-address {
+      flex: 1;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 4px;
+      margin: 0 15px;
+      height: 16px;
+      display: flex;
+      align-items: center;
+      padding-left: 8px;
+      font-size: 8px;
+      color: var(--text-muted);
+    }
+    .browser-screen {
+      flex: 1;
+      background: #111827;
+      padding: 12px 15px;
+      font-size: 9px;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+
+    /* 真实页面样式复刻 */
+    .user-info-bar-mock {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--glass-border);
+      padding: 6px 12px;
+      border-radius: 8px;
+      margin-bottom: 10px;
+      font-size: 8px;
+      width: 100%;
+    }
+    .user-info-bar-mock span { color: var(--text-muted); }
+    .user-info-bar-mock strong { color: var(--text-main); }
+    .btn-logout-mock {
+      border: 1px solid #ef4444;
+      color: #ef4444;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 7px;
+    }
+
+    .admin-nav-mock {
+      display: flex;
+      border-bottom: 1px solid var(--glass-border);
+      margin-bottom: 10px;
+      gap: 10px;
+      width: 100%;
+    }
+    .admin-nav-mock-item {
+      padding: 6px 10px;
+      color: var(--text-muted);
+      font-weight: 600;
+      border-bottom: 2px solid transparent;
+    }
+    .admin-nav-mock-item.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary);
+    }
+
+    .form-container-mock {
+      background: rgba(255,255,255,0.02);
+      border: 1px solid var(--glass-border);
+      border-radius: 10px;
+      padding: 12px;
+    }
+    .form-container-mock h2 { font-size: 13px; color:#fff; margin-bottom:2px; }
+    .form-container-mock .subtitle { font-size: 8px; color: var(--text-muted); margin-bottom:10px; }
+
+    /* 真实的 3:4 照片框样式 */
+    .photo-uploader-mock {
+      width: 80px;
+      height: 107px;
+      margin: 0 auto 10px auto;
+      border: 1px dashed rgba(255,255,255,0.15);
+      background: rgba(255,255,255,0.01);
+      border-radius: 6px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+    }
+    .photo-uploader-mock svg { width: 16px; height: 16px; color: var(--primary); margin-bottom: 2px; }
+    .photo-uploader-mock p { font-size: 6px; color: var(--text-muted); margin: 0; }
+    .photo-preview-mock {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: none;
+    }
+
+    /* 真实的双列表单网格 */
+    .form-grid-mock {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    /* 弹出卡片样式 */
+    .qr-card-preview {
+      position: absolute;
+      top: 5%;
+      left: 20%;
+      right: 20%;
+      bottom: 5%;
+      background: rgba(13, 18, 33, 0.98);
+      border-radius: 12px;
+      border: 1.5px solid var(--primary);
+      box-shadow: 0 15px 30px var(--primary-glow);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 15px;
+      animation: zoomIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 50;
+    }
+    @keyframes zoomIn {
+      from { transform: scale(0.9); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+    .qr-card-title {
+      font-size: 11px;
+      font-weight: bold;
+      color: var(--accent);
+      margin-bottom: 12px;
+      letter-spacing: 0.5px;
+    }
+    .qr-card-grid {
+      display: flex;
+      width: 100%;
+      gap: 15px;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .qr-card-avatar {
+      width: 65px;
+      height: 87px;
+      border-radius: 4px;
+      object-fit: cover;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    .qr-card-info {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      font-size: 8px;
+      text-align: left;
+    }
+    .qr-card-info span { color: var(--text-muted); }
+    .qr-card-info strong { color: #fff; }
+    .qr-card-code {
+      width: 70px;
+      height: 70px;
+      background: white;
+      padding: 4px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .qr-card-code img { width: 100%; height: 100%; }
+
+    /* 移动端信息录入模拟 */
+    .mobile-client-screen {
+      padding: 10px 8px;
+      background: #111827;
+      height: 100%;
+      width: 100%;
+      overflow-y: auto;
+      font-size: 8px;
+    }
+    .mobile-client-screen::-webkit-scrollbar { display: none; }
   </style>
 </head>
 <body>
 
-  <!-- 背景粒子球 -->
+  <!-- 背景柔焦球 -->
   <div class="bg-glow-container">
     <div class="glow-ball glow-ball-1"></div>
     <div class="glow-ball glow-ball-2"></div>
-    <div class="glow-ball glow-ball-3"></div>
   </div>
 
   <!-- 顶部状态栏 -->
   <div class="top-status-bar">
     <div class="logo-area">
       <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
       </svg>
-      培训信息录入与门禁恢复管理系统
+      培训人员信息录入与门禁系统
     </div>
-    <div class="system-info" id="slide-progress-text">1 / 6</div>
+    <div class="system-info" id="slide-progress-text">1 / 3</div>
   </div>
 
-  <!-- PPT 幻灯片框 -->
+  <!-- PPT 主幻灯片容器 -->
   <div class="presentation-container">
     <div class="slides-wrapper" id="slides-wrapper">
       
-      <!-- SLIDE 1: 封面 -->
+      <!-- SLIDE 1: 新用户注册 (原 Slide 3 移前) -->
       <div class="slide active">
-        <div class="slide-left" style="max-width: 60%;">
-          <span class="slide-tag">PRESENTATION</span>
-          <h1 class="hero-title">系统核心业务流程<br><span class="accent-text">交互式动态演示</span></h1>
-          <p>本演示采用全动态仿真模拟，直观展示系统在实际场景下的运行步骤与操作逻辑，包含<b>「新用户注册审核」</b>、<b>「培训人员信息录入」</b>以及<b>「门禁恢复下载管理」</b>三大模块。</p>
-          <button class="btn-action" onclick="slideNext()">
-            开始浏览演示
-            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
-            </svg>
-          </button>
-          <div class="shortcut-tip">
-            键盘提示：支持使用键盘左右方向键 <b>←</b> <b>→</b> 或 <b>空格键</b> 快速翻页。
-          </div>
-        </div>
-        <div class="slide-right" style="max-width: 40%; display: flex; flex-direction: column; justify-content: center; align-items: flex-end;">
-          <div style="background: var(--card-bg); border: 1px solid var(--glass-border); border-radius: 20px; padding: 30px; box-shadow: 0 15px 30px rgba(0,0,0,0.3); max-width: 320px; width: 100%;">
-            <h4 style="font-size: 1.1rem; color: #fff; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
-              <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--accent);"></span>
-              演示导航
-            </h4>
-            <div style="display: flex; flex-direction: column; gap: 8px; font-size: 0.9rem; color: var(--text-muted);">
-              <div style="cursor: pointer; display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05);" onclick="goToSlide(1)"><span>1. 概述与封面</span><strong style="color: var(--accent);">Start</strong></div>
-              <div style="cursor: pointer; display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05);" onclick="goToSlide(2)"><span>2. 系统运行流程</span><strong>Flow</strong></div>
-              <div style="cursor: pointer; display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05);" onclick="goToSlide(3)"><span>3. 移动端注册 (iOS修复)</span><strong>iOS Reg</strong></div>
-              <div style="cursor: pointer; display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05);" onclick="goToSlide(4)"><span>4. 培训人员信息录入</span><strong>Input</strong></div>
-              <div style="cursor: pointer; display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05);" onclick="goToSlide(5)"><span>5. 门禁下载与恢复</span><strong>Restore</strong></div>
-              <div style="cursor: pointer; display: flex; justify-content: space-between; padding: 6px 0;" onclick="goToSlide(5)"><span>6. 总结与访问</span><strong>End</strong></div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- SLIDE 2: 业务流程概述 -->
-      <div class="slide">
-        <div class="slide-left" style="max-width: 50%;">
-          <span class="slide-tag">WORKFLOW</span>
-          <h2>系统核心闭环架构</h2>
-          <p>系统为典型的“云-端”协同多租户模式，确保了信息录入的高效准确和数据的严格物理隔离：</p>
-          <ul class="steps-list">
-            <li style="margin-bottom: 14px;"><strong>用户注册审核：</strong> 客户端工作单位负责人自主注册，管理员后台审核激活后方可登入。</li>
-            <li style="margin-bottom: 14px;"><strong>人员信息录入：</strong> 各单位负责人录入员工信息并上传照片，系统结合安全考试结果，自动生成门禁包。</li>
-            <li style="margin-bottom: 14px;"><strong>门禁权限恢复：</strong> 员工中途离场重新返场时，负责人可一键提交门禁恢复申请，由管理员批量审核更新。</li>
-          </ul>
-        </div>
-        <div class="slide-right" style="max-width: 50%;">
-          <!-- 流程图动画容器 -->
-          <div class="flow-diagram">
-            <div class="flow-node primary flow-node-1">
-              管理端后台<br><span style="font-size:8px; color:var(--text-muted);">审核与门禁下载</span>
-            </div>
-            <div class="flow-node flow-node-2">
-              单位负责人端<br><span style="font-size:8px; color:var(--text-muted);">录入/申请恢复</span>
-            </div>
-            <div class="flow-node accent flow-node-3">
-              在线答题系统<br><span style="font-size:8px; color:var(--text-muted);">及格后开通门禁</span>
-            </div>
-            <!-- SVG 流动虚线 -->
-            <svg class="flow-arrow-svg">
-              <!-- Node2 to Node1 -->
-              <path d="M 70 180 Q 70 80 180 50" fill="none" stroke="rgba(99,102,241,0.4)" stroke-width="2" class="flow-path"/>
-              <!-- Node3 to Node1 -->
-              <path d="M 380 180 Q 380 80 270 50" fill="none" stroke="rgba(6,182,212,0.4)" stroke-width="2" class="flow-path" style="animation-delay:-5s;"/>
-              <!-- Node1 to Node2 (回复门禁/审核反馈) -->
-              <path d="M 200 75 Q 150 120 120 180" fill="none" stroke="rgba(16,185,129,0.3)" stroke-dasharray="4" stroke-width="1.5"/>
-              <!-- Node2 to Node3 -->
-              <path d="M 125 210 L 325 210" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="2" class="flow-path" style="animation-delay:-10s;"/>
-            </svg>
-            <div style="position: absolute; bottom: 0; left: 0; width: 100%; text-align: center; font-size: 0.85rem; color: var(--text-muted);">
-              数据多节点流转示意图
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- SLIDE 3: 用户注册 (移动端iOS优化演示) -->
-      <div class="slide">
         <div class="slide-left">
-          <span class="slide-tag">MODULE 01</span>
+          <span class="slide-tag">STEP 01</span>
           <h2>移动端新用户注册</h2>
-          <p>提供工作单位负责人使用的自主注册界面，兼容 iOS / Android 移动端键盘布局。</p>
+          <p>提供给各工作单位负责人的自主注册界面，兼容 iOS / Android 移动端键盘布局。</p>
           <ul class="steps-list" style="margin-bottom: 25px;">
-            <li><strong>键盘友好（iOS优化）：</strong> 手机号输入自动过滤非数字，彻底解决了 iOS 系统在 pattern 属性限制下造成的“中文键盘黏滞、无法切换”的痛点。</li>
-            <li><strong>防重注册校验：</strong> 手机号作为唯一登录账号，后端进行防重性检测。</li>
-            <li><strong>管理审核激活：</strong> 注册数据提交后会进入待审核队列，管理员激活后生效。</li>
+            <li><strong>iOS 键盘优化：</strong> 手机号输入自动过滤非数字，彻底解决了 iOS 系统在 pattern 属性限制下造成的“中文键盘黏滞、无法切换”的痛点。</li>
+            <li><strong>唯一账号校验：</strong> 手机号作为唯一登录凭证，后端自动进行防重性检测。</li>
+            <li><strong>管理后台审核：</strong> 注册数据提交后自动进入待审核队列，管理员激活后即可登录录入员工。</li>
           </ul>
           <button class="btn-action" id="btn-play-reg" onclick="playRegAnimation()">
-            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
               <path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            运行注册演示动画
+            开始注册演示动画
           </button>
         </div>
         <div class="slide-right">
-          <!-- iOS 手机模拟器 -->
+          <!-- 手机模拟器 -->
           <div class="device-mockup">
             <div class="mock-cursor" id="cursor-reg"></div>
             <div class="mock-screen">
@@ -914,7 +763,7 @@
               </div>
               <button class="mock-btn" id="reg-mock-btn">
                 <span>提 交 注 册 申 请</span>
-                <span class="loading-spinner" id="reg-mock-spinner"></span>
+                <span class="mock-spinner" id="reg-mock-spinner"></span>
               </button>
               
               <!-- 模拟手机键盘 -->
@@ -940,156 +789,250 @@
         </div>
       </div>
 
-      <!-- SLIDE 4: 员工信息录入与门禁生成 -->
+      <!-- SLIDE 2: 培训人员录入 (PC端实际画面仿真) -->
       <div class="slide">
         <div class="slide-left">
-          <span class="slide-tag">MODULE 02</span>
-          <h2>员工信息与照片录入</h2>
-          <p>通过桌面管理端录入各单位受训员工的基本信息并生成个人门禁权限：</p>
+          <span class="slide-tag">STEP 02</span>
+          <h2>PC端培训人员信息录入</h2>
+          <p>复刻实际电脑端录入界面，完全遵照系统实际使用的“两行式”表单布局进行演示：</p>
           <ul class="steps-list" style="margin-bottom: 25px;">
-            <li><strong>身份证智能校验：</strong> 录入身份证号时，系统前端自动解析合法性，自动计算并填充出生日期，防止手工输入错漏。</li>
-            <li><strong>免冠照片直观预览：</strong> 必须上传真实证件照片。系统进行实时无刷新图片加载与缩放裁切预览。</li>
-            <li><strong>在线二维码生成：</strong> 录入成功并答题合格后，即可直接获取印有员工头像、身份信息的“专属门禁二维码通行证”。</li>
+            <li><strong>第一行（照片上传）：</strong> 规定 3:4 比例的电子照片框，支持点击区域拍照或选择本地照片，自动在前端缩放预览。</li>
+            <li><strong>第二行（基本与岗位网格）：</strong> 姓名、民族、身份证、联系电话、常住地址、工种和学历等完整字段网格输入。</li>
+            <li><strong>身份证提取生日：</strong> 身份证号录入完成后，系统自动进行前端校验，并能实时在后台自动计算出出生日期。</li>
           </ul>
-          <button class="btn-action" id="btn-play-input" onclick="playInputAnimation()">
-            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+          <button class="btn-action" id="btn-play-pc" onclick="playPCAnimation()">
+            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
               <path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            运行信息录入演示
+            开始PC端录入演示
           </button>
         </div>
         <div class="slide-right">
-          <!-- 桌面端浏览器模拟器 -->
+          <!-- 电脑端实际画面仿真框 -->
           <div class="browser-mockup">
-            <div class="mock-cursor" id="cursor-input"></div>
+            <div class="mock-cursor" id="cursor-pc"></div>
             <div class="browser-topbar">
               <div class="browser-dot red"></div>
               <div class="browser-dot yellow"></div>
               <div class="browser-dot green"></div>
               <div class="browser-address">http://8.137.13.118:8001/client</div>
             </div>
+            
             <div class="browser-screen">
-              <div class="mock-toast" id="toast-input" style="top: 10px;">培训人员信息保存成功，门禁卡已生成！</div>
-              <div class="browser-form">
-                <h3 style="font-size: 11px; margin-bottom: 6px; color:#fff;">新增培训人员录入</h3>
-                <div class="mock-form-group" style="margin-bottom: 6px;">
-                  <label>姓名</label>
-                  <input type="text" id="in-mock-name" class="mock-input" style="padding: 4px;" readonly>
+              <div class="mock-toast" id="toast-pc">人员信息录入保存成功！</div>
+              
+              <!-- 门禁卡弹出卡片 -->
+              <div class="qr-card-preview" id="qr-card-pc">
+                <div class="qr-card-title">培训人员门禁通行证</div>
+                <div class="qr-card-grid">
+                  <img class="qr-card-avatar" src="avatar_demo.png" alt="人像">
+                  <div class="qr-card-info">
+                    <span>姓名：<strong id="card-name-pc">李四</strong></span>
+                    <span>单位：<strong style="color:#6366f1;">中建三局</strong></span>
+                    <span>性别/生日：<strong>男 / 1990-03-07</strong></span>
+                    <span>工种/学历：<strong>安全员 / 本科</strong></span>
+                  </div>
                 </div>
-                <div class="mock-form-group" style="margin-bottom: 6px;">
-                  <label>身份证号</label>
-                  <input type="text" id="in-mock-idcard" class="mock-input" style="padding: 4px;" readonly>
+                <div class="qr-card-code">
+                  <img src="qrcode.png" alt="QR Code">
                 </div>
-                <div class="mock-form-group" style="margin-bottom: 6px;">
-                  <label>出生日期 (自动提取)</label>
-                  <input type="text" id="in-mock-birthday" class="mock-input" style="padding: 4px; background: rgba(255,255,255,0.02);" readonly>
-                </div>
-                <div class="mock-form-group" style="margin-bottom: 6px;">
-                  <label>联系电话</label>
-                  <input type="text" id="in-mock-phone" class="mock-input" style="padding: 4px;" readonly>
-                </div>
-                <button class="mock-btn primary" id="in-mock-btn" style="padding: 6px; margin-top: 4px;">保存人员数据</button>
               </div>
-              <div class="browser-preview" id="in-mock-upload-area">
-                <div class="upload-placeholder" id="in-mock-upload-placeholder">
-                  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                  <span>请选择并上传免冠照</span>
+
+              <!-- 实际用户栏 -->
+              <div class="user-info-bar-mock">
+                <div>
+                  <span>录入人员：</span><strong>张三</strong>
+                  <span style="margin-left: 15px;">工作单位：</span><strong>中建三局</strong>
                 </div>
-                <img id="in-mock-avatar" class="avatar-preview-img" src="avatar_demo.png" alt="证件照">
+                <div class="btn-logout-mock">退出登录</div>
+              </div>
+              
+              <!-- 页签 -->
+              <div class="admin-nav-mock">
+                <div class="admin-nav-mock-item active">信息录入</div>
+                <div class="admin-nav-mock-item">历史记录</div>
+                <div class="admin-nav-mock-item">门禁恢复</div>
+              </div>
+
+              <!-- 实际表单容器 -->
+              <div class="form-container-mock">
+                <h2>培训人员信息录入</h2>
+                <p class="subtitle">请准确填写您的真实信息并上传照片</p>
                 
-                <!-- 二维码门禁卡弹出卡片 -->
-                <div class="qr-card-preview" id="qr-card">
-                  <div class="qr-card-title">培训人员门禁通行证</div>
-                  <div class="qr-card-grid">
-                    <img class="qr-card-avatar" src="avatar_demo.png" alt="人像">
-                    <div class="qr-card-info">
-                      <span>姓名：<strong id="qr-card-name">李四</strong></span>
-                      <span>单位：<strong style="color:#6366f1;">中建三局</strong></span>
-                      <span>生日：<strong id="qr-card-birth">1990-03-07</strong></span>
-                      <span>状态：<strong style="color:#10b981;">已激活(考试通过)</strong></span>
+                <div style="display:flex; flex-direction:column; gap:8px;">
+                  <!-- 第一行：照片 -->
+                  <div class="mock-form-group">
+                    <label>第一行：电子照片 (点击区域可拍照或上传，系统自动压缩)</label>
+                    <div class="photo-uploader-mock" id="uploader-pc">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                      </svg>
+                      <p>选择照片 / 拍摄现场照</p>
+                      <img src="avatar_demo.png" class="photo-preview-mock" id="preview-pc">
                     </div>
                   </div>
-                  <div class="qr-card-code">
-                    <!-- 使用系统本地原有的 qrcode.png 占位展示 -->
-                    <img src="qrcode.png" alt="QR Code">
+
+                  <!-- 第二行：基本信息网格 -->
+                  <div class="mock-form-group">
+                    <label>第二行：基本与岗位信息</label>
+                    <div class="form-grid-mock">
+                      <div class="mock-form-group">
+                        <label>姓名 *</label>
+                        <input type="text" id="pc-mock-name" class="mock-input" readonly>
+                      </div>
+                      <div class="mock-form-group">
+                        <label>民族 *</label>
+                        <input type="text" id="pc-mock-nation" class="mock-input" placeholder="点击选择民族" readonly>
+                      </div>
+                      <div class="mock-form-group">
+                        <label>身份证号 *</label>
+                        <input type="text" id="pc-mock-idcard" class="mock-input" readonly>
+                      </div>
+                      <div class="mock-form-group">
+                        <label>联系电话 *</label>
+                        <input type="text" id="pc-mock-phone" class="mock-input" readonly>
+                      </div>
+                      <div class="mock-form-group">
+                        <label>常住地址 *</label>
+                        <input type="text" id="pc-mock-address" class="mock-input" readonly>
+                      </div>
+                      <div class="mock-form-group">
+                        <label>岗位/工种 *</label>
+                        <input type="text" id="pc-mock-job" class="mock-input" placeholder="点击选择工种" readonly>
+                      </div>
+                      <div class="mock-form-group">
+                        <label>学历 *</label>
+                        <input type="text" id="pc-mock-edu" class="mock-input" placeholder="点击选择学历" readonly>
+                      </div>
+                    </div>
                   </div>
+
+                  <button class="mock-btn primary" id="pc-mock-submit" style="margin-top: 5px;">确 认 提 交 信 息</button>
                 </div>
               </div>
+
             </div>
           </div>
         </div>
       </div>
 
-      <!-- SLIDE 5: 门禁下载与日常维护 -->
+      <!-- SLIDE 3: 手机端录入实际页面演示 -->
       <div class="slide">
         <div class="slide-left">
-          <span class="slide-tag">MODULE 03</span>
-          <h2>门禁数据管理与恢复</h2>
-          <p>管理员后台（Admin 面板）提供了高度可视化的门禁数据管理模块：</p>
+          <span class="slide-tag">STEP 03</span>
+          <h2>手机端人员实际画面演示</h2>
+          <p>模拟负责人使用苹果或安卓手机打开信息录入页面时的真实响应式画面：</p>
           <ul class="steps-list" style="margin-bottom: 25px;">
-            <li><strong>一键批量导出 (CSV+照片)：</strong> 自动按筛选条件将员工信息转换成门禁设备匹配的 CSV 格式，并且批量将真实照片重命名为身份证号一并打包压缩（ZIP）下载，极大方便了门禁机器的快速批量导入。</li>
-            <li><strong>门禁申请恢复管理：</strong> 解决现场离场员工二次返场的“门禁权限失效”情况。负责人提交恢复申请，管理员可快速多选并批量导出其门禁恢复包，效率提升 90% 以上。</li>
+            <li><strong>完美竖屏自适应：</strong> 用户信息条、页签导航自动收缩为窄屏模式，表单依然保持美观的双列网格。</li>
+            <li><strong>移动端快捷上传：</strong> 负责人可在工地上直接点击照片区域唤起手机摄像头拍照，现场录入，即拍即传。</li>
+            <li><strong>一键提交响应：</strong> 整个录入和提交流程在手机端单手即可快速闭环操作，极致流畅。</li>
           </ul>
+          <button class="btn-action" id="btn-play-mobile" onclick="playMobileAnimation()">
+            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+              <path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            开始手机端录入演示
+          </button>
         </div>
         <div class="slide-right">
-          <!-- 静态图片或可视化图形面板 -->
-          <div style="background: var(--card-bg); border: 1px solid var(--glass-border); border-radius: 20px; padding: 25px; width: 100%; max-width: 440px; box-shadow: 0 15px 30px rgba(0,0,0,0.4);">
-            <h4 style="font-size: 1.1rem; color: #fff; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
-              <span>管理员控制后台演示</span>
-              <span style="font-size: 9px; background: rgba(99,102,241,0.2); color:#818cf8; padding: 2px 8px; border-radius:4px;">CSV + ZIP 导出</span>
-            </h4>
-            <div style="display:flex; flex-direction:column; gap:12px; font-size: 0.9rem;">
-              <div style="display:flex; gap:10px; align-items:center;">
-                <div style="background:rgba(99,102,241,0.1); border: 1px solid var(--primary); color:white; width: 36px; height: 36px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-weight:bold;">1</div>
-                <div>
-                  <div style="font-weight:600; color:#fff;">勾选需导出的培训记录</div>
-                  <div style="font-size:0.8rem; color:var(--text-muted);">在表格多选勾选最新录入或申请恢复的记录</div>
+          <!-- 手机仿真框 -->
+          <div class="device-mockup">
+            <div class="mock-cursor" id="cursor-mobile"></div>
+            
+            <div class="mock-screen" style="padding: 22px 0 0 0;">
+              <div class="mock-toast" id="toast-mobile" style="top: 35px; left: 8px; right: 8px;">手机端信息录入保存成功！</div>
+              
+              <!-- 门禁卡弹出卡片 (手机版) -->
+              <div class="qr-card-preview" id="qr-card-mobile" style="left:5px; right:5px; top:10%; bottom:10%;">
+                <div class="qr-card-title">门禁通行证 (已生成)</div>
+                <div class="qr-card-grid" style="flex-direction: column; align-items: center; gap: 8px;">
+                  <img class="qr-card-avatar" src="avatar_demo.png" alt="人像" style="width: 55px; height: 73px;">
+                  <div class="qr-card-info" style="align-items: center; font-size: 7px;">
+                    <span>姓名：<strong id="card-name-mobile">王五</strong></span>
+                    <span>单位：<strong>中建三局</strong></span>
+                    <span>岗位/工种：<strong>电工 / 大专</strong></span>
+                  </div>
+                </div>
+                <div class="qr-card-code" style="width: 65px; height: 65px;">
+                  <img src="qrcode.png" alt="QR Code">
                 </div>
               </div>
-              <div style="display:flex; gap:10px; align-items:center;">
-                <div style="background:rgba(6,182,212,0.1); border: 1px solid var(--accent); color:white; width: 36px; height: 36px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-weight:bold;">2</div>
-                <div>
-                  <div style="font-weight:600; color:#fff;">系统后台自动压缩重命名</div>
-                  <div style="font-size:0.8rem; color:var(--text-muted);">照片被重命名为 <code>身份证号.jpg</code>，同步渲染 CSV 文件</div>
+
+              <!-- 手机端屏幕内容包裹滚动区 -->
+              <div class="mobile-client-screen">
+                
+                <!-- 实际用户信息条 -->
+                <div class="user-info-bar-mock" style="padding: 4px 8px; margin-bottom: 6px; font-size: 7px;">
+                  <div>
+                    <strong>张三</strong> | <span>中建三局</span>
+                  </div>
+                  <div class="btn-logout-mock" style="padding: 1px 4px; font-size: 6px;">退出</div>
                 </div>
-              </div>
-              <div style="display:flex; gap:10px; align-items:center;">
-                <div style="background:rgba(16,185,129,0.1); border: 1px solid var(--success); color:white; width: 36px; height: 36px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-weight:bold;">3</div>
-                <div>
-                  <div style="font-weight:600; color:#fff;">下载 ZIP 数据包直接导入门禁</div>
-                  <div style="font-size:0.8rem; color:var(--text-muted);">一键上传到门禁设备中即可极速下发通行权限</div>
+
+                <!-- 实际导航 -->
+                <div class="admin-nav-mock" style="margin-bottom: 8px; gap: 4px;">
+                  <div class="admin-nav-mock-item active" style="padding: 4px 6px; font-size: 8px;">信息录入</div>
+                  <div class="admin-nav-mock-item" style="padding: 4px 6px; font-size: 8px;">历史记录</div>
+                  <div class="admin-nav-mock-item" style="padding: 4px 6px; font-size: 8px;">门禁恢复</div>
                 </div>
+
+                <!-- 表单容器 -->
+                <div class="form-container-mock" style="padding: 8px;">
+                  <h2 style="font-size: 10px;">培训人员信息录入</h2>
+                  <p class="subtitle" style="font-size: 7px; margin-bottom: 6px;">请准确填写您的真实信息并上传照片</p>
+                  
+                  <!-- 照片 -->
+                  <div class="mock-form-group" style="margin-bottom: 6px;">
+                    <div class="photo-uploader-mock" id="uploader-mobile" style="width: 70px; height: 93px;">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                      </svg>
+                      <p style="font-size:5px;">上传或拍摄现场照</p>
+                      <img src="avatar_demo.png" class="photo-preview-mock" id="preview-mobile">
+                    </div>
+                  </div>
+
+                  <!-- 信息网格 -->
+                  <div class="form-grid-mock" style="gap: 5px;">
+                    <div class="mock-form-group" style="margin-bottom: 4px;">
+                      <label>姓名 *</label>
+                      <input type="text" id="mob-mock-name" class="mock-input" style="padding:4px; font-size:8px;" readonly>
+                    </div>
+                    <div class="mock-form-group" style="margin-bottom: 4px;">
+                      <label>民族 *</label>
+                      <input type="text" id="mob-mock-nation" class="mock-input" style="padding:4px; font-size:8px;" value="汉族" readonly>
+                    </div>
+                    <div class="mock-form-group" style="margin-bottom: 4px;">
+                      <label>身份证号 *</label>
+                      <input type="text" id="mob-mock-idcard" class="mock-input" style="padding:4px; font-size:8px;" readonly>
+                    </div>
+                    <div class="mock-form-group" style="margin-bottom: 4px;">
+                      <label>联系电话 *</label>
+                      <input type="text" id="mob-mock-phone" class="mock-input" style="padding:4px; font-size:8px;" readonly>
+                    </div>
+                    <div class="mock-form-group" style="margin-bottom: 4px;">
+                      <label>常住地址 *</label>
+                      <input type="text" id="mob-mock-address" class="mock-input" style="padding:4px; font-size:8px;" readonly>
+                    </div>
+                    <div class="mock-form-group" style="margin-bottom: 4px;">
+                      <label>岗位/工种 *</label>
+                      <input type="text" id="mob-mock-job" class="mock-input" style="padding:4px; font-size:8px;" value="电工" readonly>
+                    </div>
+                    <div class="mock-form-group" style="margin-bottom: 4px;">
+                      <label>学历 *</label>
+                      <input type="text" id="mob-mock-edu" class="mock-input" style="padding:4px; font-size:8px;" value="大专" readonly>
+                    </div>
+                  </div>
+
+                  <button class="mock-btn primary" id="mob-mock-submit" style="margin-top: 8px; padding: 6px; font-size: 8px;">确 认 提 交 信 息</button>
+                </div>
+
               </div>
             </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- SLIDE 6: 总结与访问 -->
-      <div class="slide">
-        <div class="slide-left" style="max-width: 60%;">
-          <span class="slide-tag">SUMMARY</span>
-          <h2>系统架构特点与使用</h2>
-          <p>本系统采用极简的现代化后端技术构建，保证了生产环境中运行的高性能与超低资源占用：</p>
-          <ul class="steps-list" style="margin-bottom: 25px;">
-            <li><strong>高性能后端：</strong> 基于 FastAPI (Python) 构建，全异步事件驱动，支持百级高并发无阻塞数据吞吐。</li>
-            <li><strong>物理安全隔离：</strong> 采用 SQLite 轻量级关系数据库，后端基于 Row-Level 业务隔离，用户仅能查看、修改和申请本单位员工的数据，防止数据跨租户泄露。</li>
-            <li><strong>热重载与快速部署：</strong> 容器化部署挂载，Git 静态拉取秒级热生效，维护简单省心。</li>
-          </ul>
-        </div>
-        <div class="slide-right" style="max-width: 40%; display: flex; flex-direction: column; justify-content: center; align-items: flex-end;">
-          <div style="background: linear-gradient(135deg, rgba(99,102,241,0.08), rgba(6,182,212,0.08)); border: 1px solid var(--primary); border-radius: 20px; padding: 25px; max-width: 320px; width: 100%; text-align: center; box-shadow: 0 15px 30px rgba(0,0,0,0.3);">
-            <h4 style="font-size: 1.2rem; color: #fff; margin-bottom: 10px;">演示完毕</h4>
-            <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 20px;">点击下方按钮重新回到第一页演示，或访问系统首页进入实操。</p>
-            <button class="btn-action" onclick="goToSlide(0)" style="margin: 0 auto; width: 100%; justify-content: center;">
-              重新播放演示 PPT
-            </button>
-            <a href="login.html" style="display:inline-block; margin-top: 12px; font-size: 0.85rem; color: var(--accent); text-decoration: none; font-weight: 600;">
-              进入系统登录页面 &rarr;
-            </a>
           </div>
         </div>
       </div>
@@ -1104,9 +1047,7 @@
         <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
       </svg>
     </button>
-    <div class="dots-indicator" id="dots-indicator">
-      <!-- 动态生成小圆点 -->
-    </div>
+    <div class="dots-indicator" id="dots-indicator"></div>
     <button class="nav-arrow" id="btn-next-slide" onclick="slideNext()" title="下一页 (→/空格)">
       <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
         <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
@@ -1115,7 +1056,7 @@
   </div>
 
   <script>
-    // 幻灯片管理
+    // 幻灯片控制
     const wrapper = document.getElementById('slides-wrapper');
     const slides = document.querySelectorAll('.slide');
     const indicator = document.getElementById('dots-indicator');
@@ -1123,7 +1064,6 @@
     let currentSlideIndex = 0;
     const totalSlides = slides.length;
 
-    // 初始化小圆点
     function initDots() {
       indicator.innerHTML = '';
       for (let i = 0; i < totalSlides; i++) {
@@ -1134,11 +1074,8 @@
       }
     }
 
-    // 翻页动作
     function updateSlide() {
       wrapper.style.transform = `translateX(-${currentSlideIndex * 100}%)`;
-      
-      // 更新激活样式
       slides.forEach((slide, idx) => {
         if (idx === currentSlideIndex) {
           slide.classList.add('active');
@@ -1146,8 +1083,6 @@
           slide.classList.remove('active');
         }
       });
-
-      // 更新指示器
       const dots = document.querySelectorAll('.dot');
       dots.forEach((dot, idx) => {
         if (idx === currentSlideIndex) {
@@ -1156,11 +1091,7 @@
           dot.classList.remove('active');
         }
       });
-
-      // 更新进度字样
       progressText.textContent = `${currentSlideIndex + 1} / ${totalSlides}`;
-
-      // 重置所有演示动画相关的元素状态，防止跨页动画残留
       resetDemoStates();
     }
 
@@ -1183,7 +1114,6 @@
       updateSlide();
     }
 
-    // 键盘事件监听
     document.addEventListener('keydown', (e) => {
       if (e.key === 'ArrowRight' || e.key === ' ') {
         e.preventDefault();
@@ -1194,253 +1124,270 @@
       }
     });
 
-    // 初始化页面
     initDots();
+    updateSlide();
 
-    // -------------------------------------------------------------
-    // 以下为仿真交互动画执行代码
-    // -------------------------------------------------------------
-    
-    // 延时辅助函数
+    // ----------------- 仿真演示动画逻辑 -----------------
     const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-    // 模拟打字效果
-    async function typeInput(elementId, text, delay = 120) {
+    async function typeInput(elementId, text, delay = 100) {
       const el = document.getElementById(elementId);
       el.value = '';
-      el.focus();
       for (let i = 0; i < text.length; i++) {
         el.value += text[i];
-        // 触发按键的高亮特效
         highlightMockKey(text[i].toUpperCase());
         await sleep(delay);
       }
-      el.blur();
     }
 
-    // 模拟键盘按键短暂激活效果
     function highlightMockKey(char) {
-      // 在模拟键盘上查找字符
       const keys = document.querySelectorAll('.mock-key');
       keys.forEach(key => {
         if (key.textContent.trim() === char) {
           key.classList.add('active');
-          setTimeout(() => key.classList.remove('active'), 100);
+          setTimeout(() => key.classList.remove('active'), 80);
         }
       });
     }
 
-    // 重置所有模拟演示状态
+    // 重置所有动画状态
     function resetDemoStates() {
-      // 重置注册页状态
+      // 1. 注册页重置
       document.getElementById('reg-mock-name').value = '';
       document.getElementById('reg-mock-phone').value = '';
       document.getElementById('reg-mock-company').value = '';
       document.getElementById('reg-mock-pwd').value = '';
       document.getElementById('reg-mock-spinner').style.display = 'none';
       document.getElementById('reg-mock-btn').style.opacity = '1';
-      document.getElementById('reg-mock-btn').querySelector('span').style.opacity = '1';
+      document.getElementById('reg-mock-btn').querySelector('span').textContent = '提 交 注 册 申 请';
       document.getElementById('toast-reg').classList.remove('show');
       document.getElementById('kbd-reg').classList.remove('show');
       document.getElementById('cursor-reg').style.display = 'none';
       document.getElementById('btn-play-reg').disabled = false;
       document.getElementById('btn-play-reg').style.opacity = '1';
 
-      // 重置录入页状态
-      document.getElementById('in-mock-name').value = '';
-      document.getElementById('in-mock-idcard').value = '';
-      document.getElementById('in-mock-birthday').value = '';
-      document.getElementById('in-mock-phone').value = '';
-      document.getElementById('in-mock-avatar').style.display = 'none';
-      document.getElementById('in-mock-upload-placeholder').style.display = 'flex';
-      document.getElementById('qr-card').style.display = 'none';
-      document.getElementById('toast-input').classList.remove('show');
-      document.getElementById('cursor-input').style.display = 'none';
-      document.getElementById('btn-play-input').disabled = false;
-      document.getElementById('btn-play-input').style.opacity = '1';
+      // 2. PC录入页重置
+      document.getElementById('pc-mock-name').value = '';
+      document.getElementById('pc-mock-nation').value = '';
+      document.getElementById('pc-mock-idcard').value = '';
+      document.getElementById('pc-mock-phone').value = '';
+      document.getElementById('pc-mock-address').value = '';
+      document.getElementById('pc-mock-job').value = '';
+      document.getElementById('pc-mock-edu').value = '';
+      document.getElementById('preview-pc').style.display = 'none';
+      document.getElementById('uploader-pc').querySelector('svg').style.display = 'block';
+      document.getElementById('uploader-pc').querySelector('p').style.display = 'block';
+      document.getElementById('toast-pc').classList.remove('show');
+      document.getElementById('qr-card-pc').style.display = 'none';
+      document.getElementById('cursor-pc').style.display = 'none';
+      document.getElementById('btn-play-pc').disabled = false;
+      document.getElementById('btn-play-pc').style.opacity = '1';
+
+      // 3. 手机端录入页重置
+      document.getElementById('mob-mock-name').value = '';
+      document.getElementById('mob-mock-idcard').value = '';
+      document.getElementById('mob-mock-phone').value = '';
+      document.getElementById('mob-mock-address').value = '';
+      document.getElementById('preview-mobile').style.display = 'none';
+      document.getElementById('uploader-mobile').querySelector('svg').style.display = 'block';
+      document.getElementById('uploader-mobile').querySelector('p').style.display = 'block';
+      document.getElementById('toast-mobile').classList.remove('show');
+      document.getElementById('qr-card-mobile').style.display = 'none';
+      document.getElementById('cursor-mobile').style.display = 'none';
+      document.getElementById('btn-play-mobile').disabled = false;
+      document.getElementById('btn-play-mobile').style.opacity = '1';
     }
 
-    // 动画 1：运行注册流程演示
+    // SLIDE 1 注册动画
     async function playRegAnimation() {
-      const btnPlay = document.getElementById('btn-play-reg');
-      btnPlay.disabled = true;
-      btnPlay.style.opacity = '0.5';
+      const btn = document.getElementById('btn-play-reg');
+      btn.disabled = true;
+      btn.style.opacity = '0.5';
 
       const cursor = document.getElementById('cursor-reg');
       const kbd = document.getElementById('kbd-reg');
-      
-      // 显示光标并定位到第一个字段（姓名）
       cursor.style.display = 'block';
       cursor.style.left = '20%';
-      cursor.style.top = '10%'; // 估计值，相对于模拟手机框
-      
-      await sleep(600);
-      
-      // 1. 输入真实姓名
-      cursor.style.left = '45%';
-      cursor.style.top = '21%';
-      await sleep(400);
-      // 点击聚焦姓名输入框
-      cursor.classList.add('clicking');
-      await sleep(150);
-      cursor.classList.remove('clicking');
-      kbd.classList.add('show'); // 弹起键盘
-      await sleep(400);
-      await typeInput('reg-mock-name', '张三', 180);
-      
-      // 2. 输入联系电话
-      cursor.style.left = '45%';
-      cursor.style.top = '29%';
-      await sleep(400);
-      cursor.classList.add('clicking');
-      await sleep(150);
-      cursor.classList.remove('clicking');
-      await sleep(200);
-      await typeInput('reg-mock-phone', '13800138000', 100);
-
-      // 3. 输入工作单位 (iOS 键盘不再锁死)
-      cursor.style.left = '45%';
-      cursor.style.top = '37%';
-      await sleep(400);
-      cursor.classList.add('clicking');
-      await sleep(150);
-      cursor.classList.remove('clicking');
-      await sleep(200);
-      // 模拟顺利调起键盘并输入中文单位名称
-      await typeInput('reg-mock-company', '中建三局', 180);
-
-      // 4. 输入密码
-      cursor.style.left = '45%';
-      cursor.style.top = '45%';
-      await sleep(400);
-      cursor.classList.add('clicking');
-      await sleep(150);
-      cursor.classList.remove('clicking');
-      await sleep(200);
-      await typeInput('reg-mock-pwd', 'password', 80);
-
-      // 收起键盘
-      kbd.classList.remove('show');
-      await sleep(300);
-
-      // 5. 点击提交按钮
-      cursor.style.left = '50%';
-      cursor.style.top = '54%';
+      cursor.style.top = '10%';
       await sleep(500);
-      cursor.classList.add('clicking');
-      await sleep(150);
-      cursor.classList.remove('clicking');
-      
-      // 按钮进入 Loading 状态
-      const regBtn = document.getElementById('reg-mock-btn');
-      const regSpinner = document.getElementById('reg-mock-spinner');
-      regBtn.querySelector('span').style.opacity = '0';
-      regSpinner.style.display = 'inline-block';
-      
-      await sleep(1500); // 模拟网络延迟
-      
-      // 提示成功
-      regSpinner.style.display = 'none';
-      regBtn.style.background = '#10b981';
-      regBtn.querySelector('span').textContent = '注册申请已提交';
-      regBtn.querySelector('span').style.opacity = '1';
-      
+
+      // 输入姓名
+      cursor.style.left = '45%'; cursor.style.top = '20%';
+      await sleep(400); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
+      kbd.classList.add('show'); await sleep(300);
+      await typeInput('reg-mock-name', '张三', 150);
+
+      // 输入电话
+      cursor.style.left = '45%'; cursor.style.top = '27%';
+      await sleep(400); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
+      await sleep(200);
+      await typeInput('reg-mock-phone', '13800138000', 80);
+
+      // 输入单位 (iOS无黏滞测试)
+      cursor.style.left = '45%'; cursor.style.top = '34%';
+      await sleep(400); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
+      await sleep(200);
+      await typeInput('reg-mock-company', '中建三局', 150);
+
+      // 输入密码
+      cursor.style.left = '45%'; cursor.style.top = '41%';
+      await sleep(400); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
+      await sleep(200);
+      await typeInput('reg-mock-pwd', '123456', 80);
+
+      kbd.classList.remove('show'); await sleep(300);
+
+      // 提交
+      cursor.style.left = '50%'; cursor.style.top = '48%';
+      await sleep(400); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
+
+      const submitBtn = document.getElementById('reg-mock-btn');
+      submitBtn.querySelector('span').style.opacity = '0';
+      document.getElementById('reg-mock-spinner').style.display = 'inline-block';
+      await sleep(1500);
+
+      document.getElementById('reg-mock-spinner').style.display = 'none';
+      submitBtn.style.background = '#10b981';
+      submitBtn.querySelector('span').textContent = '注册申请已提交';
+      submitBtn.querySelector('span').style.opacity = '1';
       document.getElementById('toast-reg').classList.add('show');
       cursor.style.display = 'none';
-      
+
       await sleep(3000);
-      btnPlay.disabled = false;
-      btnPlay.style.opacity = '1';
+      btn.disabled = false;
+      btn.style.opacity = '1';
     }
 
-    // 动画 2：运行信息录入演示
-    async function playInputAnimation() {
-      const btnPlay = document.getElementById('btn-play-input');
-      btnPlay.disabled = true;
-      btnPlay.style.opacity = '0.5';
+    // SLIDE 2 PC端实际录入动画
+    async function playPCAnimation() {
+      const btn = document.getElementById('btn-play-pc');
+      btn.disabled = true;
+      btn.style.opacity = '0.5';
 
-      const cursor = document.getElementById('cursor-input');
+      const cursor = document.getElementById('cursor-pc');
       cursor.style.display = 'block';
-      cursor.style.left = '10%';
-      cursor.style.top = '10%';
-      
-      await sleep(600);
-
-      // 1. 输入姓名
-      cursor.style.left = '30%';
-      cursor.style.top = '23%';
+      cursor.style.left = '10%'; cursor.style.top = '10%';
       await sleep(500);
-      cursor.classList.add('clicking');
-      await sleep(150);
-      cursor.classList.remove('clicking');
-      await sleep(200);
-      await typeInput('in-mock-name', '李四', 200);
 
-      // 2. 输入身份证号并自动触发计算生日
-      cursor.style.left = '30%';
-      cursor.style.top = '33%';
-      await sleep(500);
-      cursor.classList.add('clicking');
-      await sleep(150);
-      cursor.classList.remove('clicking');
-      await sleep(200);
-      await typeInput('in-mock-idcard', '110101199003072314', 80);
-      
-      // 模拟身份证自动解析出生日并回填
-      await sleep(300);
-      document.getElementById('in-mock-birthday').value = '1990-03-07';
-      // 闪烁一下提示是自动提取的
-      const birthInput = document.getElementById('in-mock-birthday');
-      birthInput.style.borderColor = 'var(--primary)';
-      birthInput.style.boxShadow = '0 0 10px var(--primary-glow)';
+      // 1. 上传电子照片
+      cursor.style.left = '50%'; cursor.style.top = '27%';
+      await sleep(500); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
       await sleep(400);
-      birthInput.style.borderColor = 'rgba(255,255,255,0.1)';
-      birthInput.style.boxShadow = 'none';
+      document.getElementById('uploader-pc').querySelector('svg').style.display = 'none';
+      document.getElementById('uploader-pc').querySelector('p').style.display = 'none';
+      document.getElementById('preview-pc').style.display = 'block';
 
-      // 3. 输入联系电话
-      cursor.style.left = '30%';
-      cursor.style.top = '51%';
-      await sleep(500);
-      cursor.classList.add('clicking');
-      await sleep(150);
-      cursor.classList.remove('clicking');
+      // 2. 输入姓名
+      cursor.style.left = '32%'; cursor.style.top = '44%';
+      await sleep(500); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
       await sleep(200);
-      await typeInput('in-mock-phone', '13988889999', 90);
+      await typeInput('pc-mock-name', '李四', 150);
 
-      // 4. 选择并上传照片
-      cursor.style.left = '75%';
-      cursor.style.top = '35%';
-      await sleep(600);
-      cursor.classList.add('clicking');
-      await sleep(150);
-      cursor.classList.remove('clicking');
-      
-      // 模拟照片预览渲染出来
-      await sleep(400);
-      document.getElementById('in-mock-upload-placeholder').style.display = 'none';
-      document.getElementById('in-mock-avatar').style.display = 'block';
-      
-      await sleep(600);
+      // 3. 选择民族
+      cursor.style.left = '68%'; cursor.style.top = '44%';
+      await sleep(500); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
+      await sleep(200);
+      document.getElementById('pc-mock-nation').value = '汉族';
 
-      // 5. 点击保存人员数据
-      cursor.style.left = '35%';
-      cursor.style.top = '62%';
-      await sleep(600);
-      cursor.classList.add('clicking');
-      await sleep(150);
-      cursor.classList.remove('clicking');
+      // 4. 输入身份证号
+      cursor.style.left = '32%'; cursor.style.top = '51%';
+      await sleep(500); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
+      await sleep(200);
+      await typeInput('pc-mock-idcard', '110101199003072314', 80);
 
-      // 显示成功提示并弹出生成的门禁卡二维码
-      document.getElementById('toast-input').classList.add('show');
-      
+      // 5. 输入电话
+      cursor.style.left = '68%'; cursor.style.top = '51%';
+      await sleep(500); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
+      await sleep(200);
+      await typeInput('pc-mock-phone', '13988889999', 80);
+
+      // 6. 输入地址
+      cursor.style.left = '32%'; cursor.style.top = '59%';
+      await sleep(500); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
+      await sleep(200);
+      await typeInput('pc-mock-address', '北京市朝阳区朝阳路1号', 100);
+
+      // 7. 选择工种
+      cursor.style.left = '68%'; cursor.style.top = '59%';
+      await sleep(500); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
+      await sleep(200);
+      document.getElementById('pc-mock-job').value = '安全员';
+
+      // 8. 选择学历
+      cursor.style.left = '68%'; cursor.style.top = '66%';
+      await sleep(500); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
+      await sleep(200);
+      document.getElementById('pc-mock-edu').value = '本科';
+
+      // 9. 确认提交信息
+      cursor.style.left = '50%'; cursor.style.top = '72%';
+      await sleep(600); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
+
+      document.getElementById('toast-pc').classList.add('show');
       await sleep(1000);
-      // 弹出最终门禁卡卡片
-      document.getElementById('qr-card').style.display = 'flex';
+      document.getElementById('qr-card-pc').style.display = 'flex';
       cursor.style.display = 'none';
 
       await sleep(4000);
-      btnPlay.disabled = false;
-      btnPlay.style.opacity = '1';
+      btn.disabled = false;
+      btn.style.opacity = '1';
+    }
+
+    // SLIDE 3 手机端实际录入动画
+    async function playMobileAnimation() {
+      const btn = document.getElementById('btn-play-mobile');
+      btn.disabled = true;
+      btn.style.opacity = '0.5';
+
+      const cursor = document.getElementById('cursor-mobile');
+      cursor.style.display = 'block';
+      cursor.style.left = '20%'; cursor.style.top = '15%';
+      await sleep(500);
+
+      // 1. 选择照片上传/拍照
+      cursor.style.left = '50%'; cursor.style.top = '24%';
+      await sleep(500); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
+      await sleep(400);
+      document.getElementById('uploader-mobile').querySelector('svg').style.display = 'none';
+      document.getElementById('uploader-mobile').querySelector('p').style.display = 'none';
+      document.getElementById('preview-mobile').style.display = 'block';
+
+      // 2. 姓名
+      cursor.style.left = '32%'; cursor.style.top = '36%';
+      await sleep(500); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
+      await sleep(200);
+      await typeInput('mob-mock-name', '王五', 150);
+
+      // 3. 身份证号
+      cursor.style.left = '32%'; cursor.style.top = '44%';
+      await sleep(500); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
+      await sleep(200);
+      await typeInput('mob-mock-idcard', '110101199505051234', 80);
+
+      // 4. 联系电话
+      cursor.style.left = '68%'; cursor.style.top = '44%';
+      await sleep(500); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
+      await sleep(200);
+      await typeInput('mob-mock-phone', '13500001111', 80);
+
+      // 5. 常住地址
+      cursor.style.left = '32%'; cursor.style.top = '51%';
+      await sleep(500); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
+      await sleep(200);
+      await typeInput('mob-mock-address', '上海市浦东新区', 100);
+
+      // 6. 确认提交信息
+      cursor.style.left = '50%'; cursor.style.top = '62%';
+      await sleep(600); cursor.classList.add('clicking'); await sleep(100); cursor.classList.remove('clicking');
+
+      document.getElementById('toast-mobile').classList.add('show');
+      await sleep(1000);
+      document.getElementById('qr-card-mobile').style.display = 'flex';
+      cursor.style.display = 'none';
+
+      await sleep(4000);
+      btn.disabled = false;
+      btn.style.opacity = '1';
     }
   </script>
 </body>
