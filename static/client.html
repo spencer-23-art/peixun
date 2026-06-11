@@ -95,36 +95,33 @@
 
     /* 移动端专有优化：彻底改用现代卡片式流布局 */
     @media (max-width: 768px) {
-      /* 表单网格在小屏幕下强制单列展示，极大扩宽输入视野 */
+      /* 表单网格在小屏幕下保持双列展示 */
       .form-grid {
-        grid-template-columns: 1fr !important;
-        gap: 12px !important;
+        grid-template-columns: 1fr 1fr !important;
+        gap: 10px !important;
       }
 
-      /* 头部个人信息条移动端自适应折行与留白调整 */
+      /* 头部个人信息条移动端：同一行横排紧凑显示 */
       .user-info-bar {
-        flex-direction: column;
-        gap: 10px;
-        align-items: stretch;
-        text-align: center;
-        padding: 15px;
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 6px 12px;
+        align-items: center;
+        justify-content: center;
+        padding: 10px 12px;
+        font-size: 0.8rem;
       }
       .user-info-bar div {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-        font-size: 0.85rem;
+        display: inline;
+        font-size: 0.8rem;
       }
       .user-info-bar div span {
-        display: inline-block;
-      }
-      .user-info-bar div strong {
-        color: var(--text-main);
+        margin-left: 0;
       }
       .user-info-bar .btn-logout {
-        width: 100%;
-        padding: 8px;
-        font-size: 0.9rem;
+        width: auto;
+        padding: 4px 10px;
+        font-size: 0.78rem;
       }
 
       /* 移动端导航标签平分宽度，更加显眼 */
