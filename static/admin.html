@@ -140,10 +140,10 @@
     .admin-sidebar {
       position: fixed;
       top: 0;
-      left: -280px;
+      left: 0;
       width: 280px;
       height: 100vh;
-      background: rgba(15, 23, 42, 0.95);
+      background: rgba(15, 23, 42, 0.65);
       backdrop-filter: blur(20px);
       -webkit-backdrop-filter: blur(20px);
       border-right: 1px solid var(--glass-border);
@@ -151,10 +151,11 @@
       z-index: 2000;
       display: flex;
       flex-direction: column;
-      transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      transform: translateX(-100%);
+      transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
     }
     .admin-sidebar.open {
-      left: 0;
+      transform: translateX(0);
     }
     .sidebar-header {
       padding: 20px;
@@ -209,19 +210,22 @@
       font-size: 0.85rem;
     }
     .sidebar-overlay {
-      display: none;
       position: fixed;
       top: 0;
       left: 0;
       width: 100vw;
       height: 100vh;
-      background: rgba(0, 0, 0, 0.5);
+      background: rgba(0, 0, 0, 0.4);
       backdrop-filter: blur(4px);
       -webkit-backdrop-filter: blur(4px);
       z-index: 1999;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.4s ease, visibility 0.4s ease;
     }
     .sidebar-overlay.open {
-      display: block;
+      opacity: 1;
+      visibility: visible;
     }
 
     /* 筛选面板卡片样式 */
@@ -591,18 +595,41 @@
     
     <!-- TAB 5: 系统配置 -->
     <div class="tab-content" id="admin-content-config">
-      <div class="glass-container" style="max-width: 500px; margin: 20px auto; padding: 30px; border: 1px solid var(--glass-border); border-radius: 12px; background: rgba(255, 255, 255, 0.02);">
-        <h3 style="margin-bottom: 20px; font-size: 1.25rem; color: var(--text-main); border-bottom: 1px solid var(--glass-border); padding-bottom: 12px;">考试开放时段设置</h3>
-        <div class="form-group" style="margin-bottom: 20px; text-align: left;">
-          <label for="cfg-start-time" style="display: block; margin-bottom: 8px; font-size: 0.9rem; color: var(--text-muted);">每日答题开始时间：</label>
-          <input type="time" id="cfg-start-time" class="form-control" style="width: 100%; box-sizing: border-box;" required>
+      <div style="display: flex; flex-direction: column; gap: 20px; align-items: center; width: 100%;">
+        <!-- 考试时段配置 -->
+        <div class="glass-container" style="max-width: 500px; margin: 20px 0 0 0; padding: 30px; border: 1px solid var(--glass-border); border-radius: 12px; background: rgba(255, 255, 255, 0.02);">
+          <h3 style="margin-bottom: 20px; font-size: 1.25rem; color: var(--text-main); border-bottom: 1px solid var(--glass-border); padding-bottom: 12px; text-align: left;">考试开放时段设置</h3>
+          <div class="form-group" style="margin-bottom: 20px; text-align: left;">
+            <label for="cfg-start-time" style="display: block; margin-bottom: 8px; font-size: 0.9rem; color: var(--text-muted);">每日答题开始时间：</label>
+            <input type="time" id="cfg-start-time" class="form-control" style="width: 100%; box-sizing: border-box;" required>
+          </div>
+          <div class="form-group" style="margin-bottom: 25px; text-align: left;">
+            <label for="cfg-end-time" style="display: block; margin-bottom: 8px; font-size: 0.9rem; color: var(--text-muted);">每日答题截止时间：</label>
+            <input type="time" id="cfg-end-time" class="form-control" style="width: 100%; box-sizing: border-box;" required>
+          </div>
+          <div style="text-align: left;">
+            <button class="btn btn-primary" onclick="saveSystemConfig()" style="width: auto; padding: 10px 24px; font-size: 0.95rem;">保存配置</button>
+          </div>
         </div>
-        <div class="form-group" style="margin-bottom: 25px; text-align: left;">
-          <label for="cfg-end-time" style="display: block; margin-bottom: 8px; font-size: 0.9rem; color: var(--text-muted);">每日答题截止时间：</label>
-          <input type="time" id="cfg-end-time" class="form-control" style="width: 100%; box-sizing: border-box;" required>
-        </div>
-        <div style="text-align: left;">
-          <button class="btn btn-primary" onclick="saveSystemConfig()" style="width: auto; padding: 10px 24px; font-size: 0.95rem;">保存配置</button>
+
+        <!-- 管理员密码修改 -->
+        <div class="glass-container" style="max-width: 500px; margin: 0 0 20px 0; padding: 30px; border: 1px solid var(--glass-border); border-radius: 12px; background: rgba(255, 255, 255, 0.02);">
+          <h3 style="margin-bottom: 20px; font-size: 1.25rem; color: var(--text-main); border-bottom: 1px solid var(--glass-border); padding-bottom: 12px; text-align: left;">管理员密码修改</h3>
+          <div class="form-group" style="margin-bottom: 20px; text-align: left;">
+            <label for="cfg-old-pwd" style="display: block; margin-bottom: 8px; font-size: 0.9rem; color: var(--text-muted);">当前密码：</label>
+            <input type="password" id="cfg-old-pwd" class="form-control" style="width: 100%; box-sizing: border-box;" placeholder="输入当前密码" required>
+          </div>
+          <div class="form-group" style="margin-bottom: 20px; text-align: left;">
+            <label for="cfg-new-pwd" style="display: block; margin-bottom: 8px; font-size: 0.9rem; color: var(--text-muted);">新密码：</label>
+            <input type="password" id="cfg-new-pwd" class="form-control" style="width: 100%; box-sizing: border-box;" placeholder="输入新密码" required>
+          </div>
+          <div class="form-group" style="margin-bottom: 25px; text-align: left;">
+            <label for="cfg-new-pwd-confirm" style="display: block; margin-bottom: 8px; font-size: 0.9rem; color: var(--text-muted);">确认新密码：</label>
+            <input type="password" id="cfg-new-pwd-confirm" class="form-control" style="width: 100%; box-sizing: border-box;" placeholder="再次输入新密码" required>
+          </div>
+          <div style="text-align: left;">
+            <button class="btn btn-primary" onclick="changeAdminPassword()" style="width: auto; padding: 10px 24px; font-size: 0.95rem;">保存新密码</button>
+          </div>
         </div>
       </div>
     </div>
@@ -2019,6 +2046,92 @@
       switchAdminTab(tab);
       toggleSidebar(false);
     }
+
+    // 修改管理员密码
+    async function changeAdminPassword() {
+      const oldPwd = document.getElementById('cfg-old-pwd').value.trim();
+      const newPwd = document.getElementById('cfg-new-pwd').value.trim();
+      const newPwdConfirm = document.getElementById('cfg-new-pwd-confirm').value.trim();
+
+      if (!oldPwd || !newPwd || !newPwdConfirm) {
+        alert('请完整填写所有密码输入框！');
+        return;
+      }
+      if (newPwd !== newPwdConfirm) {
+        alert('两次输入的密码不一致！');
+        return;
+      }
+      if (newPwd.length < 6) {
+        alert('新密码长度不能低于6位！');
+        return;
+      }
+
+      if (!confirm('确定要修改管理员密码吗？修改后将需要使用新密码重新登录！')) {
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('old_password', oldPwd);
+      formData.append('new_password', newPwd);
+
+      try {
+        const response = await fetch('/api/admin/update_password', {
+          method: 'POST',
+          headers: { 'Authorization': token },
+          body: formData
+        });
+        const result = await response.json();
+        if (response.ok && result.code === 200) {
+          showAlert('success', '密码修改成功，请重新登录！');
+          setTimeout(() => {
+            logout();
+          }, 1500);
+        } else {
+          alert(result.detail || '密码修改失败，请检查旧密码是否正确！');
+        }
+      } catch (err) {
+        alert('修改密码时网络发生错误');
+      }
+    }
+
+    // 侧拉栏左右手势滑动支持
+    (function initSwipeGesture() {
+      let touchStartX = 0;
+      let touchStartY = 0;
+      let touchEndX = 0;
+      let touchEndY = 0;
+
+      document.addEventListener('touchstart', function(e) {
+        touchStartX = e.changedTouches[0].clientX;
+        touchStartY = e.changedTouches[0].clientY;
+      }, { passive: true });
+
+      document.addEventListener('touchend', function(e) {
+        touchEndX = e.changedTouches[0].clientX;
+        touchEndY = e.changedTouches[0].clientY;
+        handleSwipeGesture();
+      }, { passive: true });
+
+      function handleSwipeGesture() {
+        const diffX = touchEndX - touchStartX;
+        const diffY = touchEndY - touchStartY;
+
+        // 确保是横向滑动且不是纵向滚动误触
+        if (Math.abs(diffX) > Math.abs(diffY) * 1.5 && Math.abs(diffX) > 60) {
+          const sidebar = document.getElementById('admin-sidebar');
+          if (!sidebar) return;
+          const isOpen = sidebar.classList.contains('open');
+
+          if (diffX > 0 && !isOpen && touchStartX < 35) {
+            // 从左边缘 35px 区域内向右划，唤起菜单
+            toggleSidebar(true);
+          } else if (diffX < 0 && isOpen) {
+            // 菜单开启状态下，向左划关闭菜单
+            toggleSidebar(false);
+          }
+        }
+      }
+    })();
   </script>
 </body>
 </html>

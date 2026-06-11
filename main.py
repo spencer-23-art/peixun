@@ -1931,6 +1931,34 @@ def save_config_api(
     finally:
         conn.close()
 
+# 修改管理员密码（仅管理员）
+@app.post("/api/admin/update_password")
+def update_admin_password(
+    old_password: str = Form(...),
+    new_password: str = Form(...),
+    admin = Depends(get_admin_user)
+):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT password FROM users WHERE id = ?", (admin['id'],))
+        row = cursor.fetchone()
+        if not row:
+            return {"code": 404, "detail": "管理员用户不存在"}
+        
+        stored_pwd = row[0]
+        if not verify_pwd(old_password, stored_pwd):
+            return {"code": 400, "detail": "旧密码不正确"}
+            
+        hashed_pwd = encrypt_pwd(new_password)
+        cursor.execute("UPDATE users SET password = ? WHERE id = ?", (hashed_pwd, admin['id']))
+        conn.commit()
+        return {"code": 200, "message": "密码修改成功"}
+    except Exception as e:
+        return {"code": 500, "detail": f"修改密码失败: {str(e)}"}
+    finally:
+        conn.close()
+
 # 考试页面（无需登录）
 @app.get("/exam", response_class=HTMLResponse)
 def get_exam():
