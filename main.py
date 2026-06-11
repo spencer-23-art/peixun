@@ -9,6 +9,7 @@ from datetime import datetime
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Header, Depends
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 import openpyxl
 import csv
 import zipfile
@@ -202,6 +203,14 @@ def init_db():
 init_db()
 
 app = FastAPI(title="培训信息录入系统")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.middleware("http")
 async def log_requests(request, call_next):

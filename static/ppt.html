@@ -2047,8 +2047,14 @@
       const formData = new FormData();
       formData.append('html_content', htmlContent);
       
+      // 动态判断当前页面加载协议，如果是在本地直接双击打开（file:///），强制将请求发送至 http://localhost:8000
+      let apiUrl = '/api/save_ppt';
+      if (window.location.protocol === 'file:') {
+        apiUrl = 'http://localhost:8000/api/save_ppt';
+      }
+      
       try {
-        const response = await fetch('/api/save_ppt', {
+        const response = await fetch(apiUrl, {
           method: 'POST',
           body: formData
         });
