@@ -641,6 +641,10 @@
         <label for="edit-user-realname">真实姓名 *</label>
         <input type="text" id="edit-user-realname" class="form-control" required>
       </div>
+      <div class="form-group" style="margin-bottom: 15px;">
+        <label for="edit-user-company">工作单位 *</label>
+        <input type="text" id="edit-user-company" class="form-control" required>
+      </div>
       <div class="form-group" style="margin-bottom: 20px;">
         <label for="edit-user-password">新密码 (留空表示不修改)</label>
         <input type="password" id="edit-user-password" class="form-control" placeholder="请输入新密码">
@@ -1330,19 +1334,19 @@
               actionButtons = `
                 <button class="btn btn-success" style="padding: 4px 8px; font-size: 0.8rem; width: auto;" onclick="handleApprove(${u.id}, 'approved')">通过</button>
                 <button class="btn btn-danger" style="padding: 4px 8px; font-size: 0.8rem; width: auto; margin-left: 4px;" onclick="handleApprove(${u.id}, 'rejected')">拒绝</button>
-                <button class="btn btn-primary" style="padding: 4px 8px; font-size: 0.8rem; width: auto; margin-left: 4px;" onclick="openEditUserModal(${u.id}, '${escapeHtml(u.username)}', '${escapeHtml(u.real_name)}')">修改</button>
+                <button class="btn btn-primary" style="padding: 4px 8px; font-size: 0.8rem; width: auto; margin-left: 4px;" onclick="openEditUserModal(${u.id}, '${escapeHtml(u.username)}', '${escapeHtml(u.real_name)}', '${escapeHtml(u.company)}')">修改</button>
                 <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 0.8rem; width: auto; margin-left: 4px; background: var(--danger-color); color: white;" onclick="handleDeleteUser(${u.id})">删除</button>
               `;
             } else if (u.status === 'approved') {
               statusBadge = '<span class="badge badge-approved">已通过</span>';
               actionButtons = `
-                <button class="btn btn-primary" style="padding: 4px 8px; font-size: 0.8rem; width: auto;" onclick="openEditUserModal(${u.id}, '${escapeHtml(u.username)}', '${escapeHtml(u.real_name)}')">修改</button>
+                <button class="btn btn-primary" style="padding: 4px 8px; font-size: 0.8rem; width: auto;" onclick="openEditUserModal(${u.id}, '${escapeHtml(u.username)}', '${escapeHtml(u.real_name)}', '${escapeHtml(u.company)}')">修改</button>
                 <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 0.8rem; width: auto; margin-left: 4px; background: var(--danger-color); color: white;" onclick="handleDeleteUser(${u.id})">删除</button>
               `;
             } else if (u.status === 'rejected') {
               statusBadge = '<span class="badge badge-rejected">已拒绝</span>';
               actionButtons = `
-                <button class="btn btn-primary" style="padding: 4px 8px; font-size: 0.8rem; width: auto;" onclick="openEditUserModal(${u.id}, '${escapeHtml(u.username)}', '${escapeHtml(u.real_name)}')">修改</button>
+                <button class="btn btn-primary" style="padding: 4px 8px; font-size: 0.8rem; width: auto;" onclick="openEditUserModal(${u.id}, '${escapeHtml(u.username)}', '${escapeHtml(u.real_name)}', '${escapeHtml(u.company)}')">修改</button>
                 <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 0.8rem; width: auto; margin-left: 4px; background: var(--danger-color); color: white;" onclick="handleDeleteUser(${u.id})">删除</button>
               `;
             }
@@ -1533,10 +1537,11 @@
     }
 
     // 打开修改用户模态框
-    function openEditUserModal(id, username, realname) {
+    function openEditUserModal(id, username, realname, company) {
       document.getElementById('edit-user-id').value = id;
       document.getElementById('edit-user-username').value = username;
       document.getElementById('edit-user-realname').value = realname;
+      document.getElementById('edit-user-company').value = company || '';
       document.getElementById('edit-user-password').value = ''; // 密码框默认留空
       
       const modal = document.getElementById('edit-user-modal');
@@ -1553,6 +1558,7 @@
       const id = document.getElementById('edit-user-id').value;
       const username = document.getElementById('edit-user-username').value.trim();
       const realname = document.getElementById('edit-user-realname').value.trim();
+      const company = document.getElementById('edit-user-company').value.trim();
       const password = document.getElementById('edit-user-password').value;
 
       if (!username) {
@@ -1563,11 +1569,16 @@
         alert('真实姓名不能为空！');
         return;
       }
+      if (!company) {
+        alert('工作单位不能为空！');
+        return;
+      }
 
       const formData = new FormData();
       formData.append('user_id', id);
       formData.append('username', username);
       formData.append('real_name', realname);
+      formData.append('company', company);
       if (password) {
         formData.append('password', password);
       }

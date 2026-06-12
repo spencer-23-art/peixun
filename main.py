@@ -189,6 +189,13 @@ def init_db():
             ('admin', encrypt_pwd('admin123'), '系统管理员', '管理部', 'approved', 'admin')
         )
         
+    cursor.execute("SELECT * FROM users WHERE username = 'admin2'")
+    if not cursor.fetchone():
+        cursor.execute(
+            "INSERT INTO users (username, password, real_name, company, status, role) VALUES (?, ?, ?, ?, ?, ?)",
+            ('admin2', encrypt_pwd('admin1234'), '普通管理员', '管理部', 'approved', 'admin')
+        )
+        
     # 检测并为 records 表添加 is_gate_downloaded 列自愈逻辑
     try:
         cursor.execute("ALTER TABLE records ADD COLUMN is_gate_downloaded INTEGER DEFAULT 0")
@@ -482,6 +489,8 @@ def approve_user(user_id: int = Form(...), action: str = Form(...), admin = Depe
 # 删除注册用户（仅管理员，物理删除以防再度登录）
 @app.post("/api/admin/user/delete")
 def delete_user(user_id: int = Form(...), admin = Depends(get_admin_user)):
+    if admin['username'] == 'admin2':
+        raise HTTPException(status_code=403, detail="该账户无删除权限")
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
@@ -503,6 +512,8 @@ def delete_user(user_id: int = Form(...), admin = Depends(get_admin_user)):
 # 删除培训人员记录（仅管理员，物理删除关联照片）
 @app.post("/api/admin/record/delete")
 def delete_record(record_id: int = Form(...), admin = Depends(get_admin_user)):
+    if admin['username'] == 'admin2':
+        raise HTTPException(status_code=403, detail="该账户无删除权限")
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
@@ -536,16 +547,20 @@ def admin_update_user(
     user_id: int = Form(...),
     username: str = Form(...),
     real_name: str = Form(...),
+    company: str = Form(...),
     password: str = Form(None),
     admin = Depends(get_admin_user)
 ):
     username = username.strip()
     real_name = real_name.strip()
+    company = company.strip()
     
     if not username:
         raise HTTPException(status_code=400, detail="申请账号（电话）不能为空")
     if not real_name:
         raise HTTPException(status_code=400, detail="真实姓名不能为空")
+    if not company:
+        raise HTTPException(status_code=400, detail="工作单位不能为空")
         
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
@@ -567,13 +582,13 @@ def admin_update_user(
         # 更新数据
         if password and password.strip():
             cursor.execute(
-                "UPDATE users SET username = ?, real_name = ?, password = ? WHERE id = ?",
-                (username, real_name, encrypt_pwd(password.strip()), user_id)
+                "UPDATE users SET username = ?, real_name = ?, company = ?, password = ? WHERE id = ?",
+                (username, real_name, company, encrypt_pwd(password.strip()), user_id)
             )
         else:
             cursor.execute(
-                "UPDATE users SET username = ?, real_name = ? WHERE id = ?",
-                (username, real_name, user_id)
+                "UPDATE users SET username = ?, real_name = ?, company = ? WHERE id = ?",
+                (username, real_name, company, user_id)
             )
         conn.commit()
         return {"code": 200, "message": "用户信息修改成功！"}
