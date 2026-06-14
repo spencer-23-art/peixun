@@ -770,9 +770,16 @@ def get_approved_companies(admin = Depends(get_admin_user)):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("SELECT DISTINCT company FROM users WHERE role != 'admin' AND status = 'approved' AND company IS NOT NULL AND company != ''")
-    companies = [row[0] for row in cursor.fetchall()]
+    all_companies = [row[0] for row in cursor.fetchall()]
+    
+    from datetime import datetime, timedelta
+    today_bj = (datetime.utcnow() + timedelta(hours=8)).strftime("%Y-%m-%d")
+    cursor.execute("SELECT DISTINCT company FROM exam_records WHERE date(created_at, '+8 hours') = ?", (today_bj,))
+    today_companies = set([row[0] for row in cursor.fetchall()])
     conn.close()
-    return {"code": 200, "data": companies}
+    
+    sorted_companies = sorted(all_companies, key=lambda c: 0 if c in today_companies else 1)
+    return {"code": 200, "data": sorted_companies}
 
 # 获取所有已审核通过用户的单位列表（公开接口，供答题页面使用）
 @app.get("/api/companies")
@@ -780,9 +787,16 @@ def get_companies():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("SELECT DISTINCT company FROM users WHERE role != 'admin' AND company IS NOT NULL AND company != ''")
-    companies = [row[0] for row in cursor.fetchall()]
+    all_companies = [row[0] for row in cursor.fetchall()]
+    
+    from datetime import datetime, timedelta
+    today_bj = (datetime.utcnow() + timedelta(hours=8)).strftime("%Y-%m-%d")
+    cursor.execute("SELECT DISTINCT company FROM exam_records WHERE date(created_at, '+8 hours') = ?", (today_bj,))
+    today_companies = set([row[0] for row in cursor.fetchall()])
     conn.close()
-    return {"code": 200, "data": companies}
+    
+    sorted_companies = sorted(all_companies, key=lambda c: 0 if c in today_companies else 1)
+    return {"code": 200, "data": sorted_companies}
 
 # 查看所有已录入的信息（仅管理员，支持按日期区间筛选、工作单位筛选和门禁下载状态排序）
 @app.get("/api/admin/records")
