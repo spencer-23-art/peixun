@@ -253,6 +253,7 @@ def init_db():
     ''')
     cursor.execute("INSERT OR IGNORE INTO configs (key, value) VALUES ('exam_start_time', '08:00:00')")
     cursor.execute("INSERT OR IGNORE INTO configs (key, value) VALUES ('exam_end_time', '12:00:00')")
+    cursor.execute("INSERT OR IGNORE INTO configs (key, value) VALUES ('regions', '三元肥,尿素塔')")
         
     # 建立索引以优化检索和排序性能
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_records_name ON records (name)")
@@ -1263,7 +1264,7 @@ def export_excel(ids: str = None, start_date: str = None, end_date: str = None, 
             train_date, # 培训日期
             exam_score, # 考试成绩
             "", # 有效期限
-            "", # 区域权限
+            r['region_auth'], # 区域权限
             "", # 流动情况
             "", # 最近一次培训日期
             "", # 特殊工种证有效期
@@ -1937,6 +1938,13 @@ def get_admin():
     with open("static/admin.html", "r", encoding="utf-8") as f:
         return HTMLResponse(content=f.read(), headers=headers)
 
+# 获取可用区域列表（公开接口，无需登录）
+@app.get("/api/regions")
+def get_regions():
+    regions_str = get_config('regions', '三元肥,尿素塔')
+    regions_list = [r.strip() for r in regions_str.split(',') if r.strip()]
+    return {"code": 200, "regions": regions_list}
+
 # 获取考试配置（仅管理员）
 @app.get("/api/admin/config")
 def get_configs_api(admin = Depends(get_admin_user)):
@@ -1944,7 +1952,8 @@ def get_configs_api(admin = Depends(get_admin_user)):
         "code": 200,
         "data": {
             "exam_start_time": get_config('exam_start_time', '08:00:00')[:5],
-            "exam_end_time": get_config('exam_end_time', '12:00:00')[:5]
+            "exam_end_time": get_config('exam_end_time', '12:00:00')[:5],
+            "regions": get_config('regions', '三元肥,尿素塔')
         }
     }
 
@@ -1953,6 +1962,7 @@ def get_configs_api(admin = Depends(get_admin_user)):
 def save_config_api(
     start_time: str = Form(...),
     end_time: str = Form(...),
+    regions: str = Form(""),
     admin = Depends(get_admin_user)
 ):
     if len(start_time) == 5:
@@ -1971,6 +1981,7 @@ def save_config_api(
     try:
         cursor.execute("INSERT OR REPLACE INTO configs (key, value) VALUES ('exam_start_time', ?)", (start_time,))
         cursor.execute("INSERT OR REPLACE INTO configs (key, value) VALUES ('exam_end_time', ?)", (end_time,))
+        cursor.execute("INSERT OR REPLACE INTO configs (key, value) VALUES ('regions', ?)", (regions.strip(),))
         conn.commit()
         return {"code": 200, "message": "配置保存成功"}
     except Exception as e:

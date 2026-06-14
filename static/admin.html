@@ -6,6 +6,33 @@
   <title>培训信息录入系统 - 管理后台</title>
   <link rel="stylesheet" href="/static/css/style.css?v=1.0.6">
   <style>
+    /* 区域标签样式 */
+    .region-tag {
+      display: inline-flex;
+      align-items: center;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: var(--text-main);
+      padding: 4px 10px;
+      border-radius: 16px;
+      font-size: 0.85rem;
+      transition: all 0.2s ease;
+    }
+    .region-tag:hover {
+      background: rgba(255, 255, 255, 0.15);
+      border-color: rgba(255, 255, 255, 0.3);
+    }
+    .region-tag .remove-btn {
+      margin-left: 6px;
+      cursor: pointer;
+      color: rgba(255, 255, 255, 0.5);
+      font-weight: bold;
+      transition: color 0.2s;
+    }
+    .region-tag .remove-btn:hover {
+      color: #ef4444;
+    }
+
     /* 针对后台页面的布局微调 */
     .admin-container {
       max-width: 1200px;
@@ -584,17 +611,30 @@
     <!-- TAB 5: 系统配置 -->
     <div class="tab-content" id="admin-content-config">
       <div style="display: flex; flex-direction: column; gap: 20px; align-items: center; width: 100%;">
-        <!-- 考试时段配置 -->
+        <!-- 考试时段与区域权限配置 -->
         <div class="glass-container" style="max-width: 500px; margin: 20px 0 0 0; padding: 30px; border: 1px solid var(--glass-border); border-radius: 12px; background: rgba(255, 255, 255, 0.02);">
-          <h3 style="margin-bottom: 20px; font-size: 1.25rem; color: var(--text-main); border-bottom: 1px solid var(--glass-border); padding-bottom: 12px; text-align: left;">考试开放时段设置</h3>
+          <h3 style="margin-bottom: 20px; font-size: 1.25rem; color: var(--text-main); border-bottom: 1px solid var(--glass-border); padding-bottom: 12px; text-align: left;">系统核心参数配置</h3>
           <div class="form-group" style="margin-bottom: 20px; text-align: left;">
             <label for="cfg-start-time" style="display: block; margin-bottom: 8px; font-size: 0.9rem; color: var(--text-muted);">每日答题开始时间：</label>
             <input type="time" id="cfg-start-time" class="form-control" style="width: 100%; box-sizing: border-box;" required>
           </div>
-          <div class="form-group" style="margin-bottom: 25px; text-align: left;">
+          <div class="form-group" style="margin-bottom: 20px; text-align: left;">
             <label for="cfg-end-time" style="display: block; margin-bottom: 8px; font-size: 0.9rem; color: var(--text-muted);">每日答题截止时间：</label>
             <input type="time" id="cfg-end-time" class="form-control" style="width: 100%; box-sizing: border-box;" required>
           </div>
+          
+          <!-- 区域权限设置 -->
+          <div class="form-group" style="margin-bottom: 25px; text-align: left;">
+            <label style="display: block; margin-bottom: 8px; font-size: 0.9rem; color: var(--text-muted);">可分配区域权限列表：</label>
+            <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+              <input type="text" id="cfg-new-region" class="form-control" style="margin-bottom: 0; flex: 1;" placeholder="输入新区域 (如: 尿素塔)">
+              <button type="button" class="btn btn-secondary" onclick="addRegionTag()" style="width: auto; padding: 0 16px; margin-bottom: 0;">添加</button>
+            </div>
+            <div id="cfg-regions-container" style="display: flex; flex-wrap: wrap; gap: 8px; min-height: 46px; padding: 10px; border: 1px dashed var(--glass-border); border-radius: 6px; background: rgba(255,255,255,0.02);">
+              <!-- 动态生成的区域 Tag -->
+            </div>
+          </div>
+
           <div style="text-align: left;">
             <button class="btn btn-primary" onclick="saveSystemConfig()" style="width: auto; padding: 10px 24px; font-size: 0.95rem;">保存配置</button>
           </div>
@@ -1131,7 +1171,7 @@
             <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">手机: ${escapeHtml(r.phone)}</div>
           </td>
           <td>
-            <div style="font-weight: 600; color: var(--text-main); font-size: 0.9rem;">${escapeHtml(r.company || '暂无单位')}</div>
+            <div style="font-weight: 600; color: var(--text-main); font-size: 0.9rem;">${escapeHtml(r['company'] || '暂无单位')}</div>
             <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap;">
               <span>岗位: ${escapeHtml(r.job)}</span>
               <span style="color: var(--glass-border);">|</span>
@@ -1980,6 +2020,49 @@
       document.getElementById('exam-detail-modal').style.display = 'none';
     }
 
+    let configuredRegions = [];
+
+    function renderRegionTags() {
+      const container = document.getElementById('cfg-regions-container');
+      if (!container) return;
+      container.innerHTML = '';
+      if (configuredRegions.length === 0) {
+        container.innerHTML = '<span style="color: var(--text-muted); font-size: 0.85rem; padding: 4px 0;">暂无配置区域权限，请添加</span>';
+        return;
+      }
+      configuredRegions.forEach((region, index) => {
+        const tag = document.createElement('div');
+        tag.className = 'region-tag';
+        tag.innerHTML = `
+          <span>${escapeHtml(region)}</span>
+          <span class="remove-btn" onclick="removeRegionTag(${index})">&times;</span>
+        `;
+        container.appendChild(tag);
+      });
+    }
+
+    function addRegionTag() {
+      const input = document.getElementById('cfg-new-region');
+      if (!input) return;
+      const val = input.value.trim();
+      if (!val) {
+        alert('区域名称不能为空');
+        return;
+      }
+      if (configuredRegions.includes(val)) {
+        alert('该区域已在列表中');
+        return;
+      }
+      configuredRegions.push(val);
+      renderRegionTags();
+      input.value = '';
+    }
+
+    function removeRegionTag(index) {
+      configuredRegions.splice(index, 1);
+      renderRegionTags();
+    }
+
     async function loadSystemConfig() {
       try {
         const response = await fetch('/api/admin/config', {
@@ -1989,6 +2072,10 @@
         if (response.ok && result.code === 200) {
           document.getElementById('cfg-start-time').value = result.data.exam_start_time;
           document.getElementById('cfg-end-time').value = result.data.exam_end_time;
+          
+          const regionsStr = result.data.regions || '';
+          configuredRegions = regionsStr.split(',').map(r => r.trim()).filter(r => r.length > 0);
+          renderRegionTags();
         } else {
           showAlert('error', '加载系统配置失败');
         }
@@ -2008,6 +2095,7 @@
       const formData = new FormData();
       formData.append('start_time', startTime);
       formData.append('end_time', endTime);
+      formData.append('regions', configuredRegions.join(','));
       
       try {
         const response = await fetch('/api/admin/config', {

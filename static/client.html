@@ -422,12 +422,10 @@
                 <option value="博士">博士</option>
               </select>
             </div>
-            <div class="form-group" style="display: none;">
-              <label for="region_auth">区域权限</label>
-              <select id="region_auth" class="form-control">
-                <option value="" selected>请选择区域权限</option>
-                <option value="三元肥">三元肥</option>
-                <option value="尿素塔">尿素塔</option>
+            <div class="form-group">
+              <label for="region_auth">区域权限 *</label>
+              <select id="region_auth" class="form-control" required>
+                <option value="" disabled selected>请选择区域权限</option>
               </select>
             </div>
           </div>
@@ -566,8 +564,31 @@
       }
     }
 
-    // 初始化获取用户信息
-    fetchUserStatus();
+    async function loadRegions() {
+      try {
+        const response = await fetch('/api/regions');
+        const result = await response.json();
+        if (response.ok && result.code === 200) {
+          const regionSelect = document.getElementById('region_auth');
+          regionSelect.innerHTML = '<option value="" disabled selected>请选择区域权限</option>';
+          result.regions.forEach(region => {
+            const opt = document.createElement('option');
+            opt.value = region;
+            opt.text = region;
+            regionSelect.appendChild(opt);
+          });
+          fillSavedFields();
+        }
+      } catch (err) {
+        console.error('加载区域权限失败', err);
+      }
+    }
+
+    // 初始化获取用户信息与区域列表
+    (async () => {
+      await loadRegions();
+      await fetchUserStatus();
+    })();
 
     let compressedPhotoBlob = null; 
     let currentEditRecordId = null;
