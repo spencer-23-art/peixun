@@ -1890,8 +1890,8 @@
           if (select && result.data && result.data.length > 0) {
             result.data.forEach(function(c) {
               var option = document.createElement('option');
-              option.value = c.name;
-              option.textContent = c.name;
+              option.value = c;
+              option.textContent = c;
               select.appendChild(option);
             });
           }
