@@ -779,7 +779,7 @@ def get_approved_companies(admin = Depends(get_admin_user)):
 def get_companies():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("SELECT DISTINCT company FROM users WHERE role != 'admin' AND status = 'approved' AND company IS NOT NULL AND company != ''")
+    cursor.execute("SELECT DISTINCT company FROM users WHERE role != 'admin' AND company IS NOT NULL AND company != ''")
     companies = [row[0] for row in cursor.fetchall()]
     conn.close()
     return {"code": 200, "data": companies}
@@ -1199,7 +1199,6 @@ def export_excel(ids: str = None, start_date: str = None, end_date: str = None, 
     
     cursor.execute(query, params)
     records = cursor.fetchall()
-    conn.close()
     
     template_path = '06.03.xlsx'
     if not os.path.exists(template_path):
@@ -1209,7 +1208,7 @@ def export_excel(ids: str = None, start_date: str = None, end_date: str = None, 
         ws.title = "Sheet1"
         ws.append([
             "姓名", "性别", "民族", "年龄", "身份证号码", "联系电话", "现常住地址", "公司名称", 
-            "岗位/工种", "学历", "有效期限", "区域权限", "人员在各单位间流动情况", 
+            "岗位/工种", "学历", "培训日期", "考试成绩", "有效期限", "区域权限", "人员在各单位间流动情况", 
             "最近一次培训日期", "特殊工种证有效期", "备注"
         ])
     else:
@@ -1221,6 +1220,21 @@ def export_excel(ids: str = None, start_date: str = None, end_date: str = None, 
         ws.delete_rows(2, ws.max_row)
         
     for r in records:
+        # 查询最近一次答题记录
+        r_company = r['company'] if r['company'] else ""
+        cursor.execute('''
+            SELECT created_at, score FROM exam_records 
+            WHERE name = ? AND company = ? 
+            ORDER BY created_at DESC LIMIT 1
+        ''', (r['name'], r_company))
+        exam_row = cursor.fetchone()
+        
+        train_date = ""
+        exam_score = ""
+        if exam_row:
+            train_date = exam_row[0][:10] if exam_row[0] else ""  # 取 YYYY-MM-DD
+            exam_score = exam_row[1]
+            
         row_data = [
             r['name'],
             r['gender'],
@@ -1232,6 +1246,8 @@ def export_excel(ids: str = None, start_date: str = None, end_date: str = None, 
             r['company'],
             r['job'],
             r['education'],
+            train_date, # 培训日期
+            exam_score, # 考试成绩
             "", # 有效期限
             "", # 区域权限
             "", # 流动情况
@@ -1241,6 +1257,8 @@ def export_excel(ids: str = None, start_date: str = None, end_date: str = None, 
         ]
         ws.append(row_data)
         
+    conn.close()
+    
     out_path = 'training_records_export.xlsx'
     wb.save(out_path)
     return FileResponse(out_path, filename="培训人员信息表.xlsx", media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
