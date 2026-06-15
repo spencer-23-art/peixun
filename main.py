@@ -783,20 +783,22 @@ def get_approved_companies(admin = Depends(get_admin_user)):
     return {"code": 200, "data": sorted_companies}
 
 # 获取所有已审核通过用户的单位列表（公开接口，供答题页面使用）
+# 按照注册用户在 records 表中提交的人员信息数量进行降序排序。如果某些单位没有在 records 中提交信息，则排到后面。
 @app.get("/api/companies")
 def get_companies():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("SELECT DISTINCT company FROM users WHERE role != 'admin' AND company IS NOT NULL AND company != ''")
-    all_companies = [row[0] for row in cursor.fetchall()]
-    
-    from datetime import datetime, timedelta
-    today_bj = (datetime.utcnow() + timedelta(hours=8)).strftime("%Y-%m-%d")
-    cursor.execute("SELECT DISTINCT company FROM exam_records WHERE date(created_at, '+8 hours') = ?", (today_bj,))
-    today_companies = set([row[0] for row in cursor.fetchall()])
+    query = """
+        SELECT u.company, COUNT(r.id) AS submit_count, MAX(r.created_at) AS last_submit_time
+        FROM users u
+        LEFT JOIN records r ON u.id = r.user_id
+        WHERE u.role != 'admin' AND u.company IS NOT NULL AND u.company != ''
+        GROUP BY u.company
+        ORDER BY submit_count DESC, last_submit_time DESC, u.company ASC
+    """
+    cursor.execute(query)
+    sorted_companies = [row[0] for row in cursor.fetchall()]
     conn.close()
-    
-    sorted_companies = sorted(all_companies, key=lambda c: 0 if c in today_companies else 1)
     return {"code": 200, "data": sorted_companies}
 
 # 查看所有已录入的信息（仅管理员，支持按日期区间筛选、工作单位筛选和门禁下载状态排序）

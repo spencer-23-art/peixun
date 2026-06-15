@@ -752,6 +752,8 @@
       }, 2000);
     }
 
+    let systemRegions = ["三元肥", "尿素塔"];
+    
     let filterStartDate = '';
     let filterEndDate = '';
     let filterCompany = '';
@@ -1056,8 +1058,21 @@
       }
     }
 
+    async function loadSystemRegions() {
+      try {
+        const response = await fetch('/api/regions');
+        const result = await response.json();
+        if (response.ok && result.code === 200 && result.regions) {
+          systemRegions = result.regions;
+        }
+      } catch (err) {
+        console.error('获取可用区域列表失败:', err);
+      }
+    }
+
     // 1. 加载已录入的数据
     async function loadRecords() {
+      await loadSystemRegions();
       try {
         let url = '/api/admin/records?';
         if (filterStartDate) {
@@ -1142,7 +1157,7 @@
 
         // 动态构建区域权限下拉选项
         let optionsHtml = '';
-        const standardOptions = ["三元肥", "尿素塔"];
+        const standardOptions = systemRegions;
         const curVal = r.region_auth || '';
         let hasSelected = false;
         

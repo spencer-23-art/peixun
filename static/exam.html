@@ -275,6 +275,11 @@
         </select>
       </div>
       
+      <div class="form-group" id="other-company-group" style="display: none; margin-top: 10px;">
+        <label for="exam-company-other">请输入单位名称 *</label>
+        <input type="text" id="exam-company-other" class="form-control" placeholder="请输入您的工作单位名称">
+      </div>
+      
       <div class="form-group">
         <label for="exam-type">考试科目 *</label>
         <select id="exam-type" class="form-control" required>
@@ -405,8 +410,13 @@
       e.preventDefault();
       
       const name = document.getElementById('exam-name').value;
-      const company = document.getElementById('exam-company').value;
+      const selectCompany = document.getElementById('exam-company').value;
       const examType = document.getElementById('exam-type').value;
+      
+      let company = selectCompany;
+      if (selectCompany === '其他单位') {
+        company = document.getElementById('exam-company-other').value.trim();
+      }
       
       if (!name || !company || !examType) {
         document.getElementById('start-error').textContent = '请填写完整信息';
@@ -442,6 +452,34 @@
       }
     }
 
+    // 自动回填公司
+    function fillCompanyValue(companyValue) {
+      if (!companyValue) return;
+      const select = document.getElementById('exam-company');
+      const otherGroup = document.getElementById('other-company-group');
+      const otherInput = document.getElementById('exam-company-other');
+      
+      let found = false;
+      for (let i = 0; i < select.options.length; i++) {
+        if (select.options[i].value === companyValue) {
+          found = true;
+          break;
+        }
+      }
+      
+      if (found) {
+        select.value = companyValue;
+        otherGroup.style.display = 'none';
+        otherInput.required = false;
+        otherInput.value = '';
+      } else {
+        select.value = '其他单位';
+        otherGroup.style.display = 'block';
+        otherInput.required = true;
+        otherInput.value = companyValue;
+      }
+    }
+
     // 加载工作单位选项
     async function loadCompanies() {
       const select = document.getElementById('exam-company');
@@ -452,9 +490,8 @@
         const result = await response.json();
         console.log('加载工作单位数据:', result);
         
+        select.innerHTML = '<option value="">请选择工作单位</option>';
         if (result.code === 200 && result.data && result.data.length > 0) {
-          select.innerHTML = '<option value="">请选择工作单位</option>';
-          
           result.data.forEach(function(company) {
             const option = document.createElement('option');
             option.value = company;
@@ -463,19 +500,47 @@
           });
           console.log('工作单位加载成功，共', result.data.length, '个单位');
         } else {
-          // 数据为空时，仅保留提示选项，不再显示默认测试单位
-          select.innerHTML = '<option value="">请选择工作单位</option>';
           console.log('工作单位数据为空');
+        }
+        
+        // 始终在最后追加“其他单位”
+        const otherOption = document.createElement('option');
+        otherOption.value = '其他单位';
+        otherOption.textContent = '其他单位';
+        select.appendChild(otherOption);
+        
+        // 如果已经有缓存的 company，进行回填
+        if (examData.company) {
+          fillCompanyValue(examData.company);
         }
       } catch (error) {
         console.error('加载工作单位失败:', error);
         select.innerHTML = '<option value="">请选择工作单位</option>';
+        const otherOption = document.createElement('option');
+        otherOption.value = '其他单位';
+        otherOption.textContent = '其他单位';
+        select.appendChild(otherOption);
       }
     }
 
     // 页面加载完成后初始化
     document.addEventListener('DOMContentLoaded', function() {
       loadCompanies();
+      
+      // 监听下拉框变化
+      document.getElementById('exam-company').addEventListener('change', function() {
+        const otherGroup = document.getElementById('other-company-group');
+        const otherInput = document.getElementById('exam-company-other');
+        if (this.value === '其他单位') {
+          otherGroup.style.display = 'block';
+          otherInput.required = true;
+          otherInput.focus();
+        } else {
+          otherGroup.style.display = 'none';
+          otherInput.required = false;
+          otherInput.value = '';
+        }
+      });
     });
 
     // 加载试题
@@ -709,16 +774,13 @@
       }
     }
 
-    // 返回科目选择，但自动保留和回填已填写的姓名和工作单位
+    // 返回科目选择，但自动保留和回填已填写的姓名 and 工作单位
     async function restartExamWithNewSubject() {
       showPanel('start-panel');
       if (examData.name) {
         document.getElementById('exam-name').value = examData.name;
       }
       await loadCompanies();
-      if (examData.company) {
-        document.getElementById('exam-company').value = examData.company;
-      }
       document.getElementById('exam-type').value = '';
     }
   </script>
