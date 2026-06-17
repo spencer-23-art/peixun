@@ -2475,6 +2475,7 @@ def get_exam():
 def check_env():
     import sys
     import os
+    import sqlite3
     
     # 检查 python-docx 依赖
     try:
@@ -2502,13 +2503,35 @@ def check_env():
     # 检查数据库文件
     db_exists = os.path.exists("peixun.db")
     
+    # 检查最新 5 条记录的 Word 文件在服务器磁盘上是否真实存在
+    recent_files = []
+    try:
+        conn = sqlite3.connect("peixun.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, name, word_path FROM records ORDER BY id DESC LIMIT 5")
+        rows = cursor.fetchall()
+        for r_id, r_name, r_path in rows:
+            exists = False
+            if r_path:
+                exists = os.path.exists(r_path)
+            recent_files.append({
+                "id": r_id,
+                "name": r_name,
+                "db_word_path": r_path,
+                "actually_exists_on_disk": exists
+            })
+        conn.close()
+    except Exception as e:
+        recent_files = [f"DB Query Error: {str(e)}"]
+    
     return {
         "python_version": sys.version,
         "python_docx_dependency": docx_msg,
         "template_exists": template_exists,
         "uploads_writable": uploads_writable,
         "uploads_write_error": uploads_msg,
-        "database_exists": db_exists
+        "database_exists": db_exists,
+        "latest_5_records_check": recent_files
     }
 
 if __name__ == "__main__":
