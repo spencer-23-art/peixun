@@ -2,8 +2,18 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# 安装 onnxruntime 依赖的 C++ 运行时库 libgomp1 (python-slim 镜像中默认缺失)
-RUN apt-get update && apt-get install -y libgomp1 && rm -rf /var/lib/apt/lists/*
+# 安装 OpenCV 和 ONNXRuntime 运行所需的系统级 C++ 运行时及图形基础库
+RUN apt-get update && apt-get install -y \
+    libgl1 \
+    libglib2.0-0 \
+    libgomp1 \
+    libxcb1 \
+    libx11-xcb1 \
+    libx11-6 \
+    libxext6 \
+    libxrender1 \
+    && rm -rf /var/lib/apt/lists/*
+
 
 # 复制依赖说明并使用国内源加速安装
 COPY requirements.txt /app/
