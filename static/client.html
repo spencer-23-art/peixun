@@ -1029,7 +1029,7 @@
                   <button class="btn btn-success" style="padding: 5px 12px; font-size: 0.8rem; margin: 0; width: auto; min-width: 60px;" onclick="editRecord(${row.id})">修改</button>
                   ${row.word_path ? 
                     `<a class="btn btn-primary" style="padding: 5px 12px; font-size: 0.8rem; text-decoration: none; display: inline-block; text-align: center; margin: 0; width: auto; min-width: 60px; box-sizing: border-box;" href="/api/record/download_word/${row.id}?token=${encodeURIComponent(token)}" target="_blank">登记卡</a>
-                     <button class="btn btn-warning" style="padding: 5px 12px; font-size: 0.8rem; margin: 0; width: auto; min-width: 60px; background-color: #f59e0b; border-color: #d97706; color: white;" onclick="copyDownloadLink(${row.id})">复制链接</button>` :
+                     <button class="btn btn-warning" style="padding: 5px 12px; font-size: 0.8rem; margin: 0; width: auto; min-width: 60px; background-color: #f59e0b; border-color: #d97706; color: white;" onclick="shareDownloadLink(${row.id})">分享登记卡</button>` :
                     `<button class="btn btn-secondary" style="padding: 5px 12px; font-size: 0.8rem; opacity: 0.5; margin: 0; width: auto; min-width: 60px;" disabled title="已失效或未生成">登记卡</button>`
                   }
                 </div>
@@ -1058,14 +1058,23 @@
       loadHistory();
     }
 
-    // 复制下载链接到剪贴板，方便发送到微信文件传输助手
-    function copyDownloadLink(recordId) {
+    // 分享/发送登记卡链接
+    function shareDownloadLink(recordId) {
       const token = getSessionItem('token');
       const url = `${window.location.protocol}//${window.location.host}/api/record/download_word/${recordId}?token=${encodeURIComponent(token)}`;
       
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(url).then(() => {
-          alert("下载链接已成功复制！\n你可以直接去微信粘贴发送给“文件传输助手”，在电脑上点开下载。");
+      const ua = navigator.userAgent.toLowerCase();
+      const isWeixin = ua.indexOf('micromessenger') !== -1;
+      
+      if (isWeixin) {
+        // 在微信浏览器内，直接弹出引导遮罩，指引用户点右上角三个点分享给朋友/文件传输助手
+        document.getElementById('weixin-share-overlay').style.display = 'block';
+      } else if (navigator.share) {
+        // 在支持 Web Share API 的手机自带浏览器中，直接调起系统分享
+        navigator.share({
+          title: '人员登记卡',
+          text: '这是人员登记卡文件，点击链接即可下载。',
+          url: url
         }).catch(err => {
           fallbackCopyText(url);
         });
@@ -1087,7 +1096,7 @@
       try {
         const successful = document.execCommand('copy');
         if (successful) {
-          alert("下载链接已成功复制！\n你可以直接去微信粘贴发送给“文件传输助手”，在电脑上点开下载。");
+          alert("下载链接已成功复制！\n你可以直接去微信粘贴发送给“文件传输助手”。");
         } else {
           alert("复制失败，请手动长按复制地址：" + text);
         }
@@ -1617,6 +1626,18 @@
       <button type="button" style="width: auto; padding: 10px 18px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15); color: #ccc; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 0.9rem;" onclick="closeCameraModal()">
         取消
       </button>
+    </div>
+  </div>
+
+  <!-- 微信分享提示遮罩层 -->
+  <div id="weixin-share-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 99999; color: white; text-align: right; padding: 20px; box-sizing: border-box;" onclick="this.style.display='none'">
+    <div style="font-size: 3.5rem; color: #00ff88; padding-right: 15px; line-height: 1; font-weight: bold; font-family: monospace;">↗</div>
+    <div style="font-size: 1.15rem; font-weight: bold; margin-top: 10px; text-align: center; padding: 0 15px; line-height: 1.7; color: #fff;">
+      微信不支持直接下载文件<br><br>
+      请点击右上角 <span style="color: #00ff88; font-size: 1.4rem; font-family: monospace;">[ ··· ]</span><br>
+      选择 <span style="color: #00ff88; font-size: 1.4rem; font-weight: bold;">[发送给朋友]</span><br>
+      或发送到 <span style="color: #00ff88; font-size: 1.4rem; font-weight: bold;">[文件传输助手]</span><br>
+      即可将登记卡卡片直接发送出去！
     </div>
   </div>
 </body>
