@@ -354,6 +354,36 @@
         display: none !important; /* 手机端隐藏顶部页签导航 */
       }
     }
+
+    /* 系统配置分栏菜单项样式 */
+    .config-menu-item:hover {
+      background: rgba(255, 255, 255, 0.05) !important;
+      color: var(--text-main) !important;
+    }
+    .config-menu-item.active {
+      background: rgba(99, 102, 241, 0.15) !important;
+      border-color: #6366f1 !important;
+      color: #818cf8 !important;
+    }
+    @media (max-width: 768px) {
+      .config-split-container {
+        flex-direction: column !important;
+        gap: 16px !important;
+      }
+      .config-menu {
+        width: 100% !important;
+        flex-direction: row !important;
+        overflow-x: auto;
+        white-space: nowrap;
+        padding-bottom: 6px;
+      }
+      .config-menu-item {
+        flex: 1;
+        text-align: center !important;
+        font-size: 0.85rem !important;
+        padding: 8px 12px !important;
+      }
+    }
   </style>
 </head>
 <body>
@@ -610,53 +640,90 @@
     
     <!-- TAB 5: 系统配置 -->
     <div class="tab-content" id="admin-content-config">
-      <div style="display: flex; flex-direction: column; gap: 20px; align-items: center; width: 100%;">
-        <!-- 考试时段与区域权限配置 -->
-        <div class="glass-container" style="max-width: 500px; margin: 20px 0 0 0; padding: 30px; border: 1px solid var(--glass-border); border-radius: 12px; background: rgba(255, 255, 255, 0.02);">
-          <h3 style="margin-bottom: 20px; font-size: 1.25rem; color: var(--text-main); border-bottom: 1px solid var(--glass-border); padding-bottom: 12px; text-align: left;">系统核心参数配置</h3>
-          <div class="form-group" style="margin-bottom: 20px; text-align: left;">
-            <label for="cfg-start-time" style="display: block; margin-bottom: 8px; font-size: 0.9rem; color: var(--text-muted);">每日答题开始时间：</label>
-            <input type="time" id="cfg-start-time" class="form-control" style="width: 100%; box-sizing: border-box;" required>
+      <div class="config-split-container" style="display: flex; gap: 24px; width: 100%; align-items: flex-start; max-width: 1100px; margin: 20px auto 0 auto; box-sizing: border-box;">
+        <!-- 左边：标题栏菜单 -->
+        <div class="config-menu" style="width: 220px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px;">
+          <div class="config-menu-item active" onclick="switchConfigSubTab('core')" id="cfg-menu-core" style="padding: 12px 16px; border-radius: 8px; background: rgba(255,255,255,0.02); border: 1px solid var(--glass-border); color: var(--text-main); font-weight: 600; cursor: pointer; text-align: left; transition: all 0.2s;">
+            ⚙️ 系统核心参数
           </div>
-          <div class="form-group" style="margin-bottom: 20px; text-align: left;">
-            <label for="cfg-end-time" style="display: block; margin-bottom: 8px; font-size: 0.9rem; color: var(--text-muted);">每日答题截止时间：</label>
-            <input type="time" id="cfg-end-time" class="form-control" style="width: 100%; box-sizing: border-box;" required>
+          <div class="config-menu-item" onclick="switchConfigSubTab('bank')" id="cfg-menu-bank" style="padding: 12px 16px; border-radius: 8px; background: rgba(255,255,255,0.02); border: 1px solid var(--glass-border); color: var(--text-muted); font-weight: 500; cursor: pointer; text-align: left; transition: all 0.2s;">
+            📚 安全考试题库
           </div>
-          
-          <!-- 区域权限设置 -->
-          <div class="form-group" style="margin-bottom: 25px; text-align: left;">
-            <label style="display: block; margin-bottom: 8px; font-size: 0.9rem; color: var(--text-muted);">可分配区域权限列表：</label>
-            <div style="display: flex; gap: 8px; margin-bottom: 12px;">
-              <input type="text" id="cfg-new-region" class="form-control" style="margin-bottom: 0; flex: 1;" placeholder="输入新区域 (如: 尿素塔)">
-              <button type="button" class="btn btn-secondary" onclick="addRegionTag()" style="width: auto; padding: 0 16px; margin-bottom: 0;">添加</button>
-            </div>
-            <div id="cfg-regions-container" style="display: flex; flex-wrap: wrap; gap: 8px; min-height: 46px; padding: 10px; border: 1px dashed var(--glass-border); border-radius: 6px; background: rgba(255,255,255,0.02);">
-              <!-- 动态生成的区域 Tag -->
-            </div>
-          </div>
-
-          <div style="text-align: left;">
-            <button class="btn btn-primary" onclick="saveSystemConfig()" style="width: auto; padding: 10px 24px; font-size: 0.95rem;">保存配置</button>
+          <div class="config-menu-item" onclick="switchConfigSubTab('password')" id="cfg-menu-password" style="padding: 12px 16px; border-radius: 8px; background: rgba(255,255,255,0.02); border: 1px solid var(--glass-border); color: var(--text-muted); font-weight: 500; cursor: pointer; text-align: left; transition: all 0.2s;">
+            🔒 管理员密码修改
           </div>
         </div>
 
-        <!-- 管理员密码修改 -->
-        <div class="glass-container" style="max-width: 500px; margin: 0 0 20px 0; padding: 30px; border: 1px solid var(--glass-border); border-radius: 12px; background: rgba(255, 255, 255, 0.02);">
-          <h3 style="margin-bottom: 20px; font-size: 1.25rem; color: var(--text-main); border-bottom: 1px solid var(--glass-border); padding-bottom: 12px; text-align: left;">管理员密码修改</h3>
-          <div class="form-group" style="margin-bottom: 20px; text-align: left;">
-            <label for="cfg-old-pwd" style="display: block; margin-bottom: 8px; font-size: 0.9rem; color: var(--text-muted);">当前密码：</label>
-            <input type="password" id="cfg-old-pwd" class="form-control" style="width: 100%; box-sizing: border-box;" placeholder="输入当前密码" required>
+        <!-- 右边：标题栏中的内容 -->
+        <div class="config-content" style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 20px;">
+          <!-- 1. 系统核心参数配置 -->
+          <div id="cfg-panel-core" class="config-sub-panel" style="width: 100%;">
+            <div class="glass-container" style="max-width: 100%; margin: 0; padding: 30px; border: 1px solid var(--glass-border); border-radius: 12px; background: rgba(255, 255, 255, 0.02); box-sizing: border-box; width: 100%;">
+              <h3 style="margin-bottom: 20px; font-size: 1.25rem; color: var(--text-main); border-bottom: 1px solid var(--glass-border); padding-bottom: 12px; text-align: left;">系统核心参数配置</h3>
+              <div class="form-group" style="margin-bottom: 20px; text-align: left;">
+                <label for="cfg-start-time" style="display: block; margin-bottom: 8px; font-size: 0.9rem; color: var(--text-muted);">每日答题开始时间：</label>
+                <input type="time" id="cfg-start-time" class="form-control" style="width: 100%; box-sizing: border-box;" required>
+              </div>
+              <div class="form-group" style="margin-bottom: 20px; text-align: left;">
+                <label for="cfg-end-time" style="display: block; margin-bottom: 8px; font-size: 0.9rem; color: var(--text-muted);">每日答题截止时间：</label>
+                <input type="time" id="cfg-end-time" class="form-control" style="width: 100%; box-sizing: border-box;" required>
+              </div>
+              
+              <!-- 区域权限设置 -->
+              <div class="form-group" style="margin-bottom: 25px; text-align: left;">
+                <label style="display: block; margin-bottom: 8px; font-size: 0.9rem; color: var(--text-muted);">可分配区域权限列表：</label>
+                <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                  <input type="text" id="cfg-new-region" class="form-control" style="margin-bottom: 0; flex: 1;" placeholder="输入新区域 (如: 尿素塔)">
+                  <button type="button" class="btn btn-secondary" onclick="addRegionTag()" style="width: auto; padding: 0 16px; margin-bottom: 0;">添加</button>
+                </div>
+                <div id="cfg-regions-container" style="display: flex; flex-wrap: wrap; gap: 8px; min-height: 46px; padding: 10px; border: 1px dashed var(--glass-border); border-radius: 6px; background: rgba(255,255,255,0.02);">
+                  <!-- 动态生成的区域 Tag -->
+                </div>
+              </div>
+
+              <div style="text-align: left;">
+                <button class="btn btn-primary" onclick="saveSystemConfig()" style="width: auto; padding: 10px 24px; font-size: 0.95rem;">保存配置</button>
+              </div>
+            </div>
           </div>
-          <div class="form-group" style="margin-bottom: 20px; text-align: left;">
-            <label for="cfg-new-pwd" style="display: block; margin-bottom: 8px; font-size: 0.9rem; color: var(--text-muted);">新密码：</label>
-            <input type="password" id="cfg-new-pwd" class="form-control" style="width: 100%; box-sizing: border-box;" placeholder="输入新密码" required>
+
+          <!-- 2. 题库管理 -->
+          <div id="cfg-panel-bank" class="config-sub-panel" style="display: none; width: 100%;">
+            <div class="glass-container" style="max-width: 100%; margin: 0; padding: 30px; border: 1px solid var(--glass-border); border-radius: 12px; background: rgba(255, 255, 255, 0.02); width: 100%; box-sizing: border-box;">
+              <h3 style="margin-bottom: 20px; font-size: 1.25rem; color: var(--text-main); border-bottom: 1px solid var(--glass-border); padding-bottom: 12px; text-align: left;">安全考试题库管理</h3>
+              
+              <!-- 新增科目表单 -->
+              <div style="display: flex; gap: 10px; margin-bottom: 24px; align-items: center; justify-content: flex-start;">
+                <input type="text" id="cfg-new-subject" class="form-control" style="margin-bottom: 0; flex: 1; max-width: 260px;" placeholder="输入新科目名称 (如: 起重工)">
+                <button type="button" class="btn btn-primary" onclick="addExamSubject()" style="width: auto; padding: 0 20px; margin-bottom: 0; white-space: nowrap;">新增科目</button>
+              </div>
+
+              <div id="exam-banks-container" style="display: flex; flex-direction: column; gap: 14px; text-align: left;">
+                <!-- 动态生成科目列表 -->
+              </div>
+            </div>
           </div>
-          <div class="form-group" style="margin-bottom: 25px; text-align: left;">
-            <label for="cfg-new-pwd-confirm" style="display: block; margin-bottom: 8px; font-size: 0.9rem; color: var(--text-muted);">确认新密码：</label>
-            <input type="password" id="cfg-new-pwd-confirm" class="form-control" style="width: 100%; box-sizing: border-box;" placeholder="再次输入新密码" required>
-          </div>
-          <div style="text-align: left;">
-            <button class="btn btn-primary" onclick="changeAdminPassword()" style="width: auto; padding: 10px 24px; font-size: 0.95rem;">保存新密码</button>
+
+          <!-- 3. 管理员密码修改 -->
+          <div id="cfg-panel-password" class="config-sub-panel" style="display: none; width: 100%;">
+            <div class="glass-container" style="max-width: 100%; margin: 0 0 20px 0; padding: 30px; border: 1px solid var(--glass-border); border-radius: 12px; background: rgba(255, 255, 255, 0.02); box-sizing: border-box; width: 100%;">
+              <h3 style="margin-bottom: 20px; font-size: 1.25rem; color: var(--text-main); border-bottom: 1px solid var(--glass-border); padding-bottom: 12px; text-align: left;">管理员密码修改</h3>
+              <div class="form-group" style="margin-bottom: 20px; text-align: left;">
+                <label for="cfg-old-pwd" style="display: block; margin-bottom: 8px; font-size: 0.9rem; color: var(--text-muted);">当前密码：</label>
+                <input type="password" id="cfg-old-pwd" class="form-control" style="width: 100%; box-sizing: border-box;" placeholder="输入当前密码" required>
+              </div>
+              <div class="form-group" style="margin-bottom: 20px; text-align: left;">
+                <label for="cfg-new-pwd" style="display: block; margin-bottom: 8px; font-size: 0.9rem; color: var(--text-muted);">新密码：</label>
+                <input type="password" id="cfg-new-pwd" class="form-control" style="width: 100%; box-sizing: border-box;" placeholder="输入新密码" required>
+              </div>
+              <div class="form-group" style="margin-bottom: 25px; text-align: left;">
+                <label for="cfg-new-pwd-confirm" style="display: block; margin-bottom: 8px; font-size: 0.9rem; color: var(--text-muted);">确认新密码：</label>
+                <input type="password" id="cfg-new-pwd-confirm" class="form-control" style="width: 100%; box-sizing: border-box;" placeholder="再次输入新密码" required>
+              </div>
+              <div style="text-align: left;">
+                <button class="btn btn-primary" onclick="changeAdminPassword()" style="width: auto; padding: 10px 24px; font-size: 0.95rem;">保存新密码</button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -901,7 +968,8 @@
             h += '    <strong style="font-weight:700;font-size:0.95rem;color:var(--text-main);">' + escapeHtml(r.name) + '</strong>';
             h += '    <span class="badge" style="padding:1px 6px;font-size:0.75rem;background:rgba(99,102,241,0.1);color:#818cf8;">' + escapeHtml(r.education) + '</span>';
             h += '  </div>';
-            var ageStyle = (r.age >= 60) ? 'style="color:#ff0000;font-weight:bold;"' : '';
+            var isRed = (r.gender === '女') ? (r.age >= 55) : (r.age >= 60);
+            var ageStyle = isRed ? 'style="color:#ff0000;font-weight:bold;"' : '';
             h += '  <div style="font-size:0.8rem;color:var(--text-muted);margin-top:4px;">' + escapeHtml(r.gender) + ' &middot; <span ' + ageStyle + '>' + (r.age || 0) + '岁</span> &middot; ' + escapeHtml(r.nation) + '</div>';
             h += '  <div style="font-family:monospace;font-size:0.85rem;color:var(--text-main);font-weight:600;margin-top:4px;">身份证: ' + escapeHtml(r.id_card) + '</div>';
             h += '  <div style="font-size:0.8rem;color:var(--text-muted);margin-top:2px;">手机: ' + escapeHtml(r.phone) + '</div>';
@@ -1180,7 +1248,7 @@
               <span class="badge" style="padding: 1px 6px; font-size: 0.75rem; background: rgba(99,102,241,0.1); color:#818cf8;">${escapeHtml(r.education)}</span>
             </div>
             <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">
-              ${escapeHtml(r.gender)} · <span style="${r.age >= 60 ? 'color:#ff0000;font-weight:bold;' : ''}">${r.age}岁</span> · ${escapeHtml(r.nation)}
+              ${escapeHtml(r.gender)} · <span style="${((r.gender === '女' ? r.age >= 55 : r.age >= 60)) ? 'color:#ff0000;font-weight:bold;' : ''}">${r.age}岁</span> · ${escapeHtml(r.nation)}
             </div>
             <div style="font-family: monospace; font-size: 0.85rem; color: var(--text-main); font-weight: 600; margin-top: 4px;">身份证: ${escapeHtml(r.id_card)}</div>
             <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">手机: ${escapeHtml(r.phone)}</div>
@@ -2078,6 +2146,120 @@
       renderRegionTags();
     }
 
+    function switchConfigSubTab(subTab) {
+      document.querySelectorAll('.config-sub-panel').forEach(p => p.style.display = 'none');
+      document.getElementById('cfg-panel-' + subTab).style.display = 'block';
+      document.querySelectorAll('.config-menu-item').forEach(item => {
+        item.classList.remove('active');
+        item.style.color = 'var(--text-muted)';
+        item.style.fontWeight = '500';
+      });
+      const act = document.getElementById('cfg-menu-' + subTab);
+      act.classList.add('active');
+      act.style.color = 'var(--text-main)';
+      act.style.fontWeight = '600';
+      
+      if (subTab === 'bank') {
+        loadExamBanks();
+      }
+    }
+
+    async function loadExamBanks() {
+      const container = document.getElementById('exam-banks-container');
+      if (!container) return;
+      container.innerHTML = '<div style="color:var(--text-muted);font-size:0.9rem;padding:10px 0;">正在加载科目列表...</div>';
+      
+      try {
+        const response = await fetch('/api/exam_subjects');
+        const result = await response.json();
+        if (response.ok && result.code === 200) {
+          container.innerHTML = '';
+          if (result.data.length === 0) {
+            container.innerHTML = '<div style="color:var(--text-muted);font-size:0.9rem;padding:10px 0;">暂无配置科目，请在上方添加！</div>';
+            return;
+          }
+          result.data.forEach(sub => {
+            const row = document.createElement('div');
+            row.className = 'exam-bank-row';
+            row.setAttribute('data-type', sub.name);
+            row.style.cssText = 'display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px dashed rgba(255,255,255,0.06);';
+            row.innerHTML = `
+              <span style="color: var(--text-main); font-size: 0.95rem; font-weight: 500; min-width: 100px;">${escapeHtml(sub.name)}试题</span>
+              <span class="bank-status" style="color: var(--text-muted); font-size: 0.8rem; flex: 1; text-align: right; padding-right: 8px;"></span>
+              <div style="display: flex; gap: 10px; align-items: center;">
+                <label class="btn btn-secondary" style="width: auto; padding: 6px 14px; margin: 0; cursor: pointer; font-size: 0.85rem; display: inline-block; text-align: center;">
+                  上传更新
+                  <input type="file" accept=".xlsx" style="display:none;" onchange="uploadExamBank('${escapeHtml(sub.name)}', this)">
+                </label>
+                <button type="button" class="btn btn-secondary" style="width: auto; padding: 6px 14px; margin: 0; font-size: 0.85rem; background: rgba(239,68,68,0.1); color: #f87171; border-color: rgba(239,68,68,0.15);" onclick="deleteExamSubject('${escapeHtml(sub.name)}')">删除</button>
+              </div>
+            `;
+            container.appendChild(row);
+          });
+        } else {
+          container.innerHTML = '<div style="color:#f87171;font-size:0.9rem;padding:10px 0;">加载科目列表失败</div>';
+        }
+      } catch (e) {
+        container.innerHTML = '<div style="color:#f87171;font-size:0.9rem;padding:10px 0;">加载科目列表网络错误</div>';
+      }
+    }
+    
+    async function addExamSubject() {
+      const input = document.getElementById('cfg-new-subject');
+      const name = input.value.trim();
+      if (!name) {
+        alert('请输入科目名称');
+        return;
+      }
+      
+      const formData = new FormData();
+      formData.append('name', name);
+      
+      try {
+        const response = await fetch('/api/admin/add_exam_subject', {
+          method: 'POST',
+          headers: { 'Authorization': token },
+          body: formData
+        });
+        const result = await response.json();
+        if (response.ok && result.code === 200) {
+          showAlert('success', `成功添加科目：${name}`);
+          input.value = '';
+          loadExamBanks();
+        } else {
+          showAlert('error', result.detail || '增加科目失败');
+        }
+      } catch (e) {
+        showAlert('error', '添加科目网络错误: ' + e.message);
+      }
+    }
+    
+    async function deleteExamSubject(name) {
+      if (!confirm(`确定要删除科目“${name}”吗？这不会删除物理题库文件，但该科目将无法再用于考试。`)) {
+        return;
+      }
+      
+      const formData = new FormData();
+      formData.append('name', name);
+      
+      try {
+        const response = await fetch('/api/admin/delete_exam_subject', {
+          method: 'POST',
+          headers: { 'Authorization': token },
+          body: formData
+        });
+        const result = await response.json();
+        if (response.ok && result.code === 200) {
+          showAlert('success', `成功删除科目：${name}`);
+          loadExamBanks();
+        } else {
+          showAlert('error', result.detail || '删除科目失败');
+        }
+      } catch (e) {
+        showAlert('error', '删除科目网络错误: ' + e.message);
+      }
+    }
+
     async function loadSystemConfig() {
       try {
         const response = await fetch('/api/admin/config', {
@@ -2127,6 +2309,45 @@
       } catch (err) {
         alert('保存配置时出现网络错误');
       }
+    }
+
+    async function uploadExamBank(examType, inputEl) {
+      const file = inputEl.files[0];
+      if (!file) return;
+      
+      const row = inputEl.closest('.exam-bank-row');
+      const statusEl = row.querySelector('.bank-status');
+      statusEl.textContent = '上传中...';
+      statusEl.style.color = 'var(--text-muted)';
+      
+      const formData = new FormData();
+      formData.append('exam_type', examType);
+      formData.append('file', file);
+      
+      try {
+        const resp = await fetch('/api/admin/upload_exam_bank', {
+          method: 'POST',
+          headers: { 'Authorization': token },
+          body: formData
+        });
+        const data = await resp.json();
+        if (resp.ok && data.code === 200) {
+          statusEl.textContent = `✓ 更新成功，共${data.question_count}题`;
+          statusEl.style.color = '#4ade80';
+          showAlert('success', `${examType}题库更新成功，共${data.question_count}道题目`);
+        } else {
+          statusEl.textContent = `✗ ${data.detail || '上传失败'}`;
+          statusEl.style.color = '#f87171';
+          showAlert('error', data.detail || '上传失败');
+        }
+      } catch (e) {
+        statusEl.textContent = '✗ 网络错误';
+        statusEl.style.color = '#f87171';
+        showAlert('error', '上传失败: ' + e.message);
+      }
+      
+      // 重置 input
+      inputEl.value = '';
     }
 
     // 侧拉栏控制函数

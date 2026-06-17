@@ -14,6 +14,9 @@ import openpyxl
 import csv
 import zipfile
 
+# 引入 OCR 核心
+from ocr_handler import ocr_idcard_process, generate_record_card, start_cleanup_thread
+
 DB_PATH = 'peixun.db'
 UPLOAD_DIR = 'uploads'
 
@@ -21,16 +24,26 @@ UPLOAD_DIR = 'uploads'
 EXAM_QUESTIONS_CACHE = {}
 
 def get_exam_questions_answers(exam_type: str) -> dict:
-    EXAM_FILE_MAP = {
-        '普工': '普工试题(1).xlsx',
-        '焊工': '焊工题库(1).xlsx',
-        '探伤': '探伤.xlsx',
-        '高处作业': '高处作业(1).xlsx',
-        '吊装作业': '吊装作业.xlsx',
-        '电工': '电工题库.xlsx',
-        '叉车': '叉车工.xlsx'
-    }
-    file_name = EXAM_FILE_MAP.get(exam_type)
+    import json
+    val = get_config('exam_subjects', '')
+    if val:
+        try:
+            subjects = json.loads(val)
+            exam_file_map = {s['name']: s['file'] for s in subjects}
+        except Exception:
+            exam_file_map = {}
+    else:
+        exam_file_map = {
+            '普工': '普工试题(1).xlsx',
+            '焊工': '焊工题库(1).xlsx',
+            '探伤': '探伤.xlsx',
+            '高处作业': '高处作业(1).xlsx',
+            '吊装作业': '吊装作业.xlsx',
+            '电工': '电工题库.xlsx',
+            '叉车': '叉车工.xlsx'
+        }
+        
+    file_name = exam_file_map.get(exam_type)
     if not file_name:
         raise HTTPException(status_code=400, detail="未知的考试类型")
         
@@ -216,6 +229,13 @@ def init_db():
         conn.commit()
     except sqlite3.OperationalError:
         pass
+
+    # 检测并为 records 表添加 word_path 列自愈逻辑
+    try:
+        cursor.execute("ALTER TABLE records ADD COLUMN word_path TEXT DEFAULT NULL")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
     
     # 答题记录表
     cursor.execute('''
@@ -267,6 +287,14 @@ def init_db():
     conn.close()
 
 init_db()
+# 预先加载并常驻 OCR 模型，防止首笔请求慢
+from ocr_handler import init_ppocrv6
+try:
+    init_ppocrv6()
+except Exception as e:
+    print(f"[Warning] Startup preloading OCR model failed: {e}")
+    
+start_cleanup_thread()
 
 app = FastAPI(title="培训信息录入系统")
 
@@ -624,6 +652,64 @@ def admin_update_region(
     conn.close()
     return {"code": 200, "message": "区域权限更改成功"}
 
+@app.post("/api/ocr_idcard")
+async def api_ocr_idcard(file: UploadFile = File(...)):
+    temp_ids_dir = "uploads/temp_ids"
+    os.makedirs(temp_ids_dir, exist_ok=True)
+    
+    ext = os.path.splitext(file.filename)[1].lower()
+    if not ext:
+        ext = '.jpg'
+    temp_path = os.path.join(temp_ids_dir, f"ocr_raw_{uuid.uuid4().hex}{ext}").replace('\\', '/')
+    try:
+        with open(temp_path, "wb") as f:
+            shutil.copyfileobj(file.file, f)
+            
+        result = ocr_idcard_process(temp_path)
+        
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+            
+        return {"code": 200, **result}
+    except Exception as e:
+        if os.path.exists(temp_path):
+            try: os.remove(temp_path)
+            except: pass
+        raise HTTPException(status_code=500, detail=f"身份证识别错误: {str(e)}")
+
+@app.get("/api/record/download_word/{record_id}")
+def download_word(record_id: int, token: str = None, authorization: str = Header(None)):
+    auth_token = token or authorization
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="未提供身份凭证，无权下载！")
+    
+    user_info = verify_token(auth_token)
+    if not user_info:
+        raise HTTPException(status_code=401, detail="登录已过期或无效凭证！")
+        
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    if user_info['role'] == 'admin':
+        cursor.execute("SELECT * FROM records WHERE id = ?", (record_id,))
+    else:
+        cursor.execute("SELECT * FROM records WHERE id = ? AND user_id = ?", (record_id, user_info['id']))
+        
+    row = cursor.fetchone()
+    conn.close()
+    
+    if not row:
+        raise HTTPException(status_code=404, detail="登记卡未找到或您无权查看")
+        
+    word_path = row['word_path']
+    if not word_path or not os.path.exists(word_path):
+        raise HTTPException(status_code=404, detail="该登记卡 Word 文件不存在或已被删除（仅保存一周）")
+        
+    raw_name = row['name'] or "用户"
+    download_filename = f"{raw_name}登记卡.docx"
+    return FileResponse(word_path, filename=download_filename, media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+
 # 录入培训数据
 @app.post("/api/record")
 async def create_record(
@@ -635,6 +721,7 @@ async def create_record(
     job: str = Form(...),
     education: str = Form(...),
     region_auth: str = Form(""),
+    id_card_img_path: str = Form(None),
     photo: UploadFile = File(...),
     current_user = Depends(get_current_user)
 ):
@@ -669,9 +756,45 @@ async def create_record(
     INSERT INTO records (user_id, photo_path, name, nation, id_card, phone, address, job, education, region_auth, gender, age)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (current_user['id'], photo_path, name, nation, id_card, phone, address, job, education, region_auth, gender, age))
+    record_id = cursor.lastrowid
     conn.commit()
     conn.close()
     
+    # 自动生成登记卡 Word
+    word_path = None
+    perm_id_img_path = None
+    if id_card_img_path and os.path.exists(id_card_img_path):
+        try:
+            # 持久化身份证照片
+            idcard_save_dir = "uploads/idcards"
+            os.makedirs(idcard_save_dir, exist_ok=True)
+            perm_id_img_path = os.path.join(idcard_save_dir, f"{id_card}.png").replace('\\', '/')
+            shutil.copy2(id_card_img_path, perm_id_img_path)
+            
+            record_data = {
+                "姓名": name,
+                "性别": gender,
+                "年龄": age,
+                "联系电话": phone,
+                "岗位": job,
+                "常住地址": address,
+                "工作单位": current_user['company']
+            }
+            word_path = generate_record_card(record_data, perm_id_img_path)
+            
+            # 删除临时裁剪出的身份证照片
+            try: os.remove(id_card_img_path)
+            except: pass
+            
+            # 写入数据库记录
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+            cursor.execute("UPDATE records SET word_path = ? WHERE id = ?", (word_path, record_id))
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            print(f"Error generating word card: {e}")
+            
     return {"code": 200, "message": "信息录入成功！"}
 
 # 获取当前用户录入的历史记录（默认最近10天，支持姓名搜索查全局，仅录入员自己）
@@ -715,6 +838,7 @@ async def update_record(
     job: str = Form(...),
     education: str = Form(...),
     region_auth: str = Form(""),
+    id_card_img_path: str = Form(None),
     photo: UploadFile = File(None),
     current_user = Depends(get_current_user)
 ):
@@ -755,11 +879,51 @@ async def update_record(
                 pass
         photo_path = new_photo_path
         
+    # 原本的 word 路径
+    old_word_path = record['word_path']
+    new_word_path = old_word_path
+    
+    idcard_save_dir = "uploads/idcards"
+    os.makedirs(idcard_save_dir, exist_ok=True)
+    perm_id_img_path = os.path.join(idcard_save_dir, f"{id_card}.png").replace('\\', '/')
+    
+    # 1. 检查是否有新上传并裁剪的身份证
+    if id_card_img_path and os.path.exists(id_card_img_path):
+        try:
+            # 覆盖原永久照片
+            shutil.copy2(id_card_img_path, perm_id_img_path)
+            # 删除临时照片
+            try: os.remove(id_card_img_path)
+            except: pass
+        except Exception as e:
+            print(f"Error copying new idcard image: {e}")
+            
+    # 2. 如果永久照片存在，重新生成 Word 登记卡
+    if os.path.exists(perm_id_img_path):
+        try:
+            record_data = {
+                "姓名": name,
+                "性别": gender,
+                "年龄": age,
+                "联系电话": phone,
+                "岗位": job,
+                "常住地址": address,
+                "工作单位": current_user['company']
+            }
+            new_word_path = generate_record_card(record_data, perm_id_img_path)
+            
+            # 如果生成了新的 Word 且路径发生变化，删除旧的 Word
+            if old_word_path and new_word_path != old_word_path and os.path.exists(old_word_path):
+                try: os.remove(old_word_path)
+                except: pass
+        except Exception as e:
+            print(f"Error regenerating word card: {e}")
+            
     cursor.execute('''
     UPDATE records 
-    SET name = ?, nation = ?, id_card = ?, phone = ?, address = ?, job = ?, education = ?, region_auth = ?, gender = ?, age = ?, photo_path = ?
+    SET name = ?, nation = ?, id_card = ?, phone = ?, address = ?, job = ?, education = ?, region_auth = ?, gender = ?, age = ?, photo_path = ?, word_path = ?
     WHERE id = ? AND user_id = ?
-    ''', (name, nation, id_card, phone, address, job, education, region_auth, gender, age, photo_path, record_id, current_user['id']))
+    ''', (name, nation, id_card, phone, address, job, education, region_auth, gender, age, photo_path, new_word_path, record_id, current_user['id']))
     
     conn.commit()
     conn.close()
@@ -1662,6 +1826,71 @@ def export_restore_photos(ids: str = None, admin = Depends(get_admin_user)):
     }
     return Response(content=zip_buffer.getvalue(), media_type="application/zip", headers=headers)
 
+# 题库上传更新
+@app.post("/api/admin/upload_exam_bank")
+async def upload_exam_bank(
+    exam_type: str = Form(...),
+    file: UploadFile = File(...),
+    admin = Depends(get_admin_user)
+):
+    """管理员上传 xlsx 题库文件，替换 shiti/ 目录中的对应文件"""
+    import json
+    val = get_config('exam_subjects', '')
+    if val:
+        try:
+            subjects = json.loads(val)
+            exam_file_map = {s['name']: s['file'] for s in subjects}
+        except Exception:
+            exam_file_map = {}
+    else:
+        exam_file_map = {
+            '普工': '普工试题(1).xlsx',
+            '焊工': '焊工题库(1).xlsx',
+            '探伤': '探伤.xlsx',
+            '高处作业': '高处作业(1).xlsx',
+            '吊装作业': '吊装作业.xlsx',
+            '电工': '电工题库.xlsx',
+            '叉车': '叉车工.xlsx'
+        }
+    
+    target_filename = exam_file_map.get(exam_type)
+    if not target_filename:
+        raise HTTPException(status_code=400, detail=f"未知的考试类型: {exam_type}")
+    
+    if not file.filename.endswith('.xlsx'):
+        raise HTTPException(status_code=400, detail="仅支持 .xlsx 格式文件")
+    
+    content = await file.read()
+    
+    # 验证文件有效性
+    try:
+        import io
+        wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True)
+        ws = wb.active
+        count = 0
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            if len(row) >= 4 and row[1] and row[3]:
+                count += 1
+        wb.close()
+        if count == 0:
+            raise HTTPException(status_code=400, detail="题库文件中未找到有效题目（需B列题目+D列答案）")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"题库文件格式错误: {e}")
+    
+    # 保存文件
+    os.makedirs('shiti', exist_ok=True)
+    target_path = os.path.join('shiti', target_filename)
+    with open(target_path, 'wb') as f:
+        f.write(content)
+    
+    # 清除缓存
+    if exam_type in EXAM_QUESTIONS_CACHE:
+        del EXAM_QUESTIONS_CACHE[exam_type]
+    
+    return {"code": 200, "message": f"{exam_type}题库更新成功", "question_count": count}
+
 # ---------------- 考试相关接口 ----------------
 
 # 获取试题（无需登录）
@@ -1946,6 +2175,105 @@ def get_regions():
     regions_str = get_config('regions', '三元肥,尿素塔')
     regions_list = [r.strip() for r in regions_str.split(',') if r.strip()]
     return {"code": 200, "regions": regions_list}
+
+# 获取考试科目列表（无需登录，供考生和管理员使用）
+@app.get("/api/exam_subjects")
+def get_exam_subjects():
+    default_subjects = [
+        {"name": "普工", "file": "普工试题(1).xlsx"},
+        {"name": "焊工", "file": "焊工题库(1).xlsx"},
+        {"name": "探伤", "file": "探伤.xlsx"},
+        {"name": "高处作业", "file": "高处作业(1).xlsx"},
+        {"name": "吊装作业", "file": "吊装作业.xlsx"},
+        {"name": "电工", "file": "电工题库.xlsx"},
+        {"name": "叉车", "file": "叉车工.xlsx"}
+    ]
+    import json
+    val = get_config('exam_subjects', '')
+    if not val:
+        # 第一次访问，将默认写入 configs
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("INSERT OR REPLACE INTO configs (key, value) VALUES ('exam_subjects', ?)", (json.dumps(default_subjects, ensure_ascii=False),))
+        conn.commit()
+        conn.close()
+        return {"code": 200, "data": default_subjects}
+    try:
+        data = json.loads(val)
+        return {"code": 200, "data": data}
+    except Exception:
+        return {"code": 200, "data": default_subjects}
+
+# 增加新考试科目（仅管理员）
+@app.post("/api/admin/add_exam_subject")
+def add_exam_subject(name: str = Form(...), admin = Depends(get_admin_user)):
+    name = name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="科目名称不能为空")
+        
+    import json
+    val = get_config('exam_subjects', '')
+    
+    # 提取现有科目
+    if val:
+        try:
+            subjects = json.loads(val)
+        except Exception:
+            subjects = []
+    else:
+        subjects = [
+            {"name": "普工", "file": "普工试题(1).xlsx"},
+            {"name": "焊工", "file": "焊工题库(1).xlsx"},
+            {"name": "探伤", "file": "探伤.xlsx"},
+            {"name": "高处作业", "file": "高处作业(1).xlsx"},
+            {"name": "吊装作业", "file": "吊装作业.xlsx"},
+            {"name": "电工", "file": "电工题库.xlsx"},
+            {"name": "叉车", "file": "叉车工.xlsx"}
+        ]
+        
+    # 检查重名
+    for s in subjects:
+        if s['name'] == name:
+            raise HTTPException(status_code=400, detail="该科目已存在")
+            
+    # 新科目文件名直接设为 科目名.xlsx
+    new_subject = {"name": name, "file": f"{name}.xlsx"}
+    subjects.append(new_subject)
+    
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("INSERT OR REPLACE INTO configs (key, value) VALUES ('exam_subjects', ?)", (json.dumps(subjects, ensure_ascii=False),))
+    conn.commit()
+    conn.close()
+    
+    return {"code": 200, "message": "科目增加成功", "data": subjects}
+
+# 删除考试科目（仅管理员）
+@app.post("/api/admin/delete_exam_subject")
+def delete_exam_subject(name: str = Form(...), admin = Depends(get_admin_user)):
+    name = name.strip()
+    import json
+    val = get_config('exam_subjects', '')
+    if not val:
+        raise HTTPException(status_code=404, detail="未配置科目列表")
+        
+    try:
+        subjects = json.loads(val)
+    except Exception:
+        raise HTTPException(status_code=500, detail="科目配置数据损坏")
+        
+    # 过滤掉要删除的科目
+    new_subjects = [s for s in subjects if s['name'] != name]
+    if len(new_subjects) == len(subjects):
+        raise HTTPException(status_code=404, detail="未找到该科目")
+        
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("INSERT OR REPLACE INTO configs (key, value) VALUES ('exam_subjects', ?)", (json.dumps(new_subjects, ensure_ascii=False),))
+    conn.commit()
+    conn.close()
+    
+    return {"code": 200, "message": "科目删除成功", "data": new_subjects}
 
 # 获取考试配置（仅管理员）
 @app.get("/api/admin/config")

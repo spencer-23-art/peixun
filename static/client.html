@@ -197,8 +197,19 @@
         width: 100% !important;
       }
 
-      /* 卡片式结构定制：第一列/第二列照片绝对定位到卡片右上角 */
-      #history-table-body td:nth-child(1),
+      /* 卡片式结构定制：历史记录照片绝对定位到卡片右上角 */
+      #history-table-body td:nth-child(1) {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        width: 40px !important;
+        height: 50px !important;
+        padding: 0 !important;
+        display: block !important;
+        background: transparent !important;
+      }
+      
+      /* 门禁恢复列表照片绝对定位 */
       #restore-table-body td:nth-child(2) {
         position: absolute;
         top: 16px;
@@ -207,6 +218,7 @@
         height: 66px !important;
         padding: 0 !important;
       }
+
       .table-img {
         width: 50px !important;
         height: 66px !important;
@@ -215,7 +227,27 @@
       }
 
       /* 卡片式结构定制：文字信息列在右侧留白，防止遮挡 */
-      #history-table-body td:nth-child(2),
+      #history-table-body td:nth-child(2) {
+        padding-right: 56px !important;
+      }
+
+      /* 历史记录卡片：操作按钮在卡片底部排开 */
+      #history-table-body td:nth-child(5) {
+        display: block !important;
+        width: 100% !important;
+        border-top: 1px dashed rgba(255, 255, 255, 0.08) !important;
+        margin-top: 8px;
+        padding-top: 12px !important;
+        text-align: left !important;
+      }
+      #history-table-body td:nth-child(5) div {
+        justify-content: flex-start !important;
+      }
+      #history-table-body td:nth-child(5) button,
+      #history-table-body td:nth-child(5) a {
+        flex: 1;
+        text-align: center;
+      }
       #restore-table-body td:nth-child(3) {
         padding-right: 66px !important;
       }
@@ -230,18 +262,6 @@
       .restore-checkbox {
         width: 20px !important;
         height: 20px !important;
-      }
-
-      /* 历史记录修改按钮定制为卡片底部大按钮 */
-      #history-table-body td:nth-child(5) {
-        margin-top: 12px;
-        border-top: 1px solid rgba(255, 255, 255, 0.05) !important;
-        padding-top: 10px !important;
-      }
-      #history-table-body .btn-success {
-        width: 100% !important;
-        padding: 8px !important;
-        font-size: 0.85rem !important;
       }
 
       /* 门禁恢复底部提交条在手机上纵向堆叠并拉伸 */
@@ -293,6 +313,26 @@
       <div class="alert alert-success" id="success-alert"></div>
 
       <form id="form-record" onsubmit="handleSubmit(event)">
+        <!-- 新增：身份证识别录入 -->
+        <div class="form-group">
+          <label>身份证识别录入 (自动填表)</label>
+          <div class="form-grid" style="grid-template-columns: 1fr; gap: 10px; margin-bottom: 15px; max-width: 100%;">
+            <div style="display: flex; gap: 10px; width: 100%;">
+              <button type="button" class="btn btn-primary" style="flex: 1; padding: 12px; font-weight: 600; font-size: 0.95rem; display: flex; justify-content: center; align-items: center; gap: 8px;" onclick="openCameraModal()">🪪 身份证识别录入</button>
+            </div>
+            <input type="file" id="idcard-file-input" accept="image/*" style="display: none;" onchange="handleIdCardFile(event)">
+            
+            <div id="idcard-preview-container" style="display: none; align-items: center; gap: 12px; padding: 10px; background: rgba(255,255,255,0.02); border: 1px dashed var(--glass-border); border-radius: 8px; width: 100%;">
+              <img id="idcard-preview-img" src="" style="width: 100px; height: 63px; object-fit: contain; border-radius: 4px; border: 1px solid rgba(255,255,255,0.1);">
+              <div>
+                <div style="font-weight: 600; color: #00ff88; font-size: 0.85rem;">身份证已成功识别</div>
+                <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">已自动填充下方姓名、民族和身份证号</div>
+              </div>
+            </div>
+            <input type="hidden" id="id_card_img_path">
+          </div>
+        </div>
+
         <!-- 第一行：照片位 -->
         <div class="form-group">
           <label>第一行：电子照片 (点击区域可拍照或上传，系统自动压缩至200K内)</label>
@@ -453,11 +493,11 @@
         <table>
           <thead>
             <tr>
-              <th style="width: 60px; text-align: center;">照片</th>
+              <th style="width: 70px; text-align: center;">照片</th>
               <th style="min-width: 200px;">人员基本信息</th>
               <th style="min-width: 200px;">岗位权限与地址</th>
               <th style="width: 140px;">录入时间</th>
-              <th style="width: 80px; text-align: center;">操作</th>
+              <th style="width: 150px; text-align: center;">操作</th>
             </tr>
           </thead>
           <tbody id="history-table-body">
@@ -593,6 +633,59 @@
     let compressedPhotoBlob = null; 
     let currentEditRecordId = null;
     let historyData = [];
+
+    function compressCanvasToBlob(canvas, maxSizeKB, callback) {
+      let quality = 0.9;
+      function compressLoop() {
+        canvas.toBlob((blob) => {
+          if (blob.size <= maxSizeKB * 1024 || quality <= 0.1) {
+            callback(blob);
+          } else {
+            quality -= 0.15;
+            compressLoop();
+          }
+        }, 'image/jpeg', quality);
+      }
+      compressLoop();
+    }
+
+    function compressImageFile(file, maxSizeKB, callback) {
+      if (!file.type.startsWith('image/')) {
+        showAlert('error', '所选文件不是有效的图片！');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+          let width = img.width;
+          let height = img.height;
+          const MAX_PIXELS = 1800; 
+          
+          if (width > height) {
+            if (width > MAX_PIXELS) {
+              height = Math.round((height * MAX_PIXELS) / width);
+              width = MAX_PIXELS;
+            }
+          } else {
+            if (height > MAX_PIXELS) {
+              width = Math.round((width * MAX_PIXELS) / height);
+              height = MAX_PIXELS;
+            }
+          }
+
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+
+          compressCanvasToBlob(canvas, maxSizeKB, callback);
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
 
     let alertTimeout = null;
     let alertFadeTimeout = null;
@@ -912,7 +1005,9 @@
             }
             const safePhotoPath = row.photo_path ? row.photo_path.replace(/\\/g, '/') : '';
             tr.innerHTML = `
-              <td style="text-align: center;"><img src="/${safePhotoPath}" class="table-img" onclick="previewImage('/${safePhotoPath}')" style="width:40px; height:50px; object-fit:cover; border-radius:4px;"></td>
+              <td style="text-align: center; vertical-align: middle;">
+                <img src="/${safePhotoPath}" class="table-img" onclick="previewImage('/${safePhotoPath}')" style="width:40px; height:50px; object-fit:cover; border-radius:4px; margin: 0 auto; display: block;">
+              </td>
               <td>
                 <div style="display:flex;align-items:center;gap:6px;">
                   <strong>${escapeHtml(row.name)}</strong>
@@ -929,19 +1024,23 @@
               <td>
                 <div style="font-size:0.85rem;color:var(--text-main);">${timeStr}</div>
               </td>
-              <td style="text-align: center;">
-                <div class="action-row" style="justify-content: center;">
-                  <button class="btn btn-success" style="padding: 4px 8px; font-size: 0.8rem; width: auto;" onclick="editRecord(${row.id})">修改</button>
+              <td style="text-align: center; vertical-align: middle;">
+                <div style="display: flex; gap: 8px; justify-content: center; align-items: center; flex-wrap: wrap;">
+                  <button class="btn btn-success" style="padding: 5px 12px; font-size: 0.8rem; margin: 0; width: auto; min-width: 60px;" onclick="editRecord(${row.id})">修改</button>
+                  ${row.word_path ? 
+                    `<a class="btn btn-primary" style="padding: 5px 12px; font-size: 0.8rem; text-decoration: none; display: inline-block; text-align: center; margin: 0; width: auto; min-width: 60px; box-sizing: border-box;" href="/api/record/download_word/${row.id}?token=${encodeURIComponent(token)}" target="_blank">登记卡</a>` :
+                    `<button class="btn btn-secondary" style="padding: 5px 12px; font-size: 0.8rem; opacity: 0.5; margin: 0; width: auto; min-width: 60px;" disabled title="已失效或未生成">登记卡</button>`
+                  }
                 </div>
               </td>
             `;
             tbody.appendChild(tr);
           });
         } else {
-          tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--danger-color);">${result.detail || '获取历史失败'}</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--danger-color);">${result.detail || '获取历史失败'}</td></tr>`;
         }
       } catch (err) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--danger-color);">网络错误，无法加载</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--danger-color);">网络错误，无法加载</td></tr>';
       }
     }
 
@@ -1047,6 +1146,21 @@
         <p>重新选择照片 / 拍摄（不选则保持原图）</p>
       `;
 
+      // 回填身份证图片预览
+      const idcardPreviewContainer = document.getElementById('idcard-preview-container');
+      const idcardPreviewImg = document.getElementById('idcard-preview-img');
+      const idcardImgPathInput = document.getElementById('id_card_img_path');
+      idcardImgPathInput.value = '';
+      if (record.id_card) {
+        idcardPreviewImg.src = '/uploads/idcards/' + record.id_card + '.png';
+        idcardPreviewImg.onerror = function() {
+          idcardPreviewContainer.style.display = 'none';
+        };
+        idcardPreviewContainer.style.display = 'flex';
+      } else {
+        idcardPreviewContainer.style.display = 'none';
+      }
+
       // UI文案微调
       document.getElementById('form-title').innerText = '修改培训人员信息';
       document.getElementById('btn-submit').innerText = '保 存 修 改 信 息';
@@ -1059,6 +1173,11 @@
     function cancelEdit() {
       currentEditRecordId = null;
       document.getElementById('form-record').reset();
+
+      // 重置身份证识别区域
+      document.getElementById('id_card_img_path').value = '';
+      document.getElementById('idcard-preview-container').style.display = 'none';
+      document.getElementById('idcard-preview-img').src = '';
 
       // 清理 job 临时 option
       const jobSelect = document.getElementById('job');
@@ -1088,10 +1207,9 @@
       `;
 
       document.getElementById('form-title').innerText = '培训人员信息录入';
-      document.getElementById('btn-submit').innerText = '确 认 提交 信 息';
+      document.getElementById('btn-submit').innerText = '确 认 提 交 信 息';
       document.getElementById('btn-cancel-edit').style.display = 'none';
 
-      // 重新回填缓存的字段
       fillSavedFields();
 
 
@@ -1129,55 +1247,14 @@
         <p>正在自动压缩照片(限制200K内)...</p>
       `;
 
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        const img = new Image();
-        img.onload = function() {
-          let width = img.width;
-          let height = img.height;
-          const MAX_PIXELS = 1200; 
-          
-          if (width > height) {
-            if (width > MAX_PIXELS) {
-              height = Math.round((height * MAX_PIXELS) / width);
-              width = MAX_PIXELS;
-            }
-          } else {
-            if (height > MAX_PIXELS) {
-              width = Math.round((width * MAX_PIXELS) / height);
-              height = MAX_PIXELS;
-            }
-          }
-
-          const canvas = document.createElement('canvas');
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(img, 0, 0, width, height);
-
-          let quality = 0.9;
-          
-          function compressLoop() {
-            canvas.toBlob((blob) => {
-              if (blob.size <= 200 * 1024 || quality <= 0.1) {
-                compressedPhotoBlob = blob;
-                const blobUrl = URL.createObjectURL(blob);
-                preview.src = blobUrl;
-                preview.style.display = 'block';
-                placeholder.style.display = 'none';
-                console.log(`压缩成功！原图大小: ${(file.size/1024).toFixed(1)}KB, 压缩后大小: ${(blob.size/1024).toFixed(1)}KB, 压缩率: ${quality}`);
-              } else {
-                quality -= 0.15;
-                compressLoop();
-              }
-            }, 'image/jpeg', quality);
-          }
-          
-          compressLoop();
-        };
-        img.src = e.target.result;
-      };
-      reader.readAsDataURL(file);
+      compressImageFile(file, 200, (blob) => {
+        compressedPhotoBlob = blob;
+        const blobUrl = URL.createObjectURL(blob);
+        preview.src = blobUrl;
+        preview.style.display = 'block';
+        placeholder.style.display = 'none';
+        console.log(`现场照压缩成功！原图大小: ${(file.size/1024).toFixed(1)}KB, 压缩后大小: ${(blob.size/1024).toFixed(1)}KB`);
+      });
     }
 
     async function handleSubmit(e) {
@@ -1203,6 +1280,7 @@
       formData.append('job', document.getElementById('job').value);
       formData.append('education', document.getElementById('education').value);
       formData.append('region_auth', document.getElementById('region_auth').value);
+      formData.append('id_card_img_path', document.getElementById('id_card_img_path').value);
       
       if (compressedPhotoBlob) {
         formData.append('photo', compressedPhotoBlob, 'photo.jpg');
@@ -1228,7 +1306,6 @@
           const isEdit = currentEditRecordId !== null;
           showAlert('success', isEdit ? '修改信息成功！' : '提交录入信息成功！');
           
-          // 提交成功，把当前的配置缓存起来，方便在 reset 后能够立即回填，并成为下次自动填充的源
           userSavedFields = {
             nation: document.getElementById('nation').value,
             address: document.getElementById('address').value,
@@ -1237,7 +1314,6 @@
             region_auth: document.getElementById('region_auth').value
           };
 
-          // 重置状态
           currentEditRecordId = null;
           document.getElementById('form-title').innerText = '培训人员信息录入';
           document.getElementById('btn-submit').innerText = '确 认 提 交 信 息';
@@ -1245,22 +1321,23 @@
 
           document.getElementById('form-record').reset();
           
+          // 重置身份证识别区域
+          document.getElementById('id_card_img_path').value = '';
+          document.getElementById('idcard-preview-container').style.display = 'none';
+          document.getElementById('idcard-preview-img').src = '';
           
-          // 清理 job 临时 option
           const jobSelect = document.getElementById('job');
           const tempJobOption = jobSelect.querySelector('option[data-temp="true"]');
           if (tempJobOption) {
             tempJobOption.remove();
           }
 
-          // 清理 region_auth 临时 option
           const regionSelect = document.getElementById('region_auth');
           const tempOption = regionSelect.querySelector('option[data-temp="true"]');
           if (tempOption) {
             tempOption.remove();
           }
           
-          // 重置照片选择器
           compressedPhotoBlob = null;
           document.getElementById('photo-preview').style.display = 'none';
           const placeholder = document.getElementById('uploader-placeholder');
@@ -1273,7 +1350,6 @@
             <p>选择照片 / 拍摄现场照</p>
           `;
           
-          // 回填字段
           fillSavedFields();
 
 
@@ -1295,6 +1371,213 @@
       sessionStorage.clear();
       window.location.href = '/login';
     }
+
+    let cameraStream = null;
+
+    async function openCameraModal() {
+      const modal = document.getElementById('camera-modal');
+      modal.style.display = 'flex';
+      const videoEl = document.getElementById('camera-video');
+      
+      try {
+        const constraints = {
+          video: {
+            facingMode: "environment",
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          },
+          audio: false
+        };
+        try {
+          cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
+        } catch (e) {
+          cameraStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        }
+        videoEl.srcObject = cameraStream;
+        await videoEl.play();
+      } catch (err) {
+        console.error("Camera failed: ", err);
+        closeCameraModal();
+        document.getElementById('idcard-file-input').click();
+      }
+    }
+
+    function closeCameraModal() {
+      const modal = document.getElementById('camera-modal');
+      modal.style.display = 'none';
+      const videoEl = document.getElementById('camera-video');
+      videoEl.pause();
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+        cameraStream = null;
+      }
+    }
+
+    function doCameraCapture() {
+      const videoEl = document.getElementById('camera-video');
+      const frameEl = document.getElementById('camera-frame');
+      
+      if (!videoEl.videoWidth || !videoEl.videoHeight) {
+        alert("摄像头未准备就绪");
+        return;
+      }
+      
+      const vw = videoEl.videoWidth;
+      const vh = videoEl.videoHeight;
+      const rect = videoEl.getBoundingClientRect();
+      const displayW = rect.width;
+      const displayH = rect.height;
+      const displayRatio = displayW / displayH;
+      const videoRatio = vw / vh;
+
+      let scale = 1;
+      let dx = 0;
+      let dy = 0;
+
+      if (videoRatio > displayRatio) {
+        scale = displayH / vh;
+        dx = (vw * scale - displayW) / 2;
+      } else {
+        scale = displayW / vw;
+        dy = (vh * scale - displayH) / 2;
+      }
+
+      const frameRect = frameEl.getBoundingClientRect();
+      const fx = frameRect.left - rect.left;
+      const fy = frameRect.top - rect.top;
+      const fw = frameRect.width;
+      const fh = frameRect.height;
+
+      const sx = (fx + dx) / scale;
+      const sy = (fy + dy) / scale;
+      const sw = fw / scale;
+      const sh = fh / scale;
+
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const outputScale = 1.5;
+      
+      canvas.width = sw * outputScale;
+      canvas.height = sh * outputScale;
+      ctx.drawImage(videoEl, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+      
+      compressCanvasToBlob(canvas, 200, (blob) => {
+        closeCameraModal();
+        uploadIdCardBlob(blob);
+      });
+    }
+
+    function handleIdCardFile(event) {
+      const file = event.target.files[0];
+      if (file) {
+        const submitBtn = document.getElementById('btn-submit');
+        submitBtn.disabled = true;
+        submitBtn.innerText = '正在压缩身份证图片...';
+        compressImageFile(file, 500, (blob) => {
+          uploadIdCardBlob(blob);
+        });
+      }
+      event.target.value = '';
+    }
+
+    async function uploadIdCardBlob(blob) {
+      const submitBtn = document.getElementById('btn-submit');
+      submitBtn.disabled = true;
+      submitBtn.innerText = '正在上传并识别身份证...';
+      
+      const formData = new FormData();
+      formData.append('file', blob, 'idcard.jpg');
+      
+      try {
+        const response = await fetch('/api/ocr_idcard', {
+          method: 'POST',
+          body: formData
+        });
+        const result = await response.json();
+        
+        submitBtn.disabled = false;
+        submitBtn.innerText = currentEditRecordId ? '确 认 修 改 信 息' : '确 认 提 交 信 息';
+        
+        if (response.ok && result.name && result.id_card) {
+          document.getElementById('name').value = result.name;
+          document.getElementById('id_card').value = result.id_card;
+          
+          const nationSelect = document.getElementById('nation');
+          const matchedNation = result.nation.endsWith('族') ? result.nation : result.nation + '族';
+          
+          let found = false;
+          for (let opt of nationSelect.options) {
+            if (opt.value === matchedNation) {
+              nationSelect.value = matchedNation;
+              found = true;
+              break;
+            }
+          }
+          if (!found) {
+            nationSelect.value = '汉族';
+          }
+          
+          document.getElementById('id_card_img_path').value = result.temp_id_card_img;
+          
+          const previewContainer = document.getElementById('idcard-preview-container');
+          const previewImg = document.getElementById('idcard-preview-img');
+          previewImg.src = '/' + result.temp_id_card_img;
+          previewContainer.style.display = 'flex';
+          
+          showAlert('success', `身份证成功识别！已自动回填姓名：${result.name}`);
+        } else {
+          showAlert('error', '身份证识别失败，请确保光线充足且正面完整置于框内！');
+        }
+      } catch (err) {
+        submitBtn.disabled = false;
+        submitBtn.innerText = currentEditRecordId ? '确 认 修 改 信 息' : '确 认 提 交 信 息';
+        showAlert('error', '身份证上传识别失败，网络故障');
+      }
+    }
+
   </script>
+
+  <!-- 身份证遮罩拍照模态框 -->
+  <div id="camera-modal" class="modal" style="display: none; background: #121212; z-index: 2000; flex-direction: column; justify-content: space-between; align-items: center; padding: 0;">
+    <video id="camera-video" autoplay playsinline muted style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 2001;"></video>
+    
+    <div style="position: absolute; top: 0; left: 0; width: 100%; padding: 15px; display: flex; justify-content: center; align-items: center; z-index: 2005; background: linear-gradient(to bottom, rgba(0,0,0,0.8), rgba(0,0,0,0));">
+      <div style="font-weight:bold; color: white; text-shadow:0 2px 4px rgba(0,0,0,0.8); font-size: 1.1rem; letter-spacing: 1px;">身份证正面拍照</div>
+    </div>
+    
+    <!-- 镂空遮罩 -->
+    <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2002; pointer-events: none;">
+      <div id="camera-frame" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 85vw; max-width: 420px; aspect-ratio: 85.6 / 54; border: 1.5px solid rgba(255, 255, 255, 0.4); border-radius: 12px; box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.65); z-index: 2003; pointer-events: auto;">
+        <!-- 4个绿色角标 -->
+        <span style="position: absolute; width: 20px; height: 20px; border: 3px solid #00ff88; top: -2px; left: -2px; border-right: none; border-bottom: none; border-top-left-radius: 6px;"></span>
+        <span style="position: absolute; width: 20px; height: 20px; border: 3px solid #00ff88; top: -2px; right: -2px; border-left: none; border-bottom: none; border-top-right-radius: 6px;"></span>
+        <span style="position: absolute; width: 20px; height: 20px; border: 3px solid #00ff88; bottom: -2px; left: -2px; border-right: none; border-top: none; border-bottom-left-radius: 6px;"></span>
+        <span style="position: absolute; width: 20px; height: 20px; border: 3px solid #00ff88; bottom: -2px; right: -2px; border-left: none; border-top: none; border-bottom-right-radius: 6px;"></span>
+      </div>
+    </div>
+    
+    <!-- 文字提示 -->
+    <div style="position: absolute; top: calc(50% + (85vw * 54 / 85.6 / 2) + 20px); left: 50%; transform: translateX(-50%); width: 90%; text-align: center; z-index: 2004; pointer-events: none;">
+      <div style="font-size: 0.85rem; background: rgba(0, 0, 0, 0.6); padding: 6px 12px; border-radius: 20px; display: inline-block; color: #eee; border: 1px solid rgba(255, 255, 255, 0.1);">请将身份证正面放入框内并保持清晰</div>
+    </div>
+    
+    <!-- 拍照控制 -->
+    <div style="position: absolute; bottom: 0; left: 0; width: 100%; padding: 25px 30px; display: flex; justify-content: space-between; align-items: center; z-index: 2005; background: linear-gradient(to top, rgba(0,0,0,0.9), rgba(0,0,0,0)); box-sizing: border-box;">
+      <!-- 左侧：相册导入 -->
+      <button type="button" style="width: auto; padding: 10px 18px; background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25); color: white; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 0.9rem;" onclick="closeCameraModal(); document.getElementById('idcard-file-input').click();">
+        📂 相册/本地选择
+      </button>
+      
+      <!-- 中间：拍照圆纽 -->
+      <button type="button" onclick="doCameraCapture()" style="width: 70px; height: 70px; border-radius: 50%; background: white; border: 5px solid rgba(255,255,255,0.3); display: flex; justify-content: center; align-items: center; cursor: pointer; outline: none;">
+        <div style="width: 48px; height: 48px; border-radius: 50%; background: #121212;"></div>
+      </button>
+
+      <!-- 右侧：取消 -->
+      <button type="button" style="width: auto; padding: 10px 18px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15); color: #ccc; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 0.9rem;" onclick="closeCameraModal()">
+        取消
+      </button>
+    </div>
+  </div>
 </body>
 </html>

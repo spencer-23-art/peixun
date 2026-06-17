@@ -283,14 +283,7 @@
       <div class="form-group">
         <label for="exam-type">考试科目 *</label>
         <select id="exam-type" class="form-control" required>
-          <option value="">请选择考试科目</option>
-          <option value="普工">普工</option>
-          <option value="焊工">焊工</option>
-          <option value="探伤">探伤</option>
-          <option value="高处作业">高处作业</option>
-          <option value="吊装作业">吊装作业</option>
-          <option value="电工">电工</option>
-          <option value="叉车">叉车</option>
+          <option value="">正在加载科目列表...</option>
         </select>
       </div>
       
@@ -386,16 +379,8 @@
       timerInterval: null
     };
 
-    // 试题文件映射
-    const examFileMap = {
-      '普工': '普工试题(1).xlsx',
-      '焊工': '焊工题库(1).xlsx',
-      '探伤': '探伤.xlsx',
-      '高处作业': '高处作业(1).xlsx',
-      '吊装作业': '吊装作业.xlsx',
-      '电工': '电工题库.xlsx',
-      '叉车': '叉车工.xlsx'
-    };
+    // 试题文件映射 (改为动态加载)
+    let examFileMap = {};
 
     // 显示/隐藏面板
     function showPanel(panelId) {
@@ -523,9 +508,36 @@
       }
     }
 
+    async function loadExamSubjects() {
+      try {
+        const response = await fetch('/api/exam_subjects');
+        const result = await response.json();
+        if (result.code === 200 && result.data) {
+          const select = document.getElementById('exam-type');
+          select.innerHTML = '<option value="">请选择考试科目</option>';
+          
+          examFileMap = {};
+          result.data.forEach(sub => {
+            examFileMap[sub.name] = sub.file;
+            const opt = document.createElement('option');
+            opt.value = sub.name;
+            opt.textContent = sub.name;
+            select.appendChild(opt);
+          });
+          console.log('成功动态加载考试科目:', Object.keys(examFileMap).length, '个');
+        } else {
+          document.getElementById('exam-type').innerHTML = '<option value="">加载科目失败</option>';
+        }
+      } catch (error) {
+        console.error('加载考试科目网络错误:', error);
+        document.getElementById('exam-type').innerHTML = '<option value="">加载科目失败</option>';
+      }
+    }
+
     // 页面加载完成后初始化
     document.addEventListener('DOMContentLoaded', function() {
       loadCompanies();
+      loadExamSubjects(); // 动态加载科目选项列表
       
       // 监听下拉框变化
       document.getElementById('exam-company').addEventListener('change', function() {
