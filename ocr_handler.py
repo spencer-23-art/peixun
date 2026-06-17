@@ -13,7 +13,18 @@ from docx import Document
 from docx.shared import Inches
 from modelscope import snapshot_download
 from rapidocr_onnxruntime import RapidOCR
-from rapidocr_onnxruntime.utils import read_yaml, concat_model_path
+from rapidocr_onnxruntime.utils import read_yaml
+
+
+def _concat_model_path(config):
+    import rapidocr_onnxruntime
+    root_dir = Path(rapidocr_onnxruntime.__file__).resolve().parent
+    key = 'model_path'
+    for k in ['Det', 'Rec', 'Cls']:
+        if k in config and key in config[k]:
+            config[k][key] = str(root_dir / config[k][key])
+    return config
+
 
 # ================= 1. PP-OCRv6 Tiny 模型加载与 OCR 引擎 =================
 OCR_ENGINE = None
@@ -59,7 +70,7 @@ def init_ppocrv6():
         import rapidocr_onnxruntime
         root_dir = Path(rapidocr_onnxruntime.__file__).resolve().parent
         config = read_yaml(str(root_dir / 'config.yaml'))
-        config = concat_model_path(config)
+        config = _concat_model_path(config)
         
         config['Det']['model_path'] = det_path
         config['Rec']['model_path'] = rec_path
@@ -103,7 +114,7 @@ def init_ppocrv6_no_cls():
         import rapidocr_onnxruntime
         root_dir = Path(rapidocr_onnxruntime.__file__).resolve().parent
         config = read_yaml(str(root_dir / 'config.yaml'))
-        config = concat_model_path(config)
+        config = _concat_model_path(config)
         
         # 复用主引擎的模型路径
         if hasattr(main_engine, 'text_detector') and hasattr(main_engine.text_detector, 'model_path'):
