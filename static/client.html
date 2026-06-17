@@ -1028,7 +1028,8 @@
                 <div style="display: flex; gap: 8px; justify-content: center; align-items: center; flex-wrap: wrap;">
                   <button class="btn btn-success" style="padding: 5px 12px; font-size: 0.8rem; margin: 0; width: auto; min-width: 60px;" onclick="editRecord(${row.id})">修改</button>
                   ${row.word_path ? 
-                    `<a class="btn btn-primary" style="padding: 5px 12px; font-size: 0.8rem; text-decoration: none; display: inline-block; text-align: center; margin: 0; width: auto; min-width: 60px; box-sizing: border-box;" href="/api/record/download_word/${row.id}?token=${encodeURIComponent(token)}" target="_blank">登记卡</a>` :
+                    `<a class="btn btn-primary" style="padding: 5px 12px; font-size: 0.8rem; text-decoration: none; display: inline-block; text-align: center; margin: 0; width: auto; min-width: 60px; box-sizing: border-box;" href="/api/record/download_word/${row.id}?token=${encodeURIComponent(token)}" target="_blank">登记卡</a>
+                     <button class="btn btn-warning" style="padding: 5px 12px; font-size: 0.8rem; margin: 0; width: auto; min-width: 60px; background-color: #f59e0b; border-color: #d97706; color: white;" onclick="copyDownloadLink(${row.id})">复制链接</button>` :
                     `<button class="btn btn-secondary" style="padding: 5px 12px; font-size: 0.8rem; opacity: 0.5; margin: 0; width: auto; min-width: 60px;" disabled title="已失效或未生成">登记卡</button>`
                   }
                 </div>
@@ -1055,6 +1056,45 @@
     function clearHistorySearch() {
       document.getElementById('history-search-name').value = '';
       loadHistory();
+    }
+
+    // 复制下载链接到剪贴板，方便发送到微信文件传输助手
+    function copyDownloadLink(recordId) {
+      const token = getSessionItem('token');
+      const url = `${window.location.protocol}//${window.location.host}/api/record/download_word/${recordId}?token=${encodeURIComponent(token)}`;
+      
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(() => {
+          alert("下载链接已成功复制！\n你可以直接去微信粘贴发送给“文件传输助手”，在电脑上点开下载。");
+        }).catch(err => {
+          fallbackCopyText(url);
+        });
+      } else {
+        fallbackCopyText(url);
+      }
+    }
+
+    function fallbackCopyText(text) {
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      // 避免屏幕滚动
+      textArea.style.top = "0";
+      textArea.style.left = "0";
+      textArea.style.position = "fixed";
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      try {
+        const successful = document.execCommand('copy');
+        if (successful) {
+          alert("下载链接已成功复制！\n你可以直接去微信粘贴发送给“文件传输助手”，在电脑上点开下载。");
+        } else {
+          alert("复制失败，请手动长按复制地址：" + text);
+        }
+      } catch (err) {
+        alert("复制失败，请手动长按复制地址：" + text);
+      }
+      document.body.removeChild(textArea);
     }
 
     function escapeHtml(str) {
