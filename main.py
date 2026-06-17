@@ -1,4 +1,21 @@
 import os
+import sys
+
+# 自动双向重定向 stdout 和 stderr 到 app_stdout.log 中，保留控制台输出的同时记录到文件
+class DualLogger:
+    def __init__(self, filepath):
+        self.terminal = sys.stdout
+        self.log = open(filepath, "a", encoding="utf-8", buffering=1)
+    def write(self, message):
+        self.terminal.write(message)
+        self.log.write(message)
+    def flush(self):
+        self.terminal.flush()
+        self.log.flush()
+
+sys.stdout = DualLogger("app_stdout.log")
+sys.stderr = DualLogger("app_stdout.log")
+
 import sqlite3
 import shutil
 import hmac
@@ -729,7 +746,15 @@ def download_word(record_id: int, token: str = None, authorization: str = Header
         
     raw_name = row['name'] or "用户"
     download_filename = f"{raw_name}登记卡.docx"
-    return FileResponse(word_path, filename=download_filename, media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+    from urllib.parse import quote
+    headers = {
+        "Content-Disposition": f"attachment; filename*=utf-8''{quote(download_filename)}"
+    }
+    return FileResponse(
+        word_path, 
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers=headers
+    )
 
 # 录入培训数据
 @app.post("/api/record")
