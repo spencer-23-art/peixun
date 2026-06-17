@@ -15,7 +15,23 @@ import csv
 import zipfile
 
 # 引入 OCR 核心
-from ocr_handler import ocr_idcard_process, generate_record_card, start_cleanup_thread
+try:
+    from ocr_handler import ocr_idcard_process, generate_record_card, start_cleanup_thread
+    OCR_AVAILABLE = True
+except Exception as e:
+    OCR_AVAILABLE = False
+    OCR_ERROR_MSG = str(e)
+    print(f"[Warning] Failed to import ocr_handler, OCR features will be disabled: {e}")
+    
+    def ocr_idcard_process(*args, **kwargs):
+        raise HTTPException(status_code=500, detail=f"OCR 引擎依赖缺失，请在服务器安装所需依赖（如 rapidocr_onnxruntime, modelscope, opencv-python-headless 等）。错误原因: {OCR_ERROR_MSG}")
+        
+    def generate_record_card(*args, **kwargs):
+        raise HTTPException(status_code=500, detail=f"登记卡生成功能依赖缺失，请在服务器安装 python-docx。错误原因: {OCR_ERROR_MSG}")
+        
+    def start_cleanup_thread(*args, **kwargs):
+        pass
+
 
 DB_PATH = 'peixun.db'
 UPLOAD_DIR = 'uploads'
@@ -288,13 +304,18 @@ def init_db():
 
 init_db()
 # 预先加载并常驻 OCR 模型，防止首笔请求慢
-from ocr_handler import init_ppocrv6
-try:
-    init_ppocrv6()
-except Exception as e:
-    print(f"[Warning] Startup preloading OCR model failed: {e}")
+if OCR_AVAILABLE:
+    try:
+        from ocr_handler import init_ppocrv6
+        init_ppocrv6()
+    except Exception as e:
+        print(f"[Warning] Startup preloading OCR model failed: {e}")
     
-start_cleanup_thread()
+    try:
+        start_cleanup_thread()
+    except Exception as e:
+        print(f"[Warning] Failed to start cleanup thread: {e}")
+
 
 app = FastAPI(title="培训信息录入系统")
 
