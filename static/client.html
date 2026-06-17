@@ -1029,7 +1029,8 @@
                   <button class="btn btn-success" style="padding: 5px 12px; font-size: 0.8rem; margin: 0; width: auto; min-width: 60px;" onclick="editRecord(${row.id})">修改</button>
                   ${row.word_path ? 
                     `<a class="btn btn-primary" style="padding: 5px 12px; font-size: 0.8rem; text-decoration: none; display: inline-block; text-align: center; margin: 0; width: auto; min-width: 60px; box-sizing: border-box;" href="/api/record/download_word/${row.id}?token=${encodeURIComponent(token)}" target="_blank">登记卡</a>
-                     <button class="btn btn-warning" style="padding: 5px 12px; font-size: 0.8rem; margin: 0; width: auto; min-width: 60px; background-color: #f59e0b; border-color: #d97706; color: white;" onclick="shareDownloadLink(${row.id})">分享登记卡</button>` :
+                     ${/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ? 
+                       `<button class="btn btn-warning" style="padding: 5px 12px; font-size: 0.8rem; margin: 0; width: auto; min-width: 60px; background-color: #f59e0b; border-color: #d97706; color: white;" onclick="shareDownloadLink(${row.id})">分享</button>` : ''}` :
                     `<button class="btn btn-secondary" style="padding: 5px 12px; font-size: 0.8rem; opacity: 0.5; margin: 0; width: auto; min-width: 60px;" disabled title="已失效或未生成">登记卡</button>`
                   }
                 </div>
