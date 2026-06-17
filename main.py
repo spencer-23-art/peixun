@@ -2470,6 +2470,47 @@ def get_exam():
     with open("static/exam.html", "r", encoding="utf-8") as f:
         return f.read()
 
+# 诊断服务器环境的调试接口
+@app.get("/api/debug/check_env")
+def check_env():
+    import sys
+    import os
+    
+    # 检查 python-docx 依赖
+    try:
+        import docx
+        docx_msg = "OK"
+    except Exception as e:
+        docx_msg = f"Error: {str(e)}"
+        
+    # 检查登记卡模板文件
+    template_exists = os.path.exists("登记卡.docx")
+    
+    # 检查 uploads 目录写入权限
+    uploads_writable = False
+    uploads_msg = "OK"
+    try:
+        os.makedirs("uploads/cards", exist_ok=True)
+        test_file = "uploads/cards/test_write.txt"
+        with open(test_file, "w") as f:
+            f.write("test")
+        os.remove(test_file)
+        uploads_writable = True
+    except Exception as e:
+        uploads_msg = f"Error: {str(e)}"
+    
+    # 检查数据库文件
+    db_exists = os.path.exists("peixun.db")
+    
+    return {
+        "python_version": sys.version,
+        "python_docx_dependency": docx_msg,
+        "template_exists": template_exists,
+        "uploads_writable": uploads_writable,
+        "uploads_write_error": uploads_msg,
+        "database_exists": db_exists
+    }
+
 if __name__ == "__main__":
     import uvicorn
     # 启动服务器
