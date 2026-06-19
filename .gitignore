@@ -6,6 +6,37 @@ uploads/
 *.zip
 local_deps_backup/
 
+# 运行日志（含请求记录与可能的 token，勿入库）
+*.log
+app_stdout.log
+
+# TLS 证书与私钥
+*.pem
+cert.pem
+key.pem
+
+# 导出产物（运行时生成）
+training_records_export.*
+photos_export.zip
+
+# WorkBuddy 工作元数据（含对话/记忆/任务，勿入库）
+.workbuddy/
+
+# 临时调试文件与草稿目录
+scratch/
+debug_*.html
+test_*.docx
+test_*.log
+
+# 登记卡模板（含敏感样式，按需本地放置）
+登记卡.docx
+
+# 根目录散落的题库临时副本（实际题库在 shiti/ 目录）
+/普工试题*.xlsx
+/焊工题库*.xlsx
+/探伤*.xlsx
+/06.03.*
+
 
 # Python 编译缓存
 __pycache__/

@@ -515,8 +515,7 @@ def crop_by_card_contour(img, is_special_cert=False):
     warped = _four_point_transform(img, best)
     if warped is None:
         return None
-    warped = normalize_card_orientation(warped)
-    return warped
+    return warped  # 方向已由 _orient_by_ocr 校正，不在此处旋转
 
 def _detect_id_card_body_quad(img):
     if img is None or img.size == 0 or len(img.shape) != 3:
@@ -589,9 +588,7 @@ def _crop_id_card_image(img):
         if quad is not None:
             body = _four_point_transform(img, _expand_quad(quad, img.shape, scale_x=1.03, scale_y=1.05))
             if body is not None and body.size != 0:
-                body = normalize_card_orientation(body)
-                body = _orient_card_by_content_box(body, is_special_cert=False)
-                body = _orient_card_result(body, is_special_cert=False)
+                # 方向已由 _orient_by_ocr 校正，不在此处旋转
                 body = trim_document_borders(body, max_trim_ratio=0.005)
                 return pad_image_to_ratio(body)
         contour_result = crop_by_card_contour(img, is_special_cert=False)
@@ -599,15 +596,11 @@ def _crop_id_card_image(img):
             ch, cw = contour_result.shape[:2]
             ih, iw = img.shape[:2]
             if ch * cw < ih * iw * 0.95:
-                contour_result = normalize_card_orientation(contour_result)
-                contour_result = _orient_card_by_content_box(contour_result, is_special_cert=False)
-                contour_result = _orient_card_result(contour_result, is_special_cert=False)
+                # 方向已由 _orient_by_ocr 校正，不在此处旋转
                 contour_result = trim_document_borders(contour_result, max_trim_ratio=0.005)
                 return pad_image_to_ratio(contour_result)
         work = img.copy()
-        work = normalize_card_orientation(work)
-        work = _orient_card_by_content_box(work, is_special_cert=False)
-        work = _orient_card_result(work, is_special_cert=False)
+        # 方向已由 _orient_by_ocr 校正，不在此处旋转
         work = trim_document_borders(work, max_trim_ratio=0.01)
         return pad_image_to_ratio(work)
     except Exception:
@@ -783,23 +776,26 @@ def _crop_by_ocr_boxes(img, ocr_results):
     if text_w < w * 0.15 or text_h < h * 0.15:
         return img
     
-    # 向外扩展 15%，包含卡片边框
-    pad_x = int(text_w * 0.15)
-    pad_y = int(text_h * 0.15)
-    
+    # 向外扩展：身份证文字区域到卡边缘大约占文字宽高的20-25%
+    # 水平方向文字通常占卡宽的70%左右，垂直方向文字通常占卡高的60%左右
+    # 所以水平扩展约18%，垂直扩展约25%能较好贴合卡边缘
+    pad_x = int(text_w * 0.18)
+    pad_y = int(text_h * 0.25)
+
     x1 = max(0, min_x - pad_x)
     y1 = max(0, min_y - pad_y)
     x2 = min(w, max_x + pad_x)
     y2 = min(h, max_y + pad_y)
-    
+
     # 如果裁剪区域和原图差不多大，说明卡占满整个画面，不需要裁剪
     crop_area = (x2 - x1) * (y2 - y1)
     if crop_area > h * w * 0.92:
         return img
-    
+
     cropped = img[y1:y2, x1:x2]
     if cropped.size == 0:
         return img
+    print(f"[OCR-Debug] OCR文字框裁切: 文字区{text_w}x{text_h} → 裁切{x2-x1}x{y2-y1}")
     return cropped
 
 def _anchor_orientation_score(ocr_results):
@@ -843,33 +839,131 @@ def _anchor_orientation_score(ocr_results):
         return 0.1  # 至少能找到姓名标签
     return 0
 
+def _orient_by_ocr(img, engine):
+    """用OCR结果驱动方向校正：在原图上尝试4个方向(0/90/180/270)，
+    用识别出的姓名+身份证号评分，选最佳方向的图+结果。
+    彻底替代基于图像尺寸的盲目旋转。"""
+    best_img = img
+    best_score = -1
+    best_result = ("", "", "")
+    best_ocr_res = None
+    best_angle = 0
+
+    angles = [0, 90, 180, 270]
+    for angle in angles:
+        if angle == 0:
+            test_img = img
+        elif angle == 90:
+            test_img = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
+        elif angle == 180:
+            test_img = cv2.rotate(img, cv2.ROTATE_180)
+        else:
+            test_img = cv2.rotate(img, cv2.ROTATE_90_COUNTERCLOCKWISE)
+
+        try:
+            ocr_res, _ = engine(test_img)
+        except Exception:
+            ocr_res = None
+
+        name, id_card, nation = smart_extract_info(ocr_res)
+        # 身份证号权重最高(3)，姓名次之(2)，民族(1)
+        score = (2 if name else 0) + (3 if id_card else 0) + (1 if nation else 0)
+        print(f"[OCR-Debug] 方向{angle}°: name='{name}', id_card='{id_card}', score={score}")
+
+        if score > best_score:
+            best_score = score
+            best_img = test_img
+            best_result = (name, id_card, nation)
+            best_ocr_res = ocr_res
+            best_angle = angle
+
+        # name+id_card都识别到，已经足够，不用再试其他方向
+        if name and id_card:
+            break
+
+    print(f"[OCR-Debug] 选定方向: {best_angle}°, score={best_score}")
+    return best_img, best_result, best_ocr_res
+
 def ocr_idcard_process(image_path):
     engine = init_ppocrv6()
-    
+
     # ===== Step 1: 读取图像（支持 EXIF 自动旋转） =====
     img_cv = _read_and_auto_orient(image_path)
     if img_cv is None:
         raise ValueError("无法解析身份证图片。")
-    
-    # ===== Step 2: Canny 裁切卡面 =====
-    img_cropped = crop_by_card_contour(img_cv, is_special_cert=False)
-    if img_cropped is None:
-        # 回退：直接使用原图并规范化为横图
-        img_cropped = img_cv.copy()
-        h, w = img_cropped.shape[:2]
-        if h > w:
-            img_cropped = cv2.rotate(img_cropped, cv2.ROTATE_90_CLOCKWISE)
-        img_cropped = pad_image_to_ratio(img_cropped)
-    
-    # ===== Step 3: 用带 cls 的引擎提取最终文字 =====
-    ocr_res, _ = engine(img_cropped)
-    name, id_card, nation = smart_extract_info(ocr_res)
-    
-    # ===== Step 4: 保存裁剪结果 =====
+    print(f"[OCR-Debug] 原图尺寸: {img_cv.shape[1]}x{img_cv.shape[0]}")
+
+    # ===== Step 2: OCR驱动方向校正 =====
+    # 在原图上尝试4个方向，用识别结果选最佳方向。
+    # 彻底替代 normalize_card_orientation 的盲目旋转（只看尺寸不看内容会把横放的身份证转竖）。
+    img_oriented, (name, id_card, nation), orient_ocr_res = _orient_by_ocr(img_cv, engine)
+    print(f"[OCR-Debug] 方向校正完成: name='{name}', id_card='{id_card}', nation='{nation}'")
+
+    # ===== Step 2b: 身份证是横版(1.585:1)，如果校正后还是竖图(h>w)，强制旋转90°成横图 =====
+    # PP-OCRv6 能识别竖排文字，导致竖图也能OCR成功，但身份证物理上是横版的。
+    # 竖图时OCR文字框是竖长条，裁切后上下全是留白、左右被pad大量白边。
+    h0, w0 = img_oriented.shape[:2]
+    if h0 > w0:
+        img_oriented = cv2.rotate(img_oriented, cv2.ROTATE_90_CLOCKWISE)
+        print(f"[OCR-Debug] 竖图({w0}x{h0})旋转90°成横图({img_oriented.shape[1]}x{img_oriented.shape[0]})")
+        # 旋转后文字方向变了，重新OCR拿横图的文字框（用于裁切）
+        try:
+            orient_ocr_res, _ = engine(img_oriented)
+            name2, id_card2, nation2 = smart_extract_info(orient_ocr_res)
+            # 旋转后如果识别到更完整的结果，更新
+            if name2 and id_card2:
+                name, id_card, nation = name2, id_card2, nation2
+                print(f"[OCR-Debug] 旋转后重新OCR成功: name='{name}', id_card='{id_card}'")
+            else:
+                print(f"[OCR-Debug] 旋转后OCR未识别全，保留原结果 name='{name}' id_card='{id_card}'")
+        except Exception as e:
+            print(f"[OCR-Debug] 旋转后重新OCR失败: {e}")
+            orient_ocr_res = None
+
+    # ===== Step 3: 裁切卡面 =====
+    # 优先用 OCR 文字框裁切（方向校正阶段已有结果，最可靠，文字一定在卡面上）
+    img_cropped = None
+    crop_method = "none"
+    if orient_ocr_res and len(orient_ocr_res) >= 2:
+        ocr_cropped = _crop_by_ocr_boxes(img_oriented, orient_ocr_res)
+        if ocr_cropped is not None and ocr_cropped.size != 0 and ocr_cropped.shape[:2] != img_oriented.shape[:2]:
+            img_cropped = ocr_cropped
+            crop_method = "ocr_boxes"
+            print(f"[OCR-Debug] 使用 OCR 文字框裁切成功")
+
+    # 兜底：OCR裁切失败 → 颜色检测
+    if img_cropped is None or img_cropped.size == 0:
+        img_cropped = _crop_id_card_image(img_oriented)
+        crop_method = "color_detection"
+
+    # 兜底2：仍无法裁切 → 用方向校正后的图
+    if img_cropped is None or img_cropped.size == 0:
+        img_cropped = img_oriented.copy()
+        crop_method = "original"
+        print(f"[OCR-Debug] 所有裁剪方法均失败，使用方向校正后的原图")
+
+    print(f"[OCR-Debug] 裁剪方法: {crop_method}, 裁剪后尺寸: {img_cropped.shape[1]}x{img_cropped.shape[0]}")
+
+    # ===== Step 4: pad 到身份证比例（不旋转，方向已由 Step 2 校正） =====
+    img_cropped = pad_image_to_ratio(img_cropped)
+
+    # ===== Step 5: 裁切后重新 OCR（裁切后文字更清晰，可能识别更准） =====
+    if crop_method != "original":
+        try:
+            ocr_res, _ = engine(img_cropped)
+            name_final, id_card_final, nation_final = smart_extract_info(ocr_res)
+            # 裁切后结果更好或方向校正阶段没识别全 → 用裁切后的结果
+            if (name_final and id_card_final) or (not name or not id_card):
+                name, id_card, nation = name_final, id_card_final, nation_final
+                print(f"[OCR-Debug] 裁切后重新识别: name='{name}', id_card='{id_card}', nation='{nation}'")
+        except Exception as e:
+            print(f"[OCR-Debug] 裁切后重新识别失败: {e}")
+
+    # ===== Step 6: 保存裁剪结果 =====
     cropped_filename = f"crop_{uuid.uuid4().hex}.jpg"
     cropped_path = os.path.join(TEMP_IDS_DIR, cropped_filename).replace('\\', '/')
     cv2.imencode('.jpg', img_cropped, [int(cv2.IMWRITE_JPEG_QUALITY), 90])[1].tofile(cropped_path)
-    
+
     return {
         "name": name,
         "id_card": id_card,
@@ -1044,6 +1138,7 @@ def start_cleanup_thread():
                 print(f"[Error] Cleanup thread exception: {e}")
             time.sleep(12 * 3600)  # 每 12 小时检查一次
             
-    t = threading_thread = __import__('threading').Thread(target=loop, daemon=True)
+    import threading
+    t = threading.Thread(target=loop, daemon=True)
     t.start()
     print("[Info] 过期登记卡清理守护线程已成功开启（周期: 12小时）。")

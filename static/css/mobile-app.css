@@ -1,0 +1,326 @@
+/* ============================================================
+   mobile-app.css — 手机端 App 外壳样式
+   仅在屏幕宽度 ≤ 768px 时生效，桌面端完全不受影响
+   设计目标：让手机 Web 端看起来像原生 App
+   ============================================================ */
+
+@media (max-width: 768px) {
+  /* ===== 1. 全局 App 容器化 ===== */
+  html, body {
+    height: 100%;
+    overscroll-behavior-y: none; /* 禁止下拉刷新 */
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    padding: 0 !important;
+    background: #0b1020 !important; /* 纯色 App 背景，去掉光晕 */
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: flex-start !important;
+    align-items: stretch !important;
+  }
+
+  /* 关掉桌面端的装饰光晕 */
+  body::before, body::after {
+    display: none !important;
+  }
+
+  /* ===== 2. 顶部 App Header ===== */
+  .app-header {
+    display: none; /* 桌面端隐藏 */
+  }
+
+  @media (max-width: 768px) {
+    .app-header {
+      display: flex !important;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      height: calc(52px + env(safe-area-inset-top, 0px));
+      padding: env(safe-area-inset-top, 0px) 16px 0;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(15, 23, 42, 0.92);
+      backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      box-shadow: 0 1px 0 rgba(0, 0, 0, 0.3);
+    }
+
+    .app-header-title {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      min-width: 0;
+      flex: 1;
+    }
+    .app-header-title .app-page-name {
+      font-size: 1.02rem;
+      font-weight: 700;
+      color: #f8fafc;
+      letter-spacing: -0.01em;
+      line-height: 1.2;
+    }
+    .app-header-title .app-user-name {
+      font-size: 0.72rem;
+      color: #94a3b8;
+      line-height: 1.2;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .app-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .app-icon-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      background: rgba(239, 68, 68, 0.1);
+      color: #fca5a5;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      padding: 0;
+    }
+    .app-icon-btn:active {
+      transform: scale(0.94);
+      background: rgba(239, 68, 68, 0.25);
+    }
+    .app-icon-btn svg {
+      width: 18px;
+      height: 18px;
+    }
+  }
+
+  /* ===== 3. 内容主区域 ===== */
+  .app-content {
+    flex: 1;
+    width: 100%;
+    padding: calc(52px + env(safe-area-inset-top, 0px) + 12px) 12px calc(72px + env(safe-area-inset-bottom, 0px) + 16px);
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* 隐藏桌面端的用户信息条和顶部页签导航 */
+  .user-info-bar {
+    display: none !important;
+  }
+  .admin-nav {
+    display: none !important;
+  }
+
+  /* 玻璃容器在手机端去掉外边距和阴影，更像 App 卡片 */
+  .glass-container {
+    margin-top: 0 !important;
+    padding: 18px 16px !important;
+    border-radius: 16px !important;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25) !important;
+    background: rgba(255, 255, 255, 0.04) !important;
+  }
+
+  /* 标题缩小，副标题隐藏以节省空间 */
+  .glass-container h2 {
+    font-size: 1.15rem !important;
+    margin-bottom: 6px !important;
+    text-align: left !important;
+  }
+  .subtitle {
+    display: none !important;
+  }
+
+  /* ===== 4. 底部 Tab Bar ===== */
+  .app-tabbar {
+    display: none;
+  }
+
+  @media (max-width: 768px) {
+    .app-tabbar {
+      display: flex !important;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      height: calc(60px + env(safe-area-inset-bottom, 0px));
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+      background: rgba(15, 23, 42, 0.95);
+      backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      box-shadow: 0 -1px 0 rgba(0, 0, 0, 0.3);
+      align-items: stretch;
+      justify-content: space-around;
+    }
+
+    .app-tab {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      padding: 6px 0 4px;
+      color: #64748b;
+      cursor: pointer;
+      transition: color 0.18s ease, transform 0.12s ease;
+      background: transparent;
+      border: none;
+      font-family: inherit;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+    .app-tab:active {
+      transform: scale(0.92);
+    }
+    .app-tab svg {
+      width: 22px;
+      height: 22px;
+      transition: transform 0.2s ease;
+    }
+    .app-tab-label {
+      font-size: 0.68rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+    .app-tab.active {
+      color: #818cf8;
+    }
+    .app-tab.active svg {
+      transform: translateY(-1px);
+      filter: drop-shadow(0 2px 6px rgba(129, 140, 248, 0.5));
+    }
+    .app-tab.active .app-tab-label {
+      color: #c7d2fe;
+    }
+    /* 顶部小指示条 */
+    .app-tab::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%) scaleX(0);
+      width: 24px;
+      height: 3px;
+      border-radius: 0 0 3px 3px;
+      background: linear-gradient(90deg, #818cf8, #6366f1);
+      transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .app-tab.active::before {
+      transform: translateX(-50%) scaleX(1);
+    }
+    .app-tab {
+      position: relative;
+    }
+  }
+
+  /* ===== 5. 表单元素 App 化 ===== */
+  .form-control {
+    padding: 11px 14px !important;
+    font-size: 0.95rem !important;
+    border-radius: 10px !important;
+    background: rgba(255, 255, 255, 0.05) !important;
+    min-height: 44px; /* iOS 触控规范 */
+  }
+
+  .form-group label {
+    font-size: 0.78rem !important;
+    margin-bottom: 6px !important;
+    text-transform: none !important; /* 去掉全大写，中文用不上 */
+    letter-spacing: 0 !important;
+  }
+
+  /* 表单单列布局，更易填写 */
+  .form-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  /* 按钮更高、更易点 */
+  .btn {
+    min-height: 46px;
+    font-size: 0.95rem !important;
+    border-radius: 11px !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  }
+  .btn:active {
+    transform: scale(0.98) !important;
+  }
+
+  /* 照片上传区域调整 */
+  .photo-uploader {
+    width: 150px !important;
+    height: 200px !important;
+    margin: 0 auto 18px auto !important;
+    border-radius: 14px !important;
+  }
+
+  /* 提示框圆角调整 */
+  .alert {
+    border-radius: 10px !important;
+    font-size: 0.85rem !important;
+    padding: 10px 14px !important;
+  }
+
+  /* ===== 6. 历史记录/门禁恢复 卡片优化 ===== */
+  .table-wrapper tr {
+    border-radius: 14px !important;
+    padding: 14px !important;
+  }
+
+  /* 搜索框 App 化 */
+  #history-search-name, #restore-search-name {
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+
+  /* ===== 7. 登录页 App 化 ===== */
+  .glass-container.login-card {
+    margin-top: 0 !important;
+    min-height: 100vh;
+    border-radius: 0 !important;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 32px 22px calc(32px + env(safe-area-inset-bottom, 0px)) !important;
+    max-width: 100% !important;
+  }
+  .glass-container.login-card h2 {
+    font-size: 1.4rem !important;
+  }
+
+  /* ===== 8. 模态框/弹层 App 化 ===== */
+  .modal {
+    background: rgba(0, 0, 0, 0.92) !important;
+  }
+  .modal-content {
+    max-width: 96% !important;
+    max-height: 88% !important;
+    border-radius: 16px !important;
+  }
+}
+
+/* ===== 桌面端：App 外壳元素隐藏 ===== */
+@media (min-width: 769px) {
+  .app-header,
+  .app-tabbar {
+    display: none !important;
+  }
+  .app-content {
+    /* 桌面端不需要 padding 调整 */
+  }
+}

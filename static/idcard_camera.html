@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>身份证拍照识别 - 遮罩相机演示</title>
+  <style>
+    :root {
+      --primary: #00ff88;
+      --bg-dark: #121212;
+      --text-light: #ffffff;
+    }
+    
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body, html {
+      width: 100%;
+      height: 100%;
+      background-color: var(--bg-dark);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      overflow: hidden;
+      color: var(--text-light);
+    }
+
+    /* 相机全屏容器 */
+    .camera-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* 实时视频背景 */
+    #video {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: 1;
+    }
+
+    /* 身份证半透明遮罩层 */
+    .overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 2;
+      pointer-events: none;
+    }
+
+    /* 身份证定位相框：透明，通过巨大的四周box-shadow实现背景变暗半透明遮罩 */
+    .id-card-frame {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 85vw;
+      max-width: 420px;
+      aspect-ratio: 85.6 / 54; /* 身份证 5:3 黄金比例 */
+      border: 1.5px solid rgba(255, 255, 255, 0.4);
+      border-radius: 12px;
+      box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.65); /* 核心技巧：无限大的黑色半透明阴影构成蒙版 */
+      z-index: 3;
+      pointer-events: auto;
+    }
+
+    /* 对齐角标：L型绿色边框 */
+    .corner {
+      position: absolute;
+      width: 24px;
+      height: 24px;
+      border: 4px solid var(--primary);
+    }
+    .top-left {
+      top: -2px;
+      left: -2px;
+      border-right: none;
+      border-bottom: none;
+      border-top-left-radius: 8px;
+    }
+    .top-right {
+      top: -2px;
+      right: -2px;
+      border-left: none;
+      border-bottom: none;
+      border-top-right-radius: 8px;
+    }
+    .bottom-left {
+      bottom: -2px;
+      left: -2px;
+      border-right: none;
+      border-top: none;
+      border-bottom-left-radius: 8px;
+    }
+    .bottom-right {
+      bottom: -2px;
+      right: -2px;
+      border-left: none;
+      border-top: none;
+      border-bottom-right-radius: 8px;
+    }
+
+    /* 信息提示区域 */
+    .tips-box {
+      position: absolute;
+      top: calc(50% + (85vw * 54 / 85.6 / 2) + 20px);
+      left: 50%;
+      transform: translateX(-50%);
+      width: 90%;
+      text-align: center;
+      z-index: 4;
+      pointer-events: none;
+    }
+    /* 针对 max-width 做微调适配 */
+    @media (min-width: 494px) {
+      .tips-box {
+        top: calc(50% + 132px + 20px);
+      }
+    }
+
+    .tips-text {
+      font-size: 0.95rem;
+      background: rgba(0, 0, 0, 0.6);
+      padding: 8px 16px;
+      border-radius: 20px;
+      display: inline-block;
+      color: #e0e0e0;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    /* 顶部控制栏 */
+    .header-bar {
+      position: relative;
+      width: 100%;
+      padding: 15px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 5;
+      background: linear-gradient(to bottom, rgba(0,0,0,0.8), rgba(0,0,0,0));
+    }
+    
+    .btn-back {
+      background: rgba(255,255,255,0.15);
+      border: none;
+      color: white;
+      padding: 8px 16px;
+      border-radius: 18px;
+      font-size: 0.9rem;
+      cursor: pointer;
+      backdrop-filter: blur(5px);
+    }
+
+    /* 底部拍照操作栏 */
+    .controls-bar {
+      position: relative;
+      width: 100%;
+      padding: 30px 20px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 5;
+      background: linear-gradient(to top, rgba(0,0,0,0.9), rgba(0,0,0,0));
+    }
+
+    /* 拍照圆盘按钮 */
+    .btn-capture {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      background: white;
+      border: 6px solid rgba(255, 255, 255, 0.3);
+      cursor: pointer;
+      outline: none;
+      transition: all 0.2s ease;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .btn-capture:active {
+      transform: scale(0.9);
+      border-color: rgba(255, 255, 255, 0.5);
+    }
+    .btn-capture-inner {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: var(--bg-dark);
+      transition: background 0.2s;
+    }
+    .btn-capture:hover .btn-capture-inner {
+      background: var(--primary);
+    }
+
+    /* 预览结果模态框 */
+    .preview-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.95);
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+      padding: 20px;
+    }
+    .preview-modal.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .preview-image-container {
+      width: 100%;
+      max-width: 400px;
+      aspect-ratio: 85.6 / 54;
+      border: 2px solid var(--primary);
+      border-radius: 12px;
+      overflow: hidden;
+      margin-bottom: 30px;
+      background: #000;
+    }
+    #preview-img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    .preview-actions {
+      display: flex;
+      gap: 20px;
+      width: 100%;
+      max-width: 400px;
+    }
+    .btn-action {
+      flex: 1;
+      padding: 12px;
+      border-radius: 25px;
+      font-size: 1rem;
+      font-weight: bold;
+      border: none;
+      cursor: pointer;
+    }
+    .btn-cancel {
+      background: #333;
+      color: white;
+    }
+    .btn-upload {
+      background: var(--primary);
+      color: #121212;
+    }
+
+    /* 加载提示 */
+    .loading-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.8);
+      z-index: 200;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      display: none;
+    }
+    .spinner {
+      width: 50px;
+      height: 50px;
+      border: 5px solid rgba(255,255,255,0.1);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 15px;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="camera-container">
+    <!-- 1. 摄像头视频画面 -->
+    <video id="video" autoplay playsinline muted></video>
+
+    <!-- 顶部控制 -->
+    <div class="header-bar">
+      <button class="btn-back" onclick="stopCamera()">返回</button>
+      <div style="font-weight:bold; text-shadow:0 2px 4px rgba(0,0,0,0.8);">身份证正面识别</div>
+      <div style="width: 50px;"></div>
+    </div>
+
+    <!-- 2. 身份证镂空遮罩 -->
+    <div class="overlay">
+      <div class="id-card-frame" id="id-card-frame">
+        <span class="corner top-left"></span>
+        <span class="corner top-right"></span>
+        <span class="corner bottom-left"></span>
+        <span class="corner bottom-right"></span>
+      </div>
+    </div>
+
+    <!-- 3. 文字视觉提示 -->
+    <div class="tips-box">
+      <div class="tips-text">请将身份证正面放入框内并保持清晰</div>
+    </div>
+
+    <!-- 4. 底部操作栏 -->
+    <div class="controls-bar">
+      <button class="btn-capture" onclick="capturePhoto()" title="拍照">
+        <div class="btn-capture-inner"></div>
+      </button>
+    </div>
+  </div>
+
+  <!-- 5. 拍照裁剪后预览模态框 -->
+  <div class="preview-modal" id="preview-modal">
+    <h3 style="margin-bottom: 20px; color: var(--primary);">确认裁剪效果</h3>
+    <div class="preview-image-container">
+      <img src="" id="preview-img" alt="裁剪预览">
+    </div>
+    <div class="preview-actions">
+      <button class="btn-action btn-cancel" onclick="closePreview()">重拍</button>
+      <button class="btn-action btn-upload" onclick="uploadPhoto()">确认并识别</button>
+    </div>
+  </div>
+
+  <!-- 6. 上传中Loading遮罩 -->
+  <div class="loading-overlay" id="loading-overlay">
+    <div class="spinner"></div>
+    <p id="loading-text">正在上传并识别中，请稍候...</p>
+  </div>
+
+  <script>
+    const video = document.getElementById('video');
+    const previewModal = document.getElementById('preview-modal');
+    const previewImg = document.getElementById('preview-img');
+    const loadingOverlay = document.getElementById('loading-overlay');
+    const frame = document.getElementById('id-card-frame');
+    
+    let mediaStream = null;
+    let croppedBlob = null;
+
+    // 自动开启摄像头
+    window.addEventListener('DOMContentLoaded', startCamera);
+
+    // 启动后置摄像头流
+    async function startCamera() {
+      try {
+        const constraints = {
+          video: {
+            facingMode: "environment",
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          },
+          audio: false
+        };
+        
+        try {
+          mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+        } catch (e) {
+          console.warn("无法强制开启后置摄像头，尝试默认视频流...", e);
+          mediaStream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: false
+          });
+        }
+
+        video.srcObject = mediaStream;
+        await video.play();
+      } catch (err) {
+        console.error("摄像头开启失败: ", err);
+        alert("无法访问摄像头，请确认已授予摄像头权限！如果是PC端浏览器，请切换至移动端测试。");
+      }
+    }
+
+    // 停止摄像头流
+    function stopCamera() {
+      if (mediaStream) {
+        mediaStream.getTracks().forEach(track => track.stop());
+      }
+      history.back();
+    }
+
+    // 核心裁剪逻辑：拍照并仅仅截取相框内部对应的视频区域
+    function capturePhoto() {
+      if (!video.videoWidth || !video.videoHeight) {
+        alert("摄像头未准备就绪！");
+        return;
+      }
+
+      // 1. 获取视频的实际分辨率
+      const vw = video.videoWidth;
+      const vh = video.videoHeight;
+
+      // 2. 获取 video 元素在网页上的渲染宽高
+      const rect = video.getBoundingClientRect();
+      const displayW = rect.width;
+      const displayH = rect.height;
+
+      // 3. 计算视频在 object-fit: cover 规则下的缩放和剪裁偏移量
+      const displayRatio = displayW / displayH;
+      const videoRatio = vw / vh;
+
+      let scale = 1;
+      let dx = 0;
+      let dy = 0;
+
+      if (videoRatio > displayRatio) {
+        // 视频比容器更宽，高度贴合，横向两侧被剪裁
+        scale = displayH / vh;
+        dx = (vw * scale - displayW) / 2;
+      } else {
+        // 视频比容器更高，宽度贴合，纵向上下被剪裁
+        scale = displayW / vw;
+        dy = (vh * scale - displayH) / 2;
+      }
+
+      // 4. 获取相框在页面上的相对坐标和大小
+      const frameRect = frame.getBoundingClientRect();
+      const fx = frameRect.left - rect.left;
+      const fy = frameRect.top - rect.top;
+      const fw = frameRect.width;
+      const fh = frameRect.height;
+
+      // 5. 映射回视频流像素坐标
+      const sx = (fx + dx) / scale;
+      const sy = (fy + dy) / scale;
+      const sw = fw / scale;
+      const sh = fh / scale;
+
+      // 6. 用 Canvas 仅仅截取并绘制该区域
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+
+      const outputScale = 1.5;
+      canvas.width = sw * outputScale;
+      canvas.height = sh * outputScale;
+
+      ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+      previewImg.src = dataUrl;
+      previewModal.classList.add('active');
+
+      canvas.toBlob((blob) => {
+        croppedBlob = blob;
+      }, 'image/jpeg', 0.9);
+    }
+
+    // 关闭预览
+    function closePreview() {
+      previewModal.classList.remove('active');
+      previewImg.src = "";
+      croppedBlob = null;
+    }
+
+    // 发起上传与识别
+    async function uploadPhoto() {
+      if (!croppedBlob) {
+        alert("未生成有效的裁剪照片，请重试！");
+        return;
+      }
+
+      loadingOverlay.style.display = 'flex';
+      
+      const formData = new FormData();
+      formData.append('file', croppedBlob, 'idcard_cropped.jpg');
+
+      try {
+        const response = await fetch('/api/ocr_idcard', {
+          method: 'POST',
+          body: formData
+        });
+        const result = await response.json();
+
+        loadingOverlay.style.display = 'none';
+
+        if (response.ok && result.code === 200) {
+          alert(`识别成功！\n姓名: ${result.name}\n身份证号: ${result.id_card}\n民族: ${result.nation}`);
+          closePreview();
+        } else {
+          alert("识别失败: " + (result.detail || result.message || "未知错误"));
+        }
+      } catch (err) {
+        loadingOverlay.style.display = 'none';
+        console.error(err);
+        alert("网络请求出错，请检查服务端连接！");
+      }
+    }
+  </script>
+</body>
+</html>

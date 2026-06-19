@@ -1,35 +1,47 @@
 import os
 import sys
+import logging
+from logging.handlers import RotatingFileHandler
 
 # 自动双向重定向 stdout 和 stderr 到 app_stdout.log 中，保留控制台输出的同时记录到文件
+# 日志按 10MB 轮转、最多保留 5 个历史文件，避免长期运行无限增长（N6）
 class DualLogger:
     def __init__(self, filepath):
         self.terminal = sys.stdout
-        self.log = open(filepath, "a", encoding="utf-8", buffering=1)
+        self.handler = RotatingFileHandler(
+            filepath, maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8"
+        )
+        self.handler.setFormatter(logging.Formatter("%(message)s"))
     def write(self, message):
         self.terminal.write(message)
-        self.log.write(message)
+        self.handler.stream.write(message)
     def flush(self):
         self.terminal.flush()
-        self.log.flush()
+        self.handler.flush()
 
 sys.stdout = DualLogger("app_stdout.log")
 sys.stderr = DualLogger("app_stdout.log")
 
+import os
+import io
+import re
+import json
 import sqlite3
 import shutil
 import hmac
 import hashlib
 import uuid
 import time
-from datetime import datetime
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Header, Depends
+import zipfile
+import urllib.parse
+from contextlib import contextmanager
+from datetime import datetime, timedelta
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Header, Depends, Response
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import openpyxl
 import csv
-import zipfile
 
 # 引入 OCR 核心
 try:
@@ -52,30 +64,54 @@ except Exception as e:
 
 DB_PATH = 'peixun.db'
 UPLOAD_DIR = 'uploads'
+TEMP_IDS_DIR = os.path.join(UPLOAD_DIR, 'temp_ids')
+
+# 默认考试科目（供首次初始化及回退使用）。R3：原本在 5 处重复，现统一为常量。
+DEFAULT_EXAM_SUBJECTS = [
+    {"name": "普工", "file": "普工试题(1).xlsx"},
+    {"name": "焊工", "file": "焊工题库(1).xlsx"},
+    {"name": "探伤", "file": "探伤.xlsx"},
+    {"name": "高处作业", "file": "高处作业(1).xlsx"},
+    {"name": "吊装作业", "file": "吊装作业.xlsx"},
+    {"name": "电工", "file": "电工题库.xlsx"},
+    {"name": "叉车", "file": "叉车工.xlsx"}
+]
+
+def get_exam_file_map() -> dict:
+    """读取 configs 中的考试科目配置，返回 {科目名: 文件名} 映射；缺失或损坏时回退默认。"""
+    val = get_config('exam_subjects', '')
+    if val:
+        try:
+            subjects = json.loads(val)
+            return {s['name']: s['file'] for s in subjects}
+        except Exception:
+            pass
+    return {s['name']: s['file'] for s in DEFAULT_EXAM_SUBJECTS}
+
+def get_exam_subjects_list() -> list:
+    """读取 configs 中的考试科目完整列表；缺失或损坏时回退默认。"""
+    val = get_config('exam_subjects', '')
+    if val:
+        try:
+            subjects = json.loads(val)
+            if isinstance(subjects, list):
+                return subjects
+        except Exception:
+            pass
+    return [dict(s) for s in DEFAULT_EXAM_SUBJECTS]
+
+def save_exam_subjects_list(subjects: list):
+    """把考试科目列表写回 configs。"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("INSERT OR REPLACE INTO configs (key, value) VALUES ('exam_subjects', ?)", (json.dumps(subjects, ensure_ascii=False),))
+        conn.commit()
 
 # 考试题库内存缓存，结构: { exam_type: { "mtime": 12345, "answers": { ... } } }
 EXAM_QUESTIONS_CACHE = {}
 
 def get_exam_questions_answers(exam_type: str) -> dict:
-    import json
-    val = get_config('exam_subjects', '')
-    if val:
-        try:
-            subjects = json.loads(val)
-            exam_file_map = {s['name']: s['file'] for s in subjects}
-        except Exception:
-            exam_file_map = {}
-    else:
-        exam_file_map = {
-            '普工': '普工试题(1).xlsx',
-            '焊工': '焊工题库(1).xlsx',
-            '探伤': '探伤.xlsx',
-            '高处作业': '高处作业(1).xlsx',
-            '吊装作业': '吊装作业.xlsx',
-            '电工': '电工题库.xlsx',
-            '叉车': '叉车工.xlsx'
-        }
-        
+    exam_file_map = get_exam_file_map()
     file_name = exam_file_map.get(exam_type)
     if not file_name:
         raise HTTPException(status_code=400, detail="未知的考试类型")
@@ -110,7 +146,12 @@ def get_exam_questions_answers(exam_type: str) -> dict:
     }
     return shiti_answers
 
-SECRET_KEY = b"PEIXUN_SYSTEM_SECRET_SIGNING_KEY_2026"
+# S4: Token 签名密钥优先从环境变量读取，避免硬编码进源码造成泄露后可伪造任意 Token。
+# 未设置环境变量时使用一个进程级随机值（重启后所有已签发 Token 失效），保证默认安全。
+SECRET_KEY = os.environ.get("PEIXUN_SECRET_KEY", "").encode("utf-8")
+if not SECRET_KEY:
+    SECRET_KEY = os.urandom(32)
+    print("[Warning] 未设置环境变量 PEIXUN_SECRET_KEY，已使用随机密钥（重启后所有登录将失效）。")
 
 def encrypt_pwd(raw_pwd: str) -> str:
     salt = uuid.uuid4().hex
@@ -123,6 +164,9 @@ def verify_pwd(raw_pwd: str, stored_pwd_str: str) -> bool:
         check_hashed = hashlib.sha256((raw_pwd + salt).encode('utf-8')).hexdigest()
         return hmac.compare_digest(check_hashed, hashed)
     except ValueError:
+        # L8: 历史明文密码兼容分支。注册接口已统一使用 encrypt_pwd 加盐哈希，
+        # 此分支仅兼容迁移前的明文记录——登录成功后 login 接口会自动升级为哈希。
+        # 待确认数据库无明文密码后可移除此分支。
         return hmac.compare_digest(raw_pwd, stored_pwd_str)
 
 def generate_token(user_id: int, role: str, username: str) -> str:
@@ -155,20 +199,22 @@ def verify_token(token: str) -> dict:
 
 def get_config(key: str, default: str) -> str:
     try:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("SELECT value FROM configs WHERE key = ?", (key,))
-        row = cursor.fetchone()
-        conn.close()
-        return row[0] if row else default
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT value FROM configs WHERE key = ?", (key,))
+            row = cursor.fetchone()
+            return row[0] if row else default
     except Exception:
         return default
 
+def beijing_now() -> datetime:
+    """统一返回北京时间 (UTC+8) 当前时间，不受服务器本地时区影响（L4）。"""
+    return datetime.utcnow() + timedelta(hours=8)
+
 def is_exam_open() -> bool:
-    from datetime import timedelta
     # 强制以北京时间 (UTC+8) 校验，不受服务器本地时区设置影响
-    beijing_now = datetime.utcnow() + timedelta(hours=8)
-    now_time = beijing_now.time()
+    now_dt = beijing_now()
+    now_time = now_dt.time()
     
     start_str = get_config('exam_start_time', '08:00:00')
     end_str = get_config('exam_end_time', '12:00:00')
@@ -181,6 +227,169 @@ def is_exam_open() -> bool:
         end_time = datetime.strptime("12:00:00", "%H:%M:%S").time()
         
     return start_time <= now_time <= end_time
+
+# R5: 统一的数据库连接上下文管理器，自动关闭连接。
+@contextmanager
+def get_db():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+# S5: 标准 18 位身份证号校验（地址码 6 位 + 8 位生日合法 + 3 位顺序码 + 1 位 ISO 7064 Mod 11 校验码）。
+# 替换原先错误且无依据的“第 11 位必须为 0 或 1”判断（该位是出生日首位，合法范围 0-3）。
+_ID_CARD_WEIGHTS = (7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2)
+_ID_CARD_CHECK = ('1', '0', 'X', '9', '8', '7', '6', '5', '4', '3', '2')
+
+def validate_id_card(id_card: str) -> bool:
+    """校验身份证号合法性，合法返回 True。"""
+    if not id_card or len(id_card) != 18:
+        return False
+    if not id_card[:17].isdigit():
+        return False
+    # 校验生日合法性（支持 1800-2099 年）
+    try:
+        birthday = datetime.strptime(id_card[6:14], "%Y%m%d")
+        if birthday.year < 1800 or birthday.year > 2099:
+            return False
+    except ValueError:
+        return False
+    total = sum(int(id_card[i]) * _ID_CARD_WEIGHTS[i] for i in range(17))
+    return _ID_CARD_CHECK[total % 11] == id_card[17].upper()
+
+# S2: 校验前端回传的身份证裁剪图路径确实位于 uploads/temp_ids 目录内，
+# 防止攻击者传任意服务器路径（如 peixun.db / 登记卡.docx）被复制并经 /uploads 公开下载。
+def safe_temp_id_path(path: str) -> bool:
+    if not path:
+        return False
+    base = os.path.realpath(TEMP_IDS_DIR)
+    real = os.path.realpath(path)
+    # 必须在 temp_ids 目录之下，且文件真实存在
+    return real.startswith(base + os.sep) and os.path.isfile(real)
+
+# R4: 过滤字符串中不能用于文件名的字符（跨平台），用于导出文件命名。
+_FILENAME_INVALID_CHARS = r'\/:*?"<>|'
+
+def safe_filename_part(s: str) -> str:
+    if not s:
+        return ""
+    return "".join(c for c in str(s) if c not in _FILENAME_INVALID_CHARS)
+
+# 门禁/恢复导入表 CSV 的说明注释（无法读取 06.03.csv 模板时回退使用）。
+_GATE_CSV_DEFAULT_COMMENTS = [
+    "・ *号为必填项；,,,,,,,,,\n",
+    "・ 填写数字编码代替属性值；,,,,,,,,,\n",
+    "・ 使用EXCEL编辑导入文件时，请将单元格的格式修改为文本格式，避免数字文本自动转换为科学计数文本；,,,,,,,,,\n",
+    ",,,,,,,,,\n",
+    "1、姓名*：1～32个字符；不能包含 ' / \\: * ? \" < > | 这些特殊字符；,,,,,,,,,\n",
+    "2、性别*：1（男）、2（女）、0（未知）；,,,,,,,,,\n",
+    "3、组织路径*：填写从选择导入的组织名称开始，至目标组织的完整名称路径；,,,,,,,,,\n",
+    "4、证件类型*：111（身份证）、414（护照）、113（户口簿）、335（驾驶证）、131（工作证）、133（学生证）、114（军官证）、990（其他）；,,,,,,,,,\n",
+    "5、证件号码*：1~20个字符；只允许输入数字和字母；,,,,,,,,,\n",
+    "6、工号：1~32个字符；只允许输入数字、字母和汉字；,,,,,,,,,\n",
+    "7、手机号码：1-20位数字；,,,,,,,,,\n",
+    "8、拼音：人员姓名拼音；,,,,,,,,,\n",
+    "9、所属区域：0 ～128个字符；不能包含 ' / \\ : * ? \" < > | 这些特殊字符；,,,,,,,,,\n",
+    "10、卡号：8~20个字符；只允许输入数字和大写字母。,,,,,,,,,\n"
+]
+
+def _load_gate_csv_comments() -> list:
+    """优先读取 06.03.csv 模板首部说明注释，失败则使用默认注释。"""
+    template_path = '06.03.csv'
+    if os.path.exists(template_path):
+        try:
+            with open(template_path, 'r', encoding='gbk') as f:
+                lines = f.readlines()
+                for idx, line in enumerate(lines):
+                    if '*姓名' in line:
+                        return lines[:idx]
+        except Exception:
+            pass
+    return list(_GATE_CSV_DEFAULT_COMMENTS)
+
+def build_gate_csv(records) -> bytes:
+    """根据 records（sqlite Row 列表，需含 name/gender/company/region_auth/id_card/phone）
+    生成 GBK 编码的门禁导入表 CSV 字节，供下载接口复用。"""
+    csv_output = io.StringIO()
+    csv_output.write("".join(_load_gate_csv_comments()))
+    writer = csv.writer(csv_output)
+    writer.writerow(['*姓名', '*性别', '*组织路径', '*证件类型', '*证件号码', '工号', '手机号码', '拼音', '所属区域', '卡号'])
+    for r in records:
+        gender_code = '0'
+        if r['gender'] == '男':
+            gender_code = '1'
+        elif r['gender'] == '女':
+            gender_code = '2'
+        company = r['company'] if r['company'] else ""
+        region = r['region_auth'] if r['region_auth'] else ""
+        org_path = f"{company}/{region}" if region else company
+        writer.writerow([r['name'], gender_code, org_path, '111', r['id_card'], '', r['phone'], '', region, ''])
+    csv_data = csv_output.getvalue().encode('gbk', errors='ignore')
+    csv_output.close()
+    return csv_data
+
+def pack_photos_zip(records) -> bytes:
+    """根据 records（需含 photo_path/name/id_card）生成照片压缩包字节，自动处理文件名净化与重名。"""
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        added_filenames = set()
+        for r in records:
+            photo_path = r['photo_path']
+            if not photo_path or not os.path.exists(photo_path):
+                continue
+            file_ext = os.path.splitext(photo_path)[1] or '.jpg'
+            base_filename = f"{safe_filename_part(r['name'])}_{safe_filename_part(r['id_card'])}"
+            filename = f"{base_filename}{file_ext}"
+            counter = 1
+            while filename in added_filenames:
+                filename = f"{base_filename}_{counter}{file_ext}"
+                counter += 1
+            added_filenames.add(filename)
+            zip_file.write(photo_path, arcname=filename)
+    return zip_buffer.getvalue()
+
+def _csv_download_response(content: bytes, filename: str):
+    """生成带 UTF-8 文件名的 CSV 下载响应。"""
+    return Response(
+        content=content,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename*=utf-8''{urllib.parse.quote(filename)}"}
+    )
+
+def _zip_download_response(content: bytes, filename: str):
+    """生成带 UTF-8 文件名的 ZIP 下载响应。"""
+    return Response(
+        content=content,
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename*=utf-8''{urllib.parse.quote(filename)}"}
+    )
+
+def parse_id_list(ids: str) -> list:
+    """把 "1,2,3" 解析为 [1,2,3]，校验非空。"""
+    if not ids:
+        raise HTTPException(status_code=400, detail="请选择需要下载的记录")
+    id_list = [int(x) for x in ids.split(',') if x.strip()]
+    if not id_list:
+        raise HTTPException(status_code=400, detail="没有勾选任何有效的人员记录")
+    return id_list
+
+def fetch_records_by_ids(cursor, id_list: list, gate_only: bool):
+    """按 id 列表查询 records（含 company），gate_only=True 时仅查门禁恢复待处理记录。
+    返回 (records, placeholders)。"""
+    placeholders = ','.join(['?'] * len(id_list))
+    where = f"r.id IN ({placeholders})"
+    if gate_only:
+        where += " AND r.gate_restore_status = 'pending'"
+    cursor.execute(f'''
+    SELECT r.*, u.company as company
+    FROM records r
+    LEFT JOIN users u ON r.user_id = u.id
+    WHERE {where}
+    ORDER BY r.is_gate_downloaded ASC, r.created_at DESC
+    ''', id_list)
+    return cursor.fetchall(), placeholders
 
 # 初始化数据库
 def init_db():
@@ -339,20 +548,41 @@ app = FastAPI(title="培训信息录入系统")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,  # S5: 系统通过 Header 传 Token，无需 cookie 凭证；与 * 同用更安全
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 @app.middleware("http")
 async def log_requests(request, call_next):
-    import time, sys
     start_time = time.time()
     response = await call_next(request)
     duration = time.time() - start_time
-    print(f"DEBUG_REQ: {request.method} {request.url.path} {request.query_params} - Status: {response.status_code} - Duration: {duration:.2f}s")
+    # S4: 脱敏 query_params 中的 token/authorization，避免凭证泄露到日志文件
+    safe_qp = ""
+    if request.query_params:
+        safe_items = []
+        for k, v in request.query_params.multi_items():
+            if k.lower() in ("token", "authorization"):
+                safe_items.append(f"{k}=***")
+            else:
+                safe_items.append(f"{k}={v}")
+        safe_qp = "&".join(safe_items)
+    print(f"DEBUG_REQ: {request.method} {request.url.path} {safe_qp} - Status: {response.status_code} - Duration: {duration:.2f}s")
     sys.stdout.flush()
     return response
+
+# S3: 保护 uploads 下的敏感目录（身份证照片、登记卡 Word、临时身份证图），
+# 任何人访问这些资源必须携带有效 token，防止身份证照片被任意下载
+@app.middleware("http")
+async def protect_uploads(request, call_next):
+    path = request.url.path
+    protected_prefixes = ("/uploads/idcards/", "/uploads/cards/", "/uploads/temp_ids/")
+    if any(path.startswith(p) for p in protected_prefixes):
+        token = request.query_params.get("token") or request.headers.get("authorization")
+        if not token or not verify_token(token):
+            return JSONResponse(status_code=401, content={"detail": "未授权访问该资源"})
+    return await call_next(request)
 
 # 身份证解析逻辑
 def parse_id_card(id_card_num):
@@ -398,6 +628,8 @@ def get_current_user(authorization: str = Header(None)):
             raise HTTPException(status_code=403, detail="账号尚未被审批通过，请耐心等待")
             
         return user
+    except HTTPException:
+        raise  # L1: 保留上面主动抛出的具体错误信息（如"账号尚未审批"），不被通用异常吞掉
     except Exception:
         raise HTTPException(status_code=401, detail="授权认证失败")
 
@@ -409,7 +641,8 @@ def get_admin_user(current_user = Depends(get_current_user)):
 # ---------------- API 接口 ----------------
 
 @app.post("/api/save_ppt")
-def save_ppt(html_content: str = Form(...)):
+def save_ppt(html_content: str = Form(...), admin = Depends(get_admin_user)):
+    # S1: 该接口可直接覆盖 static/ppt.html 内容，必须限定管理员，避免匿名篡改/XSS。
     try:
         static_dir = os.path.abspath("static")
         ppt_path = os.path.abspath(os.path.join(static_dir, "ppt.html"))
@@ -417,7 +650,8 @@ def save_ppt(html_content: str = Form(...)):
             f.write(html_content)
         return {"code": 200, "message": "保存成功！"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"保存失败: {str(e)}")
+        print(f"[Error] save_ppt 失败: {e}")
+        raise HTTPException(status_code=500, detail="保存失败")
 
 @app.post("/api/register")
 def register(username: str = Form(...), password: str = Form(...), real_name: str = Form(...), company: str = Form(...)):
@@ -662,7 +896,8 @@ def admin_update_user(
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e
-        raise HTTPException(status_code=500, detail=f"数据库更新失败: {str(e)}")
+        print(f"[Error] 管理员更新用户失败: {e}")
+        raise HTTPException(status_code=500, detail="用户信息更新失败")
     finally:
         conn.close()
 
@@ -713,7 +948,8 @@ async def api_ocr_idcard(file: UploadFile = File(...)):
         if os.path.exists(temp_path):
             try: os.remove(temp_path)
             except: pass
-        raise HTTPException(status_code=500, detail=f"身份证识别错误: {str(e)}")
+        print(f"[Error] OCR 识别失败: {e}")
+        raise HTTPException(status_code=500, detail="身份证识别失败，请重试或手动输入")
 
 @app.get("/api/record/download_word/{record_id}")
 def download_word(record_id: int, token: str = None, authorization: str = Header(None)):
@@ -746,9 +982,8 @@ def download_word(record_id: int, token: str = None, authorization: str = Header
         
     raw_name = row['name'] or "用户"
     download_filename = f"{raw_name}登记卡.docx"
-    from urllib.parse import quote
     headers = {
-        "Content-Disposition": f"attachment; filename*=utf-8''{quote(download_filename)}"
+        "Content-Disposition": f"attachment; filename*=utf-8''{urllib.parse.quote(download_filename)}"
     }
     return FileResponse(
         word_path, 
@@ -771,9 +1006,9 @@ async def create_record(
     photo: UploadFile = File(...),
     current_user = Depends(get_current_user)
 ):
-    if len(id_card) != 18 or id_card[10] not in ('0', '1'):
-        raise HTTPException(status_code=400, detail="身份证号码格式不正确（必须为18位且第11位是0或1）")
-        
+    if not validate_id_card(id_card):
+        raise HTTPException(status_code=400, detail="身份证号码格式不正确")
+
     # 解析身份证
     gender, age = parse_id_card(id_card)
     
@@ -809,7 +1044,7 @@ async def create_record(
     # 自动生成登记卡 Word
     word_path = None
     perm_id_img_path = None
-    if id_card_img_path and os.path.exists(id_card_img_path):
+    if safe_temp_id_path(id_card_img_path):
         try:
             # 持久化身份证照片
             idcard_save_dir = "uploads/idcards"
@@ -857,8 +1092,7 @@ def get_user_records(name: str = None, current_user = Depends(get_current_user))
         conditions.append("name LIKE ?")
         params.append(f"%{name.strip()}%")
     else:
-        from datetime import datetime, timedelta
-        ten_days_ago = (datetime.now() - timedelta(days=9)).strftime("%Y-%m-%d 00:00:00")
+        ten_days_ago = (beijing_now() - timedelta(days=9)).strftime("%Y-%m-%d 00:00:00")
         conditions.append("created_at >= ?")
         params.append(ten_days_ago)
         
@@ -888,12 +1122,12 @@ async def update_record(
     photo: UploadFile = File(None),
     current_user = Depends(get_current_user)
 ):
-    if len(id_card) != 18 or id_card[10] not in ('0', '1'):
-        raise HTTPException(status_code=400, detail="身份证号码格式不正确（必须为18位且第11位是0或1）")
-        
+    if not validate_id_card(id_card):
+        raise HTTPException(status_code=400, detail="身份证号码格式不正确")
+
     # 解析身份证
     gender, age = parse_id_card(id_card)
-    
+
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
@@ -934,7 +1168,7 @@ async def update_record(
     perm_id_img_path = os.path.join(idcard_save_dir, f"{id_card}.png").replace('\\', '/')
     
     # 1. 检查是否有新上传并裁剪的身份证
-    if id_card_img_path and os.path.exists(id_card_img_path):
+    if safe_temp_id_path(id_card_img_path):
         try:
             # 覆盖原永久照片
             shutil.copy2(id_card_img_path, perm_id_img_path)
@@ -983,8 +1217,7 @@ def get_approved_companies(admin = Depends(get_admin_user)):
     cursor.execute("SELECT DISTINCT company FROM users WHERE role != 'admin' AND status = 'approved' AND company IS NOT NULL AND company != ''")
     all_companies = [row[0] for row in cursor.fetchall()]
     
-    from datetime import datetime, timedelta
-    today_bj = (datetime.utcnow() + timedelta(hours=8)).strftime("%Y-%m-%d")
+    today_bj = beijing_now().strftime("%Y-%m-%d")
     cursor.execute("SELECT DISTINCT company FROM exam_records WHERE date(created_at, '+8 hours') = ?", (today_bj,))
     today_companies = set([row[0] for row in cursor.fetchall()])
     conn.close()
@@ -1034,8 +1267,7 @@ def get_all_records(start_date: str = None, end_date: str = None, company: str =
     
     # 默认展示最近10天的数据，如果通过日历查询、输入名字搜索或按单位筛选，则不受此默认限制
     if not start and not end and not (name and name.strip()) and not (company and company.strip()):
-        from datetime import timedelta
-        today = datetime.now()
+        today = beijing_now()
         ten_days_ago = today - timedelta(days=9)
         start = ten_days_ago.strftime("%Y-%m-%d")
         end = today.strftime("%Y-%m-%d")
@@ -1096,281 +1328,60 @@ def get_all_records(start_date: str = None, end_date: str = None, company: str =
 # 门禁导出 - 仅 CSV 导入表 (并更新已下载状态)
 @app.get("/api/admin/export/gate/csv")
 def export_gate_csv(ids: str = None, admin = Depends(get_admin_user)):
-    if not ids:
-        raise HTTPException(status_code=400, detail="请选择需要下载的记录")
-        
-    id_list = [int(x) for x in ids.split(',') if x.strip()]
-    if not id_list:
-        raise HTTPException(status_code=400, detail="没有勾选任何有效的人员记录")
-        
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    
-    # 获取选中的记录
-    placeholders = ','.join(['?'] * len(id_list))
-    cursor.execute(f'''
-    SELECT r.*, u.company as company 
-    FROM records r 
-    LEFT JOIN users u ON r.user_id = u.id 
-    WHERE r.id IN ({placeholders})
-    ORDER BY r.is_gate_downloaded ASC, r.created_at DESC
-    ''', id_list)
-    records = cursor.fetchall()
-    
-    if not records:
-        conn.close()
-        raise HTTPException(status_code=404, detail="未找到对应的记录")
-        
-    # 生成 CSV
-    import io
-    csv_output = io.StringIO()
-    writer = csv.writer(csv_output)
-    
-    comments = [
-        "・ *号为必填项；,,,,,,,,,\n",
-        "・ 填写数字编码代替属性值；,,,,,,,,,\n",
-        "・ 使用EXCEL编辑导入文件时，请将单元格的格式修改为文本格式，避免数字文本自动转换为科学计数文本；,,,,,,,,,\n",
-        ",,,,,,,,,\n",
-        "1、姓名*：1～32个字符；不能包含 ' / \\: * ? \" < > | 这些特殊字符；,,,,,,,,,\n",
-        "2、性别*：1（男）、2（女）、0（未知）；,,,,,,,,,\n",
-        "3、组织路径*：填写从选择导入 of 组织名称开始，至目标组织的完整名称路径；,,,,,,,,,\n",
-        "4、证件类型*：111（身份证）、414（护照）、113（户口簿）、335（驾驶证）、131（工作证）、133（学生证）、114（军官证）、990（其他）；,,,,,,,,,\n",
-        "5、证件号码*：1~20个字符；只允许输入数字和字母；,,,,,,,,,\n",
-        "6、工号：1~32个字符；只允许输入数字、字母和汉字；,,,,,,,,,\n",
-        "7、手机号码：1-20位数字；,,,,,,,,,\n",
-        "8、拼音：人员姓名拼音；,,,,,,,,,\n",
-        "9、所属区域：0 ～128个字符；不能包含 ' / \\ : * ? \" < > | 这些特殊字符；,,,,,,,,,\n",
-        "10、卡号：8~20个字符；只允许输入数字和大写字母。,,,,,,,,,\n"
-    ]
-    
-    template_path = '06.03.csv'
-    if os.path.exists(template_path):
-        try:
-            with open(template_path, 'r', encoding='gbk') as f:
-                lines = f.readlines()
-                header_index = 0
-                for idx, line in enumerate(lines):
-                    if '*姓名' in line:
-                         header_index = idx
-                         break
-                comments = lines[:header_index]
-        except Exception:
-            pass
-            
-    csv_content = "".join(comments)
-    csv_output.write(csv_content)
-    writer.writerow(['*姓名', '*性别', '*组织路径', '*证件类型', '*证件号码', '工号', '手机号码', '拼音', '所属区域', '卡号'])
-    
-    for r in records:
-        gender_code = '0'
-        if r['gender'] == '男':
-            gender_code = '1'
-        elif r['gender'] == '女':
-            gender_code = '2'
-            
-        org_path = f"{r['company']}/{r['region_auth']}" if r['region_auth'] else r['company']
-        
-        writer.writerow([
-            r['name'],
-            gender_code,
-            org_path,
-            '111',
-            r['id_card'],
-            '',
-            r['phone'],
-            '',
-            r['region_auth'],
-            ''
-        ])
-        
-    csv_data = csv_output.getvalue().encode('gbk', errors='ignore')
-    csv_output.close()
-    
-    # 将门禁下载状态更新为已下载(1)
-    cursor.execute(f"UPDATE records SET is_gate_downloaded = 1 WHERE id IN ({placeholders})", id_list)
-    conn.commit()
-    conn.close()
-    
-    from fastapi import Response
-    import urllib.parse
-    
-    safe_filename = urllib.parse.quote("培训人员导入表.csv")
-    headers = {
-        "Content-Disposition": f"attachment; filename*=utf-8''{safe_filename}"
-    }
-    return Response(content=csv_data, media_type="text/csv", headers=headers)
+    id_list = parse_id_list(ids)
+    with get_db() as conn:
+        cursor = conn.cursor()
+        records, placeholders = fetch_records_by_ids(cursor, id_list, gate_only=False)
+        if not records:
+            raise HTTPException(status_code=404, detail="未找到对应的记录")
+        csv_data = build_gate_csv(records)
+        # 将门禁下载状态更新为已下载(1)
+        cursor.execute(f"UPDATE records SET is_gate_downloaded = 1 WHERE id IN ({placeholders})", id_list)
+        conn.commit()
+    return _csv_download_response(csv_data, "培训人员导入表.csv")
 
 # 门禁导出 - 仅照片压缩包
 @app.get("/api/admin/export/gate/photos")
 def export_gate_photos(ids: str = None, admin = Depends(get_admin_user)):
-    if not ids:
-        raise HTTPException(status_code=400, detail="请选择需要下载的记录")
-        
-    id_list = [int(x) for x in ids.split(',') if x.strip()]
-    if not id_list:
-        raise HTTPException(status_code=400, detail="没有勾选任何有效的人员记录")
-        
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    
-    placeholders = ','.join(['?'] * len(id_list))
-    cursor.execute(f'''
-    SELECT r.*, u.company as company 
-    FROM records r 
-    LEFT JOIN users u ON r.user_id = u.id 
-    WHERE r.id IN ({placeholders})
-    ORDER BY r.is_gate_downloaded ASC, r.created_at DESC
-    ''', id_list)
-    records = cursor.fetchall()
-    conn.close()
-    
+    id_list = parse_id_list(ids)
+    with get_db() as conn:
+        cursor = conn.cursor()
+        records, _ = fetch_records_by_ids(cursor, id_list, gate_only=False)
     if not records:
         raise HTTPException(status_code=404, detail="未找到对应的记录")
-        
-    import io
-    import zipfile
-    zip_buffer = io.BytesIO()
-    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-        added_filenames = set()
-        for r in records:
-            photo_path = r['photo_path']
-            if not photo_path or not os.path.exists(photo_path):
-                continue
-                
-            file_ext = os.path.splitext(photo_path)[1]
-            if not file_ext:
-                file_ext = '.jpg'
-                
-            safe_name = "".join([c for c in r['name'] if c not in r'\/:*?"<>|'])
-            safe_id = "".join([c for c in r['id_card'] if c not in r'\/:*?"<>|'])
-            base_filename = f"{safe_name}_{safe_id}"
-            filename = f"{base_filename}{file_ext}"
-            
-            counter = 1
-            while filename in added_filenames:
-                filename = f"{base_filename}_{counter}{file_ext}"
-                counter += 1
-            added_filenames.add(filename)
-            zip_file.write(photo_path, arcname=filename)
-            
-    from fastapi import Response
-    import urllib.parse
-    
-    safe_filename = urllib.parse.quote("培训人员照片.zip")
-    headers = {
-        "Content-Disposition": f"attachment; filename*=utf-8''{safe_filename}"
-    }
-    return Response(content=zip_buffer.getvalue(), media_type="application/zip", headers=headers)
+    return _zip_download_response(pack_photos_zip(records), "培训人员照片.zip")
 
 # 门禁下载旧版兼容接口 (CSV 导入表和照片打包，支持按 ids 筛选，并更新已下载状态)
 @app.get("/api/admin/export/gate")
 def export_gate_old_compatible(ids: str = None, admin = Depends(get_admin_user)):
-    if not ids:
-        raise HTTPException(status_code=400, detail="请选择需要下载的记录")
-        
-    id_list = [int(x) for x in ids.split(',') if x.strip()]
-    if not id_list:
-        raise HTTPException(status_code=400, detail="没有勾选任何有效的人员记录")
-        
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    
-    placeholders = ','.join(['?'] * len(id_list))
-    cursor.execute(f'''
-    SELECT r.*, u.company as company 
-    FROM records r 
-    LEFT JOIN users u ON r.user_id = u.id 
-    WHERE r.id IN ({placeholders})
-    ORDER BY r.is_gate_downloaded ASC, r.created_at DESC
-    ''', id_list)
-    records = cursor.fetchall()
-    
-    if not records:
-        conn.close()
-        raise HTTPException(status_code=404, detail="未找到对应的记录")
-        
-    import io
-    csv_output = io.StringIO()
-    writer = csv.writer(csv_output)
-    comments = [
-        "・ *号为必填项；,,,,,,,,,\n",
-        "・ 填写数字编码代替属性值；,,,,,,,,,\n",
-        "・ 使用EXCEL编辑导入文件时，请将单元格的格式修改为文本格式，避免数字文本自动转换为科学计数文本；,,,,,,,,,\n",
-        ",,,,,,,,,\n",
-        "1、姓名*：1～32个字符；不能包含 ' / \\: * ? \" < > | 这些特殊字符；,,,,,,,,,\n",
-        "2、性别*：1（男）、2（女）、0（未知）；,,,,,,,,,\n",
-        "3、组织路径*：填写从选择导入 of 组织名称开始，至目标组织的完整名称路径；,,,,,,,,,\n",
-        "4、证件类型*：111（身份证）、414（护照）、113（户口簿）、335（驾驶证）、131（工作证）、133（学生证）、114（军官证）、990（其他）；,,,,,,,,,\n",
-        "5、证件号码*：1~20个字符；只允许输入数字和字母；,,,,,,,,,\n",
-        "6、工号：1~32个字符；只允许输入数字、字母和汉字；,,,,,,,,,\n",
-        "7、手机号码：1-20位数字；,,,,,,,,,\n",
-        "8、拼音：人员姓名拼音；,,,,,,,,,\n",
-        "9、所属区域：0 ～128个字符；不能包含 ' / \\ : * ? \" < > | 这些特殊字符；,,,,,,,,,\n",
-        "10、卡号：8~20个字符；只允许输入数字和大写字母。,,,,,,,,,\n"
-    ]
-    template_path = '06.03.csv'
-    if os.path.exists(template_path):
-        try:
-            with open(template_path, 'r', encoding='gbk') as f:
-                lines = f.readlines()
-                header_index = 0
-                for idx, line in enumerate(lines):
-                    if '*姓名' in line:
-                         header_index = idx
-                         break
-                comments = lines[:header_index]
-        except Exception:
-            pass
-    csv_content = "".join(comments)
-    csv_output.write(csv_content)
-    writer.writerow(['*姓名', '*性别', '*组织路径', '*证件类型', '*证件号码', '工号', '手机号码', '拼音', '所属区域', '卡号'])
-    
-    for r in records:
-        gender_code = '0'
-        if r['gender'] == '男':
-            gender_code = '1'
-        elif r['gender'] == '女':
-            gender_code = '2'
-        org_path = f"{r['company']}/{r['region_auth']}" if r['region_auth'] else r['company']
-        writer.writerow([r['name'], gender_code, org_path, '111', r['id_card'], '', r['phone'], '', r['region_auth'], ''])
-    csv_data = csv_output.getvalue().encode('gbk', errors='ignore')
-    csv_output.close()
-    
-    import zipfile
-    zip_buffer = io.BytesIO()
-    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-        zip_file.writestr("培训人员导入表.csv", csv_data)
-        added_filenames = set()
-        for r in records:
-            photo_path = r['photo_path']
-            if not photo_path or not os.path.exists(photo_path):
-                continue
-            file_ext = os.path.splitext(photo_path)[1] or '.jpg'
-            safe_name = "".join([c for c in r['name'] if c not in r'\/:*?"<>|'])
-            safe_id = "".join([c for c in r['id_card'] if c not in r'\/:*?"<>|'])
-            base_filename = f"{safe_name}_{safe_id}"
-            filename = f"{base_filename}{file_ext}"
-            counter = 1
-            while filename in added_filenames:
-                filename = f"{base_filename}_{counter}{file_ext}"
-                counter += 1
-            added_filenames.add(filename)
-            zip_file.write(photo_path, arcname=filename)
-            
-    cursor.execute(f"UPDATE records SET is_gate_downloaded = 1 WHERE id IN ({placeholders})", id_list)
-    conn.commit()
-    conn.close()
-    
-    from fastapi import Response
-    import urllib.parse
-    safe_filename = urllib.parse.quote("门禁系统导入包.zip")
-    headers = {
-        "Content-Disposition": f"attachment; filename*=utf-8''{safe_filename}"
-    }
-    return Response(content=zip_buffer.getvalue(), media_type="application/zip", headers=headers)
+    id_list = parse_id_list(ids)
+    with get_db() as conn:
+        cursor = conn.cursor()
+        records, placeholders = fetch_records_by_ids(cursor, id_list, gate_only=False)
+        if not records:
+            raise HTTPException(status_code=404, detail="未找到对应的记录")
+        csv_data = build_gate_csv(records)
+        # CSV 导入表 + 照片合并打包
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            zip_file.writestr("培训人员导入表.csv", csv_data)
+            added_filenames = set()
+            for r in records:
+                photo_path = r['photo_path']
+                if not photo_path or not os.path.exists(photo_path):
+                    continue
+                file_ext = os.path.splitext(photo_path)[1] or '.jpg'
+                base_filename = f"{safe_filename_part(r['name'])}_{safe_filename_part(r['id_card'])}"
+                filename = f"{base_filename}{file_ext}"
+                counter = 1
+                while filename in added_filenames:
+                    filename = f"{base_filename}_{counter}{file_ext}"
+                    counter += 1
+                added_filenames.add(filename)
+                zip_file.write(photo_path, arcname=filename)
+        cursor.execute(f"UPDATE records SET is_gate_downloaded = 1 WHERE id IN ({placeholders})", id_list)
+        conn.commit()
+    return _zip_download_response(zip_buffer.getvalue(), "门禁系统导入包.zip")
 
 # 导出并下载 Excel (按已有模板的格式，支持按 ids/日期区间 筛选)
 @app.get("/api/admin/export/excel")
@@ -1485,141 +1496,39 @@ def export_excel(ids: str = None, start_date: str = None, end_date: str = None, 
         ws.append(row_data)
         
     conn.close()
-    
-    out_path = 'training_records_export.xlsx'
-    wb.save(out_path)
-    return FileResponse(out_path, filename="培训人员信息表.xlsx", media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+    # L5: 用内存缓冲返回，避免写死文件名在并发导出时互相覆盖
+    out_buffer = io.BytesIO()
+    wb.save(out_buffer)
+    out_buffer.seek(0)
+    return Response(
+        content=out_buffer.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename*=utf-8''%E5%9F%B9%E8%AE%AD%E4%BA%BA%E5%91%98%E4%BF%A1%E6%81%AF%E8%A1%A8.xlsx"}
+    )
 
 # 导出并下载 CSV (按已有模板的格式)
 @app.get("/api/admin/export/csv")
 def export_csv(admin = Depends(get_admin_user)):
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    cursor.execute('''
-    SELECT r.*, u.company as company 
-    FROM records r 
-    LEFT JOIN users u ON r.user_id = u.id 
-    ORDER BY r.created_at DESC
-    ''')
-    records = cursor.fetchall()
-    conn.close()
-    
-    out_path = 'training_records_export.csv'
-    
-    # 提取原有模板的注释
-    comments = []
-    template_path = '06.03.csv'
-    if os.path.exists(template_path):
-        try:
-            with open(template_path, 'r', encoding='gbk') as f:
-                lines = f.readlines()
-                header_index = 0
-                for idx, line in enumerate(lines):
-                    if '*姓名' in line:
-                        header_index = idx
-                        break
-                comments = lines[:header_index]
-        except Exception:
-            pass
-            
-    if not comments:
-        comments = [
-            "・ *号为必填项；,,,,,,,,,\n",
-            "・ 填写数字编码代替属性值；,,,,,,,,,\n",
-            "・ 使用EXCEL编辑导入文件时，请将单元格的格式修改为文本格式，避免数字文本自动转换为科学计数文本；,,,,,,,,,\n",
-            ",,,,,,,,,\n",
-            "1、姓名*：1～32个字符；不能包含 ' / \\: * ? \" < > | 这些特殊字符；,,,,,,,,,\n",
-            "2、性别*：1（男）、2（女）、0（未知）；,,,,,,,,,\n",
-            "3、组织路径*：填写从选择导入的组织名称开始，至目标组织的完整名称路径；,,,,,,,,,\n",
-            "4、证件类型*：111（身份证）、414（护照）、113（户口簿）、335（驾驶证）、131（工作证）、133（学生证）、114（军官证）、990（其他）；,,,,,,,,,\n",
-            "5、证件号码*：1~20个字符；只允许输入数字和字母；,,,,,,,,,\n",
-            "6、工号：1~32个字符；只允许输入数字、字母和汉字；,,,,,,,,,\n",
-            "7、手机号码：1-20位数字；,,,,,,,,,\n",
-            "8、拼音：人员姓名拼音；,,,,,,,,,\n",
-            "9、所属区域：0 ～128个字符；不能包含 ' / \\ : * ? \" < > | 这些特殊字符；,,,,,,,,,\n",
-            "10、卡号：8~20个字符；只允许输入数字和大写字母。,,,,,,,,,\n"
-        ]
-        
-    with open(out_path, 'w', newline='', encoding='gbk', errors='ignore') as f:
-        f.writelines(comments)
-        writer = csv.writer(f)
-        writer.writerow(['*姓名', '*性别', '*组织路径', '*证件类型', '*证件号码', '工号', '手机号码', '拼音', '所属区域', '卡号'])
-        
-        for r in records:
-            gender_code = '0'
-            if r['gender'] == '男':
-                gender_code = '1'
-            elif r['gender'] == '女':
-                gender_code = '2'
-                
-            org_path = f"{r['company']}/{r['region_auth']}" if r['region_auth'] else r['company']
-            
-            writer.writerow([
-                r['name'],
-                gender_code,
-                org_path,
-                '111', # 证件类型 (身份证)
-                r['id_card'],
-                '', # 工号
-                r['phone'],
-                '', # 拼音
-                r['region_auth'],
-                ''  # 卡号
-            ])
-            
-    return FileResponse(out_path, filename="培训人员导入表.csv", media_type="text/csv")
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+        SELECT r.*, u.company as company
+        FROM records r
+        LEFT JOIN users u ON r.user_id = u.id
+        ORDER BY r.created_at DESC
+        ''')
+        records = cursor.fetchall()
+    return _csv_download_response(build_gate_csv(records), "培训人员导入表.csv")
 
 # 导出并下载照片压缩包（仅管理员）
 @app.get("/api/admin/export/photos")
 def export_photos(admin = Depends(get_admin_user)):
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    cursor.execute("SELECT photo_path, name, id_card FROM records")
-    records = cursor.fetchall()
-    conn.close()
-    
-    out_path = 'photos_export.zip'
-    
-    if os.path.exists(out_path):
-        try:
-            os.remove(out_path)
-        except Exception:
-            pass
-            
-    with zipfile.ZipFile(out_path, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-        added_filenames = set()
-        for r in records:
-            photo_path = r['photo_path']
-            if not photo_path or not os.path.exists(photo_path):
-                continue
-            
-            name = r['name']
-            id_card = r['id_card']
-            
-            # 获取后缀名
-            file_ext = os.path.splitext(photo_path)[1]
-            if not file_ext:
-                file_ext = '.jpg'
-                
-            # 过滤文件名中的非法字符
-            safe_name = "".join([c for c in name if c not in r'\/:*?"<>|'])
-            safe_id = "".join([c for c in id_card if c not in r'\/:*?"<>|'])
-            
-            base_filename = f"{safe_name}_{safe_id}"
-            filename = f"{base_filename}{file_ext}"
-            
-            # 处理重复文件名
-            counter = 1
-            while filename in added_filenames:
-                filename = f"{base_filename}_{counter}{file_ext}"
-                counter += 1
-                
-            added_filenames.add(filename)
-            zip_file.write(photo_path, arcname=filename)
-            
-    return FileResponse(out_path, filename="培训人员照片.zip", media_type="application/zip")
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT photo_path, name, id_card FROM records")
+        records = cursor.fetchall()
+    return _zip_download_response(pack_photos_zip(records), "培训人员照片.zip")
 
 # 获取同单位的所有人员记录（供客户端检索并用于门禁恢复）
 @app.get("/api/user/company_records")
@@ -1706,171 +1615,28 @@ def get_restore_records(admin = Depends(get_admin_user)):
 # 门禁恢复导出 - 仅 CSV 导入表 (并更新 is_restore_downloaded)
 @app.get("/api/admin/export/restore/csv")
 def export_restore_csv(ids: str = None, admin = Depends(get_admin_user)):
-    if not ids:
-        raise HTTPException(status_code=400, detail="请选择需要下载的记录")
-        
-    id_list = [int(x) for x in ids.split(',') if x.strip()]
-    if not id_list:
-        raise HTTPException(status_code=400, detail="没有勾选任何有效的人员记录")
-        
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    
-    placeholders = ','.join(['?'] * len(id_list))
-    cursor.execute(f'''
-    SELECT r.*, u.company as company 
-    FROM records r 
-    LEFT JOIN users u ON r.user_id = u.id 
-    WHERE r.id IN ({placeholders}) AND r.gate_restore_status = 'pending'
-    ORDER BY r.is_restore_downloaded ASC, r.created_at DESC
-    ''', id_list)
-    records = cursor.fetchall()
-    
-    if not records:
-        conn.close()
-        raise HTTPException(status_code=404, detail="未找到对应的恢复申请记录")
-        
-    import io
-    csv_output = io.StringIO()
-    writer = csv.writer(csv_output)
-    
-    comments = [
-        "・ *号为必填项；,,,,,,,,,\n",
-        "・ 填写数字编码代替属性值；,,,,,,,,,\n",
-        "・ 使用EXCEL编辑导入文件时，请将单元格的格式修改为文本格式，避免数字文本自动转换为科学计数文本；,,,,,,,,,\n",
-        ",,,,,,,,,\n",
-        "1、姓名*：1～32个字符；不能包含 ' / \\: * ? \" < > | 这些特殊字符；,,,,,,,,,\n",
-        "2、性别*：1（男）、2（女）、0（未知）；,,,,,,,,,\n",
-        "3、组织路径*：填写从选择导入 of 组织名称开始，至目标组织的完整名称路径；,,,,,,,,,\n",
-        "4、证件类型*：111（身份证）、414（护照）、113（户口簿）、335（驾驶证）、131（工作证）、133（学生证）、114（军官证）、990（其他）；,,,,,,,,,\n",
-        "5、证件号码*：1~20个字符；只允许输入数字和字母；,,,,,,,,,\n",
-        "6、工号：1~32个字符；只允许输入数字、字母和汉字；,,,,,,,,,\n",
-        "7、手机号码：1-20位数字；,,,,,,,,,\n",
-        "8、拼音：人员姓名拼音；,,,,,,,,,\n",
-        "9、所属区域：0 ～128个字符；不能包含 ' / \\ : * ? \" < > | 这些特殊字符；,,,,,,,,,\n",
-        "10、卡号：8~20个字符；只允许输入数字和大写字母。,,,,,,,,,\n"
-    ]
-    
-    template_path = '06.03.csv'
-    if os.path.exists(template_path):
-        try:
-            with open(template_path, 'r', encoding='gbk') as f:
-                lines = f.readlines()
-                header_index = 0
-                for idx, line in enumerate(lines):
-                    if '*姓名' in line:
-                         header_index = idx
-                         break
-                comments = lines[:header_index]
-        except Exception:
-            pass
-            
-    csv_content = "".join(comments)
-    csv_output.write(csv_content)
-    writer.writerow(['*姓名', '*性别', '*组织路径', '*证件类型', '*证件号码', '工号', '手机号码', '拼音', '所属区域', '卡号'])
-    
-    for r in records:
-        gender_code = '0'
-        if r['gender'] == '男':
-            gender_code = '1'
-        elif r['gender'] == '女':
-            gender_code = '2'
-            
-        org_path = f"{r['company']}/{r['region_auth']}" if r['region_auth'] else r['company']
-        
-        writer.writerow([
-            r['name'],
-            gender_code,
-            org_path,
-            '111',
-            r['id_card'],
-            '',
-            r['phone'],
-            '',
-            r['region_auth'],
-            ''
-        ])
-        
-    csv_data = csv_output.getvalue().encode('gbk', errors='ignore')
-    csv_output.close()
-    
-    # 将门禁恢复下载状态更新为已下载(1)
-    cursor.execute(f"UPDATE records SET is_restore_downloaded = 1 WHERE id IN ({placeholders})", id_list)
-    conn.commit()
-    conn.close()
-    
-    from fastapi import Response
-    import urllib.parse
-    
-    safe_filename = urllib.parse.quote("恢复人员导入表.csv")
-    headers = {
-        "Content-Disposition": f"attachment; filename*=utf-8''{safe_filename}"
-    }
-    return Response(content=csv_data, media_type="text/csv", headers=headers)
+    id_list = parse_id_list(ids)
+    with get_db() as conn:
+        cursor = conn.cursor()
+        records, placeholders = fetch_records_by_ids(cursor, id_list, gate_only=True)
+        if not records:
+            raise HTTPException(status_code=404, detail="未找到对应的恢复申请记录")
+        csv_data = build_gate_csv(records)
+        # 将门禁恢复下载状态更新为已下载(1)
+        cursor.execute(f"UPDATE records SET is_restore_downloaded = 1 WHERE id IN ({placeholders})", id_list)
+        conn.commit()
+    return _csv_download_response(csv_data, "恢复人员导入表.csv")
 
 # 门禁恢复导出 - 仅照片压缩包
 @app.get("/api/admin/export/restore/photos")
 def export_restore_photos(ids: str = None, admin = Depends(get_admin_user)):
-    if not ids:
-        raise HTTPException(status_code=400, detail="请选择需要下载的记录")
-        
-    id_list = [int(x) for x in ids.split(',') if x.strip()]
-    if not id_list:
-        raise HTTPException(status_code=400, detail="没有勾选任何有效的人员记录")
-        
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    
-    placeholders = ','.join(['?'] * len(id_list))
-    cursor.execute(f'''
-    SELECT r.*, u.company as company 
-    FROM records r 
-    LEFT JOIN users u ON r.user_id = u.id 
-    WHERE r.id IN ({placeholders}) AND r.gate_restore_status = 'pending'
-    ORDER BY r.is_restore_downloaded ASC, r.created_at DESC
-    ''', id_list)
-    records = cursor.fetchall()
-    conn.close()
-    
+    id_list = parse_id_list(ids)
+    with get_db() as conn:
+        cursor = conn.cursor()
+        records, _ = fetch_records_by_ids(cursor, id_list, gate_only=True)
     if not records:
         raise HTTPException(status_code=404, detail="未找到对应的记录")
-        
-    import io
-    import zipfile
-    zip_buffer = io.BytesIO()
-    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-        added_filenames = set()
-        for r in records:
-            photo_path = r['photo_path']
-            if not photo_path or not os.path.exists(photo_path):
-                continue
-                
-            file_ext = os.path.splitext(photo_path)[1]
-            if not file_ext:
-                file_ext = '.jpg'
-                
-            safe_name = "".join([c for c in r['name'] if c not in r'\/:*?"<>|'])
-            safe_id = "".join([c for c in r['id_card'] if c not in r'\/:*?"<>|'])
-            base_filename = f"{safe_name}_{safe_id}"
-            filename = f"{base_filename}{file_ext}"
-            
-            counter = 1
-            while filename in added_filenames:
-                filename = f"{base_filename}_{counter}{file_ext}"
-                counter += 1
-            added_filenames.add(filename)
-            zip_file.write(photo_path, arcname=filename)
-            
-    from fastapi import Response
-    import urllib.parse
-    
-    safe_filename = urllib.parse.quote("恢复人员照片.zip")
-    headers = {
-        "Content-Disposition": f"attachment; filename*=utf-8''{safe_filename}"
-    }
-    return Response(content=zip_buffer.getvalue(), media_type="application/zip", headers=headers)
+    return _zip_download_response(pack_photos_zip(records), "恢复人员照片.zip")
 
 # 题库上传更新
 @app.post("/api/admin/upload_exam_bank")
@@ -1880,37 +1646,18 @@ async def upload_exam_bank(
     admin = Depends(get_admin_user)
 ):
     """管理员上传 xlsx 题库文件，替换 shiti/ 目录中的对应文件"""
-    import json
-    val = get_config('exam_subjects', '')
-    if val:
-        try:
-            subjects = json.loads(val)
-            exam_file_map = {s['name']: s['file'] for s in subjects}
-        except Exception:
-            exam_file_map = {}
-    else:
-        exam_file_map = {
-            '普工': '普工试题(1).xlsx',
-            '焊工': '焊工题库(1).xlsx',
-            '探伤': '探伤.xlsx',
-            '高处作业': '高处作业(1).xlsx',
-            '吊装作业': '吊装作业.xlsx',
-            '电工': '电工题库.xlsx',
-            '叉车': '叉车工.xlsx'
-        }
-    
+    exam_file_map = get_exam_file_map()
     target_filename = exam_file_map.get(exam_type)
     if not target_filename:
         raise HTTPException(status_code=400, detail=f"未知的考试类型: {exam_type}")
-    
+
     if not file.filename.endswith('.xlsx'):
         raise HTTPException(status_code=400, detail="仅支持 .xlsx 格式文件")
-    
+
     content = await file.read()
-    
+
     # 验证文件有效性
     try:
-        import io
         wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True)
         ws = wb.active
         count = 0
@@ -1923,7 +1670,8 @@ async def upload_exam_bank(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"题库文件格式错误: {e}")
+        print(f"[Error] 题库文件解析失败: {e}")
+        raise HTTPException(status_code=400, detail="题库文件格式错误，无法解析")
     
     # 保存文件
     os.makedirs('shiti', exist_ok=True)
@@ -1944,12 +1692,12 @@ async def upload_exam_bank(
 def get_questions(file: str):
     if not is_exam_open():
         raise HTTPException(status_code=403, detail="当前非考试开放时间，禁止获取试卷")
-    import os
-    
-    # 安全检查：防止路径遍历
-    if '..' in file or '/' in file or '\\' in file:
-        raise HTTPException(status_code=400, detail="非法文件名")
-    
+
+    # S6: 白名单校验——只允许 configs 中已配置的题库文件名，杜绝路径遍历
+    allowed_files = set(get_exam_file_map().values())
+    if file not in allowed_files:
+        raise HTTPException(status_code=400, detail="非法或未知的试题文件")
+
     # 构建完整路径
     shiti_dir = 'shiti'
     file_path = os.path.join(shiti_dir, file)
@@ -1984,19 +1732,20 @@ def get_questions(file: str):
 def save_exam_record(data: dict):
     if not is_exam_open():
         raise HTTPException(status_code=403, detail="当前非考试开放时间，禁止提交答卷")
+    conn = None
     try:
         name = data.get('name')
         company = data.get('company')
         exam_type = data.get('exam_type')
         duration = data.get('duration')
         user_answers = data.get('answers', [])  # 格式: [{"question": "xxx", "user_answer": "对/错"}]
-        
+
         if not name or not company or not exam_type:
             raise HTTPException(status_code=400, detail="缺少必要信息")
-            
+
         # 1. 在后端重新加载正确答案，确保防作弊安全性（使用缓存优化）
         shiti_answers = get_exam_questions_answers(exam_type)
-                
+
         # 2. 对比计分
         correct_count = 0
         details = []
@@ -2004,56 +1753,65 @@ def save_exam_record(data: dict):
             q_text = ua.get('question', '').strip()
             user_ans = ua.get('user_answer', '').strip()
             correct_ans = shiti_answers.get(q_text, '')
-            
+
             is_correct_bool = (user_ans == correct_ans) if correct_ans else False
             if is_correct_bool:
                 correct_count += 1
-                
+
             details.append({
                 "question": q_text,
                 "user_answer": user_ans,
                 "correct_answer": correct_ans,
                 "is_correct": 1 if is_correct_bool else 0
             })
-            
+
         total_questions = len(user_answers)
         score = round((correct_count / total_questions) * 100) if total_questions > 0 else 0
         answered_count = len([a for a in user_answers if a.get('user_answer')])
-        
+
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        
-        # 删除同姓名、同单位、同考试科目的旧记录（级联删除详情表记录），以只保留最后一次答题记录
+
+        # 频率限制：同一姓名+单位+科目 5 分钟内只能提交一次，防恶意刷分，不影响正常重考
         cursor.execute('''
-            SELECT id FROM exam_records 
+            SELECT created_at FROM exam_records
             WHERE name = ? AND company = ? AND exam_type = ?
+            ORDER BY created_at DESC LIMIT 1
         ''', (name, company, exam_type))
-        old_records = cursor.fetchall()
-        for r in old_records:
-            old_id = r[0]
-            cursor.execute('DELETE FROM exam_details WHERE exam_record_id = ?', (old_id,))
-            cursor.execute('DELETE FROM exam_records WHERE id = ?', (old_id,))
-        
+        recent = cursor.fetchone()
+        if recent and recent[0]:
+            try:
+                last_time = datetime.strptime(str(recent[0])[:19], "%Y-%m-%d %H:%M:%S")
+                if (beijing_now() - last_time).total_seconds() < 300:
+                    raise HTTPException(status_code=429, detail="提交过于频繁，请 5 分钟后再试")
+            except HTTPException:
+                raise
+            except Exception:
+                pass  # 时间解析失败则放行，不阻塞正常流程
+
+        # 保留全部历史记录（不覆盖），重考会产生多条；查询与导出时取最新一条即可
+        # （export_excel 已 ORDER BY created_at DESC LIMIT 1）。
+
         # 插入答题记录
         cursor.execute('''
             INSERT INTO exam_records (name, company, exam_type, score, answered_count, correct_count, duration)
             VALUES (?, ?, ?, ?, ?, ?, ?)
         ''', (name, company, exam_type, score, answered_count, correct_count, duration))
-        
+
         record_id = cursor.lastrowid
-        
+
         # 插入答题详情
         for d in details:
             cursor.execute('''
                 INSERT INTO exam_details (exam_record_id, question, user_answer, correct_answer, is_correct)
                 VALUES (?, ?, ?, ?, ?)
             ''', (record_id, d["question"], d["user_answer"], d["correct_answer"], d["is_correct"]))
-        
+
         conn.commit()
         conn.close()
-        
+
         return {
-            "code": 200, 
+            "code": 200,
             "message": "答题记录保存成功",
             "data": {
                 "score": score,
@@ -2062,8 +1820,16 @@ def save_exam_record(data: dict):
                 "total_count": total_questions
             }
         }
+    except HTTPException:
+        raise  # L2: 保留 400/403/429 等具体错误，不被通用异常吞掉
     except Exception as e:
         print(f"保存答题记录失败: {e}")
+        if conn:  # L7: 异常时回滚，避免产生有主记录无详情的脏数据
+            try:
+                conn.rollback()
+                conn.close()
+            except Exception:
+                pass
         raise HTTPException(status_code=500, detail="保存答题记录与后端判分失败")
 
 # 获取答题记录列表（管理员权限）
@@ -2225,30 +1991,11 @@ def get_regions():
 # 获取考试科目列表（无需登录，供考生和管理员使用）
 @app.get("/api/exam_subjects")
 def get_exam_subjects():
-    default_subjects = [
-        {"name": "普工", "file": "普工试题(1).xlsx"},
-        {"name": "焊工", "file": "焊工题库(1).xlsx"},
-        {"name": "探伤", "file": "探伤.xlsx"},
-        {"name": "高处作业", "file": "高处作业(1).xlsx"},
-        {"name": "吊装作业", "file": "吊装作业.xlsx"},
-        {"name": "电工", "file": "电工题库.xlsx"},
-        {"name": "叉车", "file": "叉车工.xlsx"}
-    ]
-    import json
-    val = get_config('exam_subjects', '')
-    if not val:
-        # 第一次访问，将默认写入 configs
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("INSERT OR REPLACE INTO configs (key, value) VALUES ('exam_subjects', ?)", (json.dumps(default_subjects, ensure_ascii=False),))
-        conn.commit()
-        conn.close()
-        return {"code": 200, "data": default_subjects}
-    try:
-        data = json.loads(val)
-        return {"code": 200, "data": data}
-    except Exception:
-        return {"code": 200, "data": default_subjects}
+    subjects = get_exam_subjects_list()
+    # 首次访问时把默认配置写入数据库（保持原行为）
+    if not get_config('exam_subjects', ''):
+        save_exam_subjects_list(subjects)
+    return {"code": 200, "data": subjects}
 
 # 增加新考试科目（仅管理员）
 @app.post("/api/admin/add_exam_subject")
@@ -2256,69 +2003,32 @@ def add_exam_subject(name: str = Form(...), admin = Depends(get_admin_user)):
     name = name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="科目名称不能为空")
-        
-    import json
-    val = get_config('exam_subjects', '')
-    
-    # 提取现有科目
-    if val:
-        try:
-            subjects = json.loads(val)
-        except Exception:
-            subjects = []
-    else:
-        subjects = [
-            {"name": "普工", "file": "普工试题(1).xlsx"},
-            {"name": "焊工", "file": "焊工题库(1).xlsx"},
-            {"name": "探伤", "file": "探伤.xlsx"},
-            {"name": "高处作业", "file": "高处作业(1).xlsx"},
-            {"name": "吊装作业", "file": "吊装作业.xlsx"},
-            {"name": "电工", "file": "电工题库.xlsx"},
-            {"name": "叉车", "file": "叉车工.xlsx"}
-        ]
-        
+
+    subjects = get_exam_subjects_list()
+
     # 检查重名
     for s in subjects:
         if s['name'] == name:
             raise HTTPException(status_code=400, detail="该科目已存在")
-            
+
     # 新科目文件名直接设为 科目名.xlsx
-    new_subject = {"name": name, "file": f"{name}.xlsx"}
-    subjects.append(new_subject)
-    
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("INSERT OR REPLACE INTO configs (key, value) VALUES ('exam_subjects', ?)", (json.dumps(subjects, ensure_ascii=False),))
-    conn.commit()
-    conn.close()
-    
+    subjects.append({"name": name, "file": f"{name}.xlsx"})
+    save_exam_subjects_list(subjects)
+
     return {"code": 200, "message": "科目增加成功", "data": subjects}
 
 # 删除考试科目（仅管理员）
 @app.post("/api/admin/delete_exam_subject")
 def delete_exam_subject(name: str = Form(...), admin = Depends(get_admin_user)):
     name = name.strip()
-    import json
-    val = get_config('exam_subjects', '')
-    if not val:
-        raise HTTPException(status_code=404, detail="未配置科目列表")
-        
-    try:
-        subjects = json.loads(val)
-    except Exception:
-        raise HTTPException(status_code=500, detail="科目配置数据损坏")
-        
+    subjects = get_exam_subjects_list()
+
     # 过滤掉要删除的科目
     new_subjects = [s for s in subjects if s['name'] != name]
     if len(new_subjects) == len(subjects):
         raise HTTPException(status_code=404, detail="未找到该科目")
-        
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("INSERT OR REPLACE INTO configs (key, value) VALUES ('exam_subjects', ?)", (json.dumps(new_subjects, ensure_ascii=False),))
-    conn.commit()
-    conn.close()
-    
+
+    save_exam_subjects_list(new_subjects)
     return {"code": 200, "message": "科目删除成功", "data": new_subjects}
 
 # 获取考试配置（仅管理员）
@@ -2361,7 +2071,8 @@ def save_config_api(
         conn.commit()
         return {"code": 200, "message": "配置保存成功"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"保存配置失败: {str(e)}")
+        print(f"[Error] 保存考试配置失败: {e}")
+        raise HTTPException(status_code=500, detail="保存配置失败")
     finally:
         conn.close()
 
@@ -2378,18 +2089,21 @@ def update_admin_password(
         cursor.execute("SELECT password FROM users WHERE id = ?", (admin['id'],))
         row = cursor.fetchone()
         if not row:
-            return {"code": 404, "detail": "管理员用户不存在"}
-        
+            raise HTTPException(status_code=404, detail="管理员用户不存在")
+
         stored_pwd = row[0]
         if not verify_pwd(old_password, stored_pwd):
-            return {"code": 400, "detail": "旧密码不正确"}
-            
+            raise HTTPException(status_code=400, detail="旧密码不正确")
+
         hashed_pwd = encrypt_pwd(new_password)
         cursor.execute("UPDATE users SET password = ? WHERE id = ?", (hashed_pwd, admin['id']))
         conn.commit()
         return {"code": 200, "message": "密码修改成功"}
+    except HTTPException:
+        raise  # L3: 保留具体错误，统一用 raise HTTPException 返回正确状态码
     except Exception as e:
-        return {"code": 500, "detail": f"修改密码失败: {str(e)}"}
+        print(f"[Error] 修改管理员密码失败: {e}")
+        raise HTTPException(status_code=500, detail="修改密码失败")
     finally:
         conn.close()
 
@@ -2470,13 +2184,9 @@ def get_exam():
     with open("static/exam.html", "r", encoding="utf-8") as f:
         return f.read()
 
-# 诊断服务器环境的调试接口
+# 诊断服务器环境的调试接口（S3: 收敛为仅管理员可访问，避免公网泄露服务器/数据库信息）
 @app.get("/api/debug/check_env")
-def check_env():
-    import sys
-    import os
-    import sqlite3
-    
+def check_env(admin = Depends(get_admin_user)):
     # 检查 python-docx 依赖
     try:
         import docx
@@ -2534,7 +2244,5 @@ def check_env():
         "latest_5_records_check": recent_files
     }
 
-if __name__ == "__main__":
-    import uvicorn
-    # 启动服务器
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+# N4: 启动入口统一由 start_server.py 负责，避免维护两份启动逻辑
+# 使用方式：python start_server.py
