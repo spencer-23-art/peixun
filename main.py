@@ -169,25 +169,31 @@ def verify_pwd(raw_pwd: str, stored_pwd_str: str) -> bool:
         # 待确认数据库无明文密码后可移除此分支。
         return hmac.compare_digest(raw_pwd, stored_pwd_str)
 
-def generate_token(user_id: int, role: str, username: str) -> str:
-    timestamp = int(time.time())
-    payload = f"{user_id}:{role}:{username}:{timestamp}"
+def generate_token(user_id: int, role: str, username: str, expire_seconds: int) -> str:
+    """签发 HMAC 签名 token。
+
+    token 结构: user_id:role:username:issued_at:expire_at:signature
+    issued_at / expire_at 均为 unix 秒级时间戳。expire_at 纳入签名，
+    使单条 token 的有效期不可被篡改。
+    """
+    issued_at = int(time.time())
+    expire_at = issued_at + int(expire_seconds)
+    payload = f"{user_id}:{role}:{username}:{issued_at}:{expire_at}"
     signature = hmac.new(SECRET_KEY, payload.encode('utf-8'), hashlib.sha256).hexdigest()
     return f"{payload}:{signature}"
 
 def verify_token(token: str) -> dict:
     try:
         parts = token.split(":")
-        if len(parts) != 5:
+        if len(parts) != 6:
             return None
-        user_id, role, username, timestamp, signature = parts
-        payload = f"{user_id}:{role}:{username}:{timestamp}"
+        user_id, role, username, issued_at, expire_at, signature = parts
+        payload = f"{user_id}:{role}:{username}:{issued_at}:{expire_at}"
         expected_signature = hmac.new(SECRET_KEY, payload.encode('utf-8'), hashlib.sha256).hexdigest()
         if not hmac.compare_digest(expected_signature, signature):
             return None
-        token_time = int(timestamp)
-        current_time = int(time.time())
-        if current_time - token_time > 7 * 24 * 3600:
+        # 以 token 自带的过期时间为准（登录时按 remember 勾选决定）
+        if int(time.time()) > int(expire_at):
             return None
         return {
             "id": int(user_id),
@@ -604,11 +610,11 @@ def parse_id_card(id_card_num):
 # 鉴权依赖
 def get_current_user(authorization: str = Header(None)):
     if not authorization:
-        raise HTTPException(status_code=401, detail="未登录或未授权")
-    
+        raise HTTPException(status_code=401, detail="请重新登录")
+
     token_info = verify_token(authorization)
     if not token_info:
-        raise HTTPException(status_code=401, detail="无效的授权Token或凭证已过期")
+        raise HTTPException(status_code=401, detail="请重新登录")
     
     try:
         user_id = token_info["id"]
@@ -622,16 +628,16 @@ def get_current_user(authorization: str = Header(None)):
         conn.close()
         
         if not user:
-            raise HTTPException(status_code=401, detail="用户不存在")
-            
+            raise HTTPException(status_code=401, detail="请重新登录")
+
         if user['status'] != 'approved' and user['role'] != 'admin':
             raise HTTPException(status_code=403, detail="账号尚未被审批通过，请耐心等待")
-            
+
         return user
     except HTTPException:
         raise  # L1: 保留上面主动抛出的具体错误信息（如"账号尚未审批"），不被通用异常吞掉
     except Exception:
-        raise HTTPException(status_code=401, detail="授权认证失败")
+        raise HTTPException(status_code=401, detail="请重新登录")
 
 def get_admin_user(current_user = Depends(get_current_user)):
     if current_user['role'] != 'admin':
@@ -674,17 +680,17 @@ def register(username: str = Form(...), password: str = Form(...), real_name: st
         conn.close()
 
 @app.post("/api/login")
-def login(username: str = Form(...), password: str = Form(...)):
+def login(username: str = Form(...), password: str = Form(...), remember: str = Form("false")):
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM users WHERE username = ?", (username,))
     user = cursor.fetchone()
-    
+
     if not user or not verify_pwd(password, user['password']):
         conn.close()
         raise HTTPException(status_code=400, detail="用户名或密码错误")
-        
+
     # 平滑升级明文密码
     if '$' not in user['password']:
         try:
@@ -692,17 +698,20 @@ def login(username: str = Form(...), password: str = Form(...)):
             conn.commit()
         except Exception:
             pass
-            
+
     conn.close()
-    
+
     if user['status'] == 'pending' and user['role'] != 'admin':
         return {"code": 300, "message": "您的注册申请正在审批中，暂无法登录。"}
-        
+
     if user['status'] == 'rejected':
         return {"code": 301, "message": "您的注册申请已被拒绝，请重新注册或联系管理员。"}
-        
-    # 返回安全的 HMAC 签名 Token
-    token = generate_token(user['id'], user['role'], user['username'])
+
+    # 勾选"保持登录"签发 30 天 token；不勾选签发 1 天 token
+    # （前端在不勾选时使用 sessionStorage，关闭浏览器即清除，实现"关闭浏览器失效"）
+    remember_flag = str(remember).strip().lower() in ("true", "1", "yes", "on")
+    expire_seconds = 30 * 24 * 3600 if remember_flag else 1 * 24 * 3600
+    token = generate_token(user['id'], user['role'], user['username'], expire_seconds)
     return {
         "code": 200,
         "message": "登录成功",
@@ -955,11 +964,11 @@ async def api_ocr_idcard(file: UploadFile = File(...)):
 def download_word(record_id: int, token: str = None, authorization: str = Header(None)):
     auth_token = token or authorization
     if not auth_token:
-        raise HTTPException(status_code=401, detail="未提供身份凭证，无权下载！")
-    
+        raise HTTPException(status_code=401, detail="请重新登录")
+
     user_info = verify_token(auth_token)
     if not user_info:
-        raise HTTPException(status_code=401, detail="登录已过期或无效凭证！")
+        raise HTTPException(status_code=401, detail="请重新登录")
         
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row

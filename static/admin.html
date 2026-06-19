@@ -790,6 +790,19 @@
       window.location.href = '/login';
     }
 
+    // 统一处理 401 响应：清 session + 友好提示 + 跳登录页
+    function handleAuthFail(response, result) {
+      if (response.status === 401) {
+        const msg = (result && result.detail) ? result.detail : '登录已失效，请重新登录';
+        if (typeof alert !== 'undefined') alert(msg);
+        localStorage.clear();
+        sessionStorage.clear();
+        setTimeout(() => { window.location.href = '/login'; }, 100);
+        return true;
+      }
+      return false;
+    }
+
     const errorAlert = document.getElementById('admin-error-alert');
     const successAlert = document.getElementById('admin-success-alert');
 

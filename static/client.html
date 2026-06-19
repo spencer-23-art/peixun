@@ -617,6 +617,21 @@
       window.location.href = '/login';
     }
 
+    // 统一处理 401 响应：清 session + 友好提示 + 跳登录页
+    function handleAuthFail(response, result) {
+      if (response.status === 401) {
+        const msg = (result && result.detail) ? result.detail : '登录已失效，请重新登录';
+        showAlert('error', msg);
+        setTimeout(() => {
+          localStorage.clear();
+          sessionStorage.clear();
+          window.location.href = '/login';
+        }, 1500);
+        return true;
+      }
+      return false;
+    }
+
 
 
     let userSavedFields = null; // 缓存服务端回填字段
@@ -840,6 +855,7 @@
           headers: { 'Authorization': token }
         });
         const result = await response.json();
+        if (handleAuthFail(response, result)) return;
         if (response.ok && result.code === 200) {
           lastFilteredRestoreRecords = result.data || [];
           renderRestoreRecords();
@@ -1024,6 +1040,7 @@
           body: formData
         });
         const result = await response.json();
+        if (handleAuthFail(response, result)) return;
         if (response.ok && result.code === 200) {
           alert('门禁恢复申请提交成功！');
           selectedRestoreRecordsMap.clear();
@@ -1055,6 +1072,7 @@
           }
         });
         const result = await response.json();
+        if (handleAuthFail(response, result)) return;
         if (response.ok) {
           historyData = result.data || [];
           if (historyData.length === 0) {
@@ -1441,6 +1459,7 @@
         });
 
         const result = await response.json();
+        if (handleAuthFail(response, result)) { submitBtn.disabled = false; submitBtn.innerText = currentEditRecordId ? '确 认 修 改 信 息' : '确 认 提 交 信 息'; return; }
         if (response.ok) {
           const isEdit = currentEditRecordId !== null;
           showAlert('success', isEdit ? '修改信息成功！' : '提交录入信息成功！');

@@ -150,6 +150,7 @@
       const formData = new FormData();
       formData.append('username', phone);
       formData.append('password', password);
+      formData.append('remember', remember ? 'true' : 'false');
 
       try {
         const response = await fetch('/api/login', {
@@ -161,7 +162,7 @@
         if (response.ok) {
           if (result.code === 200) {
             showAlert('success', '登录成功！正在跳转...');
-            
+
             // 清除旧的存储，防止混合状态
             localStorage.clear();
             sessionStorage.clear();
@@ -171,13 +172,15 @@
             storage.setItem('role', result.data.role);
             storage.setItem('real_name', result.data.real_name);
             storage.setItem('company', result.data.company);
-            
+
             if (remember) {
-              // 保持登录 1 个月
+              // 勾选"保持登录"：前端记一份 30 天的本地兜底过期时间，
+              // 真正的有效期以服务端 token 签名为准（同样是 30 天）。
               const expiry = Date.now() + 30 * 24 * 60 * 60 * 1000;
               localStorage.setItem('token_expires', expiry);
             }
-            
+            // 不勾选时使用 sessionStorage，关闭浏览器即清除登录态
+
             setTimeout(() => {
               if (result.data.role === 'admin') {
                 window.location.href = '/admin';
