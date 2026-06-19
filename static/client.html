@@ -1517,7 +1517,7 @@
       const modal = document.getElementById('camera-modal');
       modal.style.display = 'flex';
       const videoEl = document.getElementById('camera-video');
-      
+
       try {
         const constraints = {
           video: {
@@ -1595,11 +1595,11 @@
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
       const outputScale = 1.5;
-      
+
       canvas.width = sw * outputScale;
       canvas.height = sh * outputScale;
       ctx.drawImage(videoEl, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
-      
+
       compressCanvasToBlob(canvas, 200, (blob) => {
         closeCameraModal();
         uploadIdCardBlob(blob);
