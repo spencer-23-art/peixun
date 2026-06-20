@@ -1118,8 +1118,8 @@
                 <div style="display: flex; gap: 8px; justify-content: center; align-items: center; flex-wrap: wrap;">
                   <button class="btn btn-success" style="padding: 5px 12px; font-size: 0.8rem; margin: 0; width: auto; min-width: 60px;" onclick="editRecord(${row.id})">修改</button>
                   ${row.word_path ?
-                    `<button class="btn btn-primary" style="padding: 5px 12px; font-size: 0.8rem; margin: 0; width: auto; min-width: 60px; box-sizing: border-box;" onclick="downloadWord(${row.id})">登记卡</button>` :
-                    `<button class="btn btn-secondary" style="padding: 5px 12px; font-size: 0.8rem; opacity: 0.5; margin: 0; width: auto; min-width: 60px;" disabled title="已失效或未生成">登记卡</button>`
+                    `<button class="btn btn-primary" style="padding: 5px 12px; font-size: 0.8rem; margin: 0; width: auto; min-width: 60px; box-sizing: border-box;" onclick="downloadWord(${row.id})">登记卡下载</button>` :
+                    `<button class="btn btn-secondary" style="padding: 5px 12px; font-size: 0.8rem; opacity: 0.5; margin: 0; width: auto; min-width: 60px;" disabled title="已失效或未生成">登记卡下载</button>`
                   }
                 </div>
               </td>
