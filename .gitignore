@@ -36,6 +36,8 @@ test_*.log
 /焊工题库*.xlsx
 /探伤*.xlsx
 /06.03.*
+shiti/*.xlsx
+
 
 
 # Python 编译缓存
