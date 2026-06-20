@@ -19,10 +19,9 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt /app/
 RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple -r requirements.txt
 
-# 复制代码、静态文件、登记卡模板和试题库
+# 复制代码、静态文件和登记卡模板
 COPY main.py ocr_handler.py start_server.py /app/
 COPY static/ /app/static/
-COPY shiti/ /app/shiti/
 COPY 登记卡.docx /app/
 
 # 容器内部暴露 8000 端口
