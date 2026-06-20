@@ -15,4 +15,6 @@ services:
       - ./static:/app/static   # 挂载静态网页目录，后续 git pull 静态 HTML 可热生效，无需重新构建容器
       # 挂载 SQLite 数据库文件，防止容器重建时数据丢失
       - ./peixun.db:/app/peixun.db
+      # 挂载题库目录，防止容器升级或重建时动态上传的题库丢失
+      - ./shiti:/app/shiti
     restart: always
