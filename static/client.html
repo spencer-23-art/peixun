@@ -338,10 +338,15 @@
         <div class="form-group">
           <label>身份证识别录入 (自动填表)</label>
           <div class="form-grid" style="grid-template-columns: 1fr; gap: 10px; margin-bottom: 15px; max-width: 100%;">
-            <div style="display: flex; gap: 10px; width: 100%;">
-              <button type="button" class="btn btn-primary" style="flex: 1; padding: 12px; font-weight: 600; font-size: 0.95rem; display: flex; justify-content: center; align-items: center; gap: 8px;" onclick="openCameraModal()">🪪 身份证识别录入</button>
+            <div style="position: relative; width: 100%;">
+              <button type="button" class="btn btn-primary" style="width: 100%; padding: 12px; font-weight: 600; font-size: 0.95rem; display: flex; justify-content: center; align-items: center; gap: 8px;" onclick="toggleIdCardChoice()">🪪 身份证识别录入</button>
+              <div id="idcard-choice-popup" style="display: none; position: absolute; top: 100%; left: 0; right: 0; margin-top: 6px; background: rgba(35,35,40,0.97); border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; overflow: hidden; z-index: 100; box-shadow: 0 8px 24px rgba(0,0,0,0.5); backdrop-filter: blur(12px);">
+                <button type="button" style="width: 100%; padding: 14px; background: transparent; border: none; border-bottom: 1px solid rgba(255,255,255,0.08); color: #e0e0e0; font-size: 0.95rem; font-weight: 600; cursor: pointer; text-align: center;" onclick="hideIdCardChoice(); document.getElementById('idcard-file-input').click();">📷 拍照</button>
+                <button type="button" style="width: 100%; padding: 14px; background: transparent; border: none; color: #e0e0e0; font-size: 0.95rem; font-weight: 600; cursor: pointer; text-align: center;" onclick="hideIdCardChoice(); document.getElementById('idcard-album-input').click();">📂 从相册选择</button>
+              </div>
             </div>
-            <input type="file" id="idcard-file-input" accept="image/*" style="display: none;" onchange="handleIdCardFile(event)">
+            <input type="file" id="idcard-file-input" accept="image/*" capture="environment" style="display: none;" onchange="handleIdCardFile(event)">
+            <input type="file" id="idcard-album-input" accept="image/*" style="display: none;" onchange="handleIdCardFile(event)">
             
             <div id="idcard-preview-container" style="display: none; align-items: center; gap: 12px; padding: 10px; background: rgba(255,255,255,0.02); border: 1px dashed var(--glass-border); border-radius: 8px; width: 100%;">
               <img id="idcard-preview-img" src="" style="width: 100px; height: 63px; object-fit: contain; border-radius: 4px; border: 1px solid rgba(255,255,255,0.1);">
@@ -1530,100 +1535,21 @@
       window.location.href = '/login';
     }
 
-    let cameraStream = null;
-
-    async function openCameraModal() {
-      const modal = document.getElementById('camera-modal');
-      modal.style.display = 'flex';
-      const videoEl = document.getElementById('camera-video');
-
-      try {
-        const constraints = {
-          video: {
-            facingMode: "environment",
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
-          },
-          audio: false
-        };
-        try {
-          cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
-        } catch (e) {
-          cameraStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-        }
-        videoEl.srcObject = cameraStream;
-        await videoEl.play();
-      } catch (err) {
-        console.error("Camera failed: ", err);
-        closeCameraModal();
-        document.getElementById('idcard-file-input').click();
-      }
+    // 身份证拍照/选择：按钮下方弹出选择菜单
+    function toggleIdCardChoice() {
+      const popup = document.getElementById('idcard-choice-popup');
+      popup.style.display = popup.style.display === 'none' ? 'block' : 'none';
     }
-
-    function closeCameraModal() {
-      const modal = document.getElementById('camera-modal');
-      modal.style.display = 'none';
-      const videoEl = document.getElementById('camera-video');
-      videoEl.pause();
-      if (cameraStream) {
-        cameraStream.getTracks().forEach(track => track.stop());
-        cameraStream = null;
-      }
+    function hideIdCardChoice() {
+      document.getElementById('idcard-choice-popup').style.display = 'none';
     }
-
-    function doCameraCapture() {
-      const videoEl = document.getElementById('camera-video');
-      const frameEl = document.getElementById('camera-frame');
-      
-      if (!videoEl.videoWidth || !videoEl.videoHeight) {
-        alert("摄像头未准备就绪");
-        return;
+    document.addEventListener('click', function(e) {
+      const popup = document.getElementById('idcard-choice-popup');
+      if (popup && popup.style.display !== 'none' && !e.target.closest('#idcard-choice-popup') && !e.target.closest('[onclick*="toggleIdCardChoice"]')) {
+        popup.style.display = 'none';
       }
-      
-      const vw = videoEl.videoWidth;
-      const vh = videoEl.videoHeight;
-      const rect = videoEl.getBoundingClientRect();
-      const displayW = rect.width;
-      const displayH = rect.height;
-      const displayRatio = displayW / displayH;
-      const videoRatio = vw / vh;
-
-      let scale = 1;
-      let dx = 0;
-      let dy = 0;
-
-      if (videoRatio > displayRatio) {
-        scale = displayH / vh;
-        dx = (vw * scale - displayW) / 2;
-      } else {
-        scale = displayW / vw;
-        dy = (vh * scale - displayH) / 2;
-      }
-
-      const frameRect = frameEl.getBoundingClientRect();
-      const fx = frameRect.left - rect.left;
-      const fy = frameRect.top - rect.top;
-      const fw = frameRect.width;
-      const fh = frameRect.height;
-
-      const sx = (fx + dx) / scale;
-      const sy = (fy + dy) / scale;
-      const sw = fw / scale;
-      const sh = fh / scale;
-
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      const outputScale = 1.5;
-
-      canvas.width = sw * outputScale;
-      canvas.height = sh * outputScale;
-      ctx.drawImage(videoEl, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
-
-      compressCanvasToBlob(canvas, 200, (blob) => {
-        closeCameraModal();
-        uploadIdCardBlob(blob);
-      });
-    }
+    });
+    // HTTP 环境下无法使用 getUserMedia，所有裁切由服务端完成
 
     function handleIdCardFile(event) {
       const file = event.target.files[0];
@@ -1695,48 +1621,7 @@
 
   </script>
 
-  <!-- 身份证遮罩拍照模态框 -->
-  <div id="camera-modal" class="modal" style="display: none; background: #121212; z-index: 2000; flex-direction: column; justify-content: space-between; align-items: center; padding: 0;">
-    <video id="camera-video" autoplay playsinline muted style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 2001;"></video>
-    
-    <div style="position: absolute; top: 0; left: 0; width: 100%; padding: 15px; display: flex; justify-content: center; align-items: center; z-index: 2005; background: linear-gradient(to bottom, rgba(0,0,0,0.8), rgba(0,0,0,0));">
-      <div style="font-weight:bold; color: white; text-shadow:0 2px 4px rgba(0,0,0,0.8); font-size: 1.1rem; letter-spacing: 1px;">身份证正面拍照</div>
-    </div>
-    
-    <!-- 镂空遮罩 -->
-    <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2002; pointer-events: none;">
-      <div id="camera-frame" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 85vw; max-width: 420px; aspect-ratio: 85.6 / 54; border: 1.5px solid rgba(255, 255, 255, 0.4); border-radius: 12px; box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.65); z-index: 2003; pointer-events: auto;">
-        <!-- 4个绿色角标 -->
-        <span style="position: absolute; width: 20px; height: 20px; border: 3px solid #00ff88; top: -2px; left: -2px; border-right: none; border-bottom: none; border-top-left-radius: 6px;"></span>
-        <span style="position: absolute; width: 20px; height: 20px; border: 3px solid #00ff88; top: -2px; right: -2px; border-left: none; border-bottom: none; border-top-right-radius: 6px;"></span>
-        <span style="position: absolute; width: 20px; height: 20px; border: 3px solid #00ff88; bottom: -2px; left: -2px; border-right: none; border-top: none; border-bottom-left-radius: 6px;"></span>
-        <span style="position: absolute; width: 20px; height: 20px; border: 3px solid #00ff88; bottom: -2px; right: -2px; border-left: none; border-top: none; border-bottom-right-radius: 6px;"></span>
-      </div>
-    </div>
-    
-    <!-- 文字提示 -->
-    <div style="position: absolute; top: calc(50% + (85vw * 54 / 85.6 / 2) + 20px); left: 50%; transform: translateX(-50%); width: 90%; text-align: center; z-index: 2004; pointer-events: none;">
-      <div style="font-size: 0.85rem; background: rgba(0, 0, 0, 0.6); padding: 6px 12px; border-radius: 20px; display: inline-block; color: #eee; border: 1px solid rgba(255, 255, 255, 0.1);">请将身份证正面放入框内并保持清晰</div>
-    </div>
-    
-    <!-- 拍照控制 -->
-    <div style="position: absolute; bottom: 0; left: 0; width: 100%; padding: 25px 30px; display: flex; justify-content: space-between; align-items: center; z-index: 2005; background: linear-gradient(to top, rgba(0,0,0,0.9), rgba(0,0,0,0)); box-sizing: border-box;">
-      <!-- 左侧：相册导入 -->
-      <button type="button" style="width: auto; padding: 10px 18px; background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25); color: white; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 0.9rem;" onclick="closeCameraModal(); document.getElementById('idcard-file-input').click();">
-        📂 相册/本地选择
-      </button>
-      
-      <!-- 中间：拍照圆纽 -->
-      <button type="button" onclick="doCameraCapture()" style="width: 70px; height: 70px; border-radius: 50%; background: white; border: 5px solid rgba(255,255,255,0.3); display: flex; justify-content: center; align-items: center; cursor: pointer; outline: none;">
-        <div style="width: 48px; height: 48px; border-radius: 50%; background: #121212;"></div>
-      </button>
 
-      <!-- 右侧：取消 -->
-      <button type="button" style="width: auto; padding: 10px 18px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15); color: #ccc; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 0.9rem;" onclick="closeCameraModal()">
-        取消
-      </button>
-    </div>
-  </div>
 
   <!-- 微信分享提示遮罩层 -->
   <div id="weixin-share-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 99999; color: white; text-align: right; padding: 20px; box-sizing: border-box;" onclick="this.style.display='none'">

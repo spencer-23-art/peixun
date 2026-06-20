@@ -778,53 +778,147 @@ def _read_and_auto_orient(image_path):
         return cv2.imdecode(np.fromfile(image_path, dtype=np.uint8), cv2.IMREAD_COLOR)
 
 def _crop_by_ocr_boxes(img, ocr_results):
-    """用 OCR 检测到的所有文字框的外接矩形来裁剪卡面区域。
-    基于身份证标准布局：文字区在卡片中央，四周留约7%边距。"""
+    """用身份证上的锚点文字精确定位卡面边界，然后裁切。
+    
+    标准身份证布局 (85.6mm × 54mm, 比例 ≈ 1.585):
+    - "姓名" / "性别" / "住址" 等标签左起: 约 6.0% 卡宽
+    - "姓名"标签顶部 y: 约 11.1% 卡高
+    - 身份证号区域:
+      - 包含"公民身份号码"标签时: 占卡宽约 [6.0%, 90.0%]
+      - 仅数字时: 占卡宽约 [38.0%, 90.0%]
+      - 底部 y: 约 93.5% 卡高
+    """
     if not ocr_results or len(ocr_results) < 2:
         return img
 
-    all_points = []
+    h, w = img.shape[:2]
+
+    # ===== 寻找锚点 =====
+    xingming_box = None
+    id_number_box = None
+    id_number_text = ""
+
+    for line in ocr_results:
+        text = str(line[1]).replace(" ", "").replace("　", "")
+        box = np.array(line[0])
+
+        # 锚点A: "姓名" 标签
+        if "姓名" in text and xingming_box is None:
+            xingming_box = box
+
+        # 锚点B: 18位身份证号
+        cleaned = text.upper().replace('O', '0').replace('Z', '2').replace('I', '1').replace('S', '5')
+        if re.search(r'[1-9]\d{5}[12]\d{3}[01]\d[0123]\d{4}[\dXx]', cleaned):
+            id_number_box = box
+            id_number_text = text
+
+    # ===== 基于锚点进行精确定位 =====
+    if id_number_box is not None:
+        id_left_x = float(np.min(id_number_box[:, 0]))
+        id_right_x = float(np.max(id_number_box[:, 0]))
+        id_bottom_y = float(np.max(id_number_box[:, 1]))
+
+        # 如果同时找到了姓名和身份证号，则使用两者作为卡宽的首尾定位锚点
+        # "姓名"左侧是 6.0% 卡宽，身份证号识别框右端是 90.0% 卡宽。双锚点跨度为 84.0%
+        if xingming_box is not None:
+            xm_left_x = float(np.min(xingming_box[:, 0]))
+            xm_top_y = float(np.min(xingming_box[:, 1]))
+            
+            card_w_est = (id_right_x - xm_left_x) / 0.84
+            card_left = xm_left_x - card_w_est * 0.06
+            card_right = card_left + card_w_est
+            
+            anchor_span_y = id_bottom_y - xm_top_y
+            if anchor_span_y > h * 0.1:
+                card_h_est = anchor_span_y / 0.824
+                card_top = xm_top_y - card_h_est * 0.111
+                card_bottom = card_top + card_h_est
+            else:
+                card_h_est = card_w_est / 1.585
+                card_bottom = id_bottom_y + card_h_est * 0.065
+                card_top = card_bottom - card_h_est
+        else:
+            # 仅有身份证号锚点时，判断是否包含中文标签
+            has_label = any(c in id_number_text for c in ["公", "民", "身", "份", "号", "码"]) or bool(re.search(r'[\u4e00-\u9fa5]', id_number_text))
+            if has_label:
+                box_left_ratio = 0.06
+            else:
+                box_left_ratio = 0.38
+            box_right_ratio = 0.90
+            box_w_ratio = box_right_ratio - box_left_ratio
+            
+            card_w_est = (id_right_x - id_left_x) / box_w_ratio
+            card_left = id_left_x - card_w_est * box_left_ratio
+            card_right = card_left + card_w_est
+
+            card_h_est = card_w_est / 1.585
+            card_bottom = id_bottom_y + card_h_est * 0.065
+            card_top = card_bottom - card_h_est
+
+        y1 = int(max(0, card_top))
+        y2 = int(min(h, card_bottom))
+        x1 = int(max(0, card_left))
+        x2 = int(min(w, card_right))
+
+        crop_area = (x2 - x1) * (y2 - y1)
+        if 0 < crop_area < h * w * 0.95 and (x2 - x1) > w * 0.3 and (y2 - y1) > h * 0.15:
+            cropped = img[y1:y2, x1:x2]
+            if cropped.size > 0:
+                print(f"[OCR-Debug] 锚点精确裁切: left={x1} right={x2} top={y1} bottom={y2} 宽={x2-x1} 高={y2-y1}")
+                return cropped
+
+    # ===== 回退：全部OCR框 + IQR过滤 =====
+    box_centers = []
     for line in ocr_results:
         box = np.array(line[0])
-        all_points.extend(box.tolist())
+        cy = float(np.mean(box[:, 1]))
+        cx = float(np.mean(box[:, 0]))
+        box_centers.append((cx, cy, box))
 
-    all_points = np.array(all_points)
+    ys = np.array([c[1] for c in box_centers])
+    q1_y, q3_y = np.percentile(ys, 25), np.percentile(ys, 75)
+    iqr_y = q3_y - q1_y
+    fence = max(iqr_y * 1.5, 20)
+    y_lo, y_hi = q1_y - fence, q3_y + fence
+
+    xs = np.array([c[0] for c in box_centers])
+    q1_x, q3_x = np.percentile(xs, 25), np.percentile(xs, 75)
+    iqr_x = q3_x - q1_x
+    fence_x = max(iqr_x * 1.5, 20)
+    x_lo, x_hi = q1_x - fence_x, q3_x + fence_x
+
+    filtered_points = []
+    for cx, cy, box in box_centers:
+        if y_lo <= cy <= y_hi and x_lo <= cx <= x_hi:
+            filtered_points.extend(box.tolist())
+
+    if len(filtered_points) < 8:
+        filtered_points = []
+        for _, _, box in box_centers:
+            filtered_points.extend(box.tolist())
+
+    all_points = np.array(filtered_points)
     min_x = int(np.min(all_points[:, 0]))
     max_x = int(np.max(all_points[:, 0]))
     min_y = int(np.min(all_points[:, 1]))
     max_y = int(np.max(all_points[:, 1]))
 
-    h, w = img.shape[:2]
     text_w = max_x - min_x
     text_h = max_y - min_y
 
-    # 文字区域太小说明检测有问题，不裁剪
     if text_w < w * 0.15 or text_h < h * 0.15:
         return img
 
-    # 身份证标准布局：文字内容区约占卡片宽度的85%、高度的75%
-    # 用文字区反推卡片范围：卡片宽 = text_w / 0.85, 卡片高 = text_h / 0.75
-    # 然后居中放置文字区
-    card_w_est = int(text_w / 0.85)
-    card_h_est = int(text_h / 0.75)
+    top_margin = text_h * 0.135
+    bottom_margin = text_h * 0.091
+    left_margin = text_w * 0.067
+    right_margin = text_w * 0.08
 
-    # 文字区中心
-    cx = (min_x + max_x) / 2
-    cy = (min_y + max_y) / 2
+    y1 = max(0, int(min_y - top_margin))
+    y2 = min(h, int(max_y + bottom_margin))
+    x1 = max(0, int(min_x - left_margin))
+    x2 = min(w, int(max_x + right_margin))
 
-    # 以文字区中心为中心，按估算的卡片尺寸裁切
-    x1 = int(cx - card_w_est / 2)
-    y1 = int(cy - card_h_est / 2)
-    x2 = int(cx + card_w_est / 2)
-    y2 = int(cy + card_h_est / 2)
-
-    # clamp 到图片边界
-    x1 = max(0, x1)
-    y1 = max(0, y1)
-    x2 = min(w, x2)
-    y2 = min(h, y2)
-
-    # 如果裁剪区域和原图差不多大，说明卡占满整个画面，不需要裁剪
     crop_area = (x2 - x1) * (y2 - y1)
     if crop_area > h * w * 0.92:
         return img
@@ -832,7 +926,7 @@ def _crop_by_ocr_boxes(img, ocr_results):
     cropped = img[y1:y2, x1:x2]
     if cropped.size == 0:
         return img
-    print(f"[OCR-Debug] OCR文字框裁切: 文字区{text_w}x{text_h} 中心({int(cx)},{int(cy)}) → 裁切{x2-x1}x{y2-y1}")
+    print(f"[OCR-Debug] IQR回退裁切: 文字区{text_w}x{text_h} 边缘({min_x},{min_y})-({max_x},{max_y}) → 裁切{x2-x1}x{y2-y1}")
     return cropped
 
 def _anchor_orientation_score(ocr_results):
@@ -885,9 +979,12 @@ def ocr_idcard_process(image_path):
         raise ValueError("无法解析身份证图片。")
     print(f"[OCR-Debug] 原图尺寸: {img_cv.shape[1]}x{img_cv.shape[0]}")
 
-    # ===== Step 2: OCR 识别（不旋转，直接在原图上识别） =====
     try:
         ocr_res, _ = engine(img_cv)
+        if ocr_res:
+            print("[OCR-Debug] All OCR results:")
+            for idx, line in enumerate(ocr_res):
+                print(f"  [{idx}] {line[1]} @ {line[0]}")
     except Exception as e:
         print(f"[OCR-Debug] OCR识别失败: {e}")
         ocr_res = None
