@@ -683,23 +683,29 @@ def register(username: str = Form(...), password: str = Form(...), real_name: st
 def login(request: Request, username: str = Form(...), password: str = Form(...), remember: str = Form("false")):
     client_ip = request.client.host if request.client else "unknown"
     ua = request.headers.get("user-agent", "unknown")
-    print(f"[Login-Debug] 尝试登录: IP={client_ip}, UA={ua}, username={repr(username)}, password_len={len(password)}")
+    
+    # 清理输入的前后空格，防止用户复制时带入不可见字符，与注册行为保持一致
+    username_clean = username.strip()
+    password_clean = password.strip()
+    
+    # 打印原始输入，以便排查不同手机输入法自动加空格或大小写的问题
+    print(f"[Login-Debug] 尝试登录 | 原始输入: username={repr(username)}, pwd_len={len(password)} | 清理后: username={repr(username_clean)}, pwd_len={len(password_clean)}")
     sys.stdout.flush()
 
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM users WHERE username = ?", (username,))
+    cursor.execute("SELECT * FROM users WHERE username = ?", (username_clean,))
     user = cursor.fetchone()
 
     if not user:
-        print(f"[Login-Debug] 登录失败: 用户不存在. 输入的用户名={repr(username)} (IP={client_ip})")
+        print(f"[Login-Debug] 登录失败: 用户不存在. 输入的用户名={repr(username_clean)} (IP={client_ip})")
         sys.stdout.flush()
         conn.close()
         raise HTTPException(status_code=400, detail="用户名或密码错误")
 
-    if not verify_pwd(password, user['password']):
-        print(f"[Login-Debug] 登录失败: 密码不匹配. 用户名={repr(username)} (IP={client_ip})")
+    if not verify_pwd(password_clean, user['password']):
+        print(f"[Login-Debug] 登录失败: 密码不匹配. 用户名={repr(username_clean)} (IP={client_ip})")
         sys.stdout.flush()
         conn.close()
         raise HTTPException(status_code=400, detail="用户名或密码错误")
@@ -988,9 +994,19 @@ def download_word(record_id: int, token: str = None, authorization: str = Header
     cursor = conn.cursor()
     
     if user_info['role'] == 'admin':
-        cursor.execute("SELECT * FROM records WHERE id = ?", (record_id,))
+        cursor.execute("""
+            SELECT r.*, u.company 
+            FROM records r 
+            LEFT JOIN users u ON r.user_id = u.id 
+            WHERE r.id = ?
+        """, (record_id,))
     else:
-        cursor.execute("SELECT * FROM records WHERE id = ? AND user_id = ?", (record_id, user_info['id']))
+        cursor.execute("""
+            SELECT r.*, u.company 
+            FROM records r 
+            LEFT JOIN users u ON r.user_id = u.id 
+            WHERE r.id = ? AND r.user_id = ?
+        """, (record_id, user_info['id']))
         
     row = cursor.fetchone()
     conn.close()
@@ -998,7 +1014,41 @@ def download_word(record_id: int, token: str = None, authorization: str = Header
     if not row:
         raise HTTPException(status_code=404, detail="登记卡未找到或您无权查看")
         
+    # 无论何时，如果身份证裁剪图存在，则在下载时重新实时生成 Word 文件，以保持日期为当前下载日期，且同步所有最新文字修改
     word_path = row['word_path']
+    id_card = row['id_card']
+    idcard_save_dir = "uploads/idcards"
+    perm_id_img_path = os.path.join(idcard_save_dir, f"{id_card}.png").replace('\\', '/')
+    
+    if id_card and os.path.exists(perm_id_img_path):
+        try:
+            record_data = {
+                "姓名": row['name'],
+                "性别": row['gender'],
+                "年龄": row['age'],
+                "联系电话": row['phone'],
+                "岗位": row['job'],
+                "常住地址": row['address'],
+                "工作单位": row['company'] or ''
+            }
+            temp_word_path = generate_record_card(record_data, perm_id_img_path)
+            
+            # 更新数据库路径
+            conn_write = sqlite3.connect(DB_PATH)
+            cursor_write = conn_write.cursor()
+            cursor_write.execute("UPDATE records SET word_path = ? WHERE id = ?", (temp_word_path, record_id))
+            conn_write.commit()
+            conn_write.close()
+            
+            # 尝试删除旧的 Word 文件
+            if word_path and word_path != temp_word_path and os.path.exists(word_path):
+                try: os.remove(word_path)
+                except: pass
+                
+            word_path = temp_word_path
+        except Exception as e:
+            print(f"Error regenerating word card on download: {e}")
+            
     if not word_path or not os.path.exists(word_path):
         raise HTTPException(status_code=404, detail="该登记卡 Word 文件不存在或已被删除（仅保存一周）")
         

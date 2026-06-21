@@ -66,33 +66,13 @@ def init_ppocrv6():
             for char in char_list:
                 df.write(char + '\n')
         
-        # 2. 构造自定义配置
-        import rapidocr_onnxruntime
-        root_dir = Path(rapidocr_onnxruntime.__file__).resolve().parent
-        config = read_yaml(str(root_dir / 'config.yaml'))
-        config = _concat_model_path(config)
-        
-        config['Det']['model_path'] = det_path
-        config['Rec']['model_path'] = rec_path
-        config['Rec']['keys_path'] = dict_txt_path
-        
-        # 3. 初始化模块
-        TextDetector = RapidOCR.init_module(config['Det']['module_name'], config['Det']['class_name'])
-        text_detector = TextDetector(config['Det'])
-        
-        TextRecognizer = RapidOCR.init_module(config['Rec']['module_name'], config['Rec']['class_name'])
-        text_recognizer = TextRecognizer(config['Rec'])
-        
-        TextClassifier = RapidOCR.init_module(config['Cls']['module_name'], config['Cls']['class_name'])
-        text_cls = TextClassifier(config['Cls'])
-        
-        # 4. 封装成完整的 RapidOCR
-        OCR_ENGINE = RapidOCR()
-        OCR_ENGINE.text_detector = text_detector
-        OCR_ENGINE.text_recognizer = text_recognizer
-        OCR_ENGINE.text_cls = text_cls
-        OCR_ENGINE.use_text_det = True
-        OCR_ENGINE.use_angle_cls = True
+        # 2. 直接使用官方高阶 API 实例化，传入自定义的模型路径和字典文件
+        # 避免由于不同机器/容器中 rapidocr_onnxruntime 版本不同导致没有 init_module 私有属性的 Bug
+        OCR_ENGINE = RapidOCR(
+            det_model_path=det_path,
+            rec_model_path=rec_path,
+            rec_keys_path=dict_txt_path
+        )
         
         print("[Success] PP-OCRv6 Tiny ONNX 引擎加载成功！")
         return OCR_ENGINE
