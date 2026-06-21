@@ -36,7 +36,7 @@ import zipfile
 import urllib.parse
 from contextlib import contextmanager
 from datetime import datetime, timedelta
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Header, Depends, Response
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Header, Depends, Response, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -680,14 +680,27 @@ def register(username: str = Form(...), password: str = Form(...), real_name: st
         conn.close()
 
 @app.post("/api/login")
-def login(username: str = Form(...), password: str = Form(...), remember: str = Form("false")):
+def login(request: Request, username: str = Form(...), password: str = Form(...), remember: str = Form("false")):
+    client_ip = request.client.host if request.client else "unknown"
+    ua = request.headers.get("user-agent", "unknown")
+    print(f"[Login-Debug] 尝试登录: IP={client_ip}, UA={ua}, username={repr(username)}, password_len={len(password)}")
+    sys.stdout.flush()
+
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM users WHERE username = ?", (username,))
     user = cursor.fetchone()
 
-    if not user or not verify_pwd(password, user['password']):
+    if not user:
+        print(f"[Login-Debug] 登录失败: 用户不存在. 输入的用户名={repr(username)} (IP={client_ip})")
+        sys.stdout.flush()
+        conn.close()
+        raise HTTPException(status_code=400, detail="用户名或密码错误")
+
+    if not verify_pwd(password, user['password']):
+        print(f"[Login-Debug] 登录失败: 密码不匹配. 用户名={repr(username)} (IP={client_ip})")
+        sys.stdout.flush()
         conn.close()
         raise HTTPException(status_code=400, detail="用户名或密码错误")
 
@@ -1241,12 +1254,15 @@ def get_companies():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     query = """
-        SELECT u.company, COUNT(r.id) AS submit_count, MAX(r.created_at) AS last_submit_time
+        SELECT u.company, MAX(r.created_at) AS last_submit_time
         FROM users u
         LEFT JOIN records r ON u.id = r.user_id
         WHERE u.role != 'admin' AND u.company IS NOT NULL AND u.company != ''
         GROUP BY u.company
-        ORDER BY submit_count DESC, last_submit_time DESC, u.company ASC
+        ORDER BY 
+            CASE WHEN MAX(r.created_at) IS NULL THEN 1 ELSE 0 END ASC,
+            MAX(r.created_at) DESC,
+            u.company ASC
     """
     cursor.execute(query)
     sorted_companies = [row[0] for row in cursor.fetchall()]
