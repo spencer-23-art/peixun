@@ -531,6 +531,18 @@ def init_db():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_exam_records_company ON exam_records (company)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_users_company ON users (company)")
     
+    # 历史数据时区迁移自愈逻辑（将原本依赖 SQLite DEFAULT CURRENT_TIMESTAMP 存入的 UTC 时间迁移至北京时间 +8 小时，仅迁移一次）
+    cursor.execute("SELECT value FROM configs WHERE key = 'timezone_fixed'")
+    row = cursor.fetchone()
+    if not row or row[0] != 'true':
+        try:
+            cursor.execute("UPDATE records SET created_at = datetime(created_at, '+8 hours') WHERE created_at IS NOT NULL")
+            cursor.execute("UPDATE exam_records SET created_at = datetime(created_at, '+8 hours') WHERE created_at IS NOT NULL")
+            cursor.execute("INSERT OR REPLACE INTO configs (key, value) VALUES ('timezone_fixed', 'true')")
+            print("Successfully migrated historical records timezone from UTC to UTC+8")
+        except Exception as e:
+            print(f"Failed to migrate timezone: {e}")
+            
     conn.commit()
     conn.close()
 
@@ -1106,9 +1118,9 @@ async def create_record(
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('''
-    INSERT INTO records (user_id, photo_path, name, nation, id_card, phone, address, job, education, region_auth, gender, age)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (current_user['id'], photo_path, name, nation, id_card, phone, address, job, education, region_auth, gender, age))
+    INSERT INTO records (user_id, photo_path, name, nation, id_card, phone, address, job, education, region_auth, gender, age, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (current_user['id'], photo_path, name, nation, id_card, phone, address, job, education, region_auth, gender, age, beijing_now().strftime("%Y-%m-%d %H:%M:%S")))
     record_id = cursor.lastrowid
     conn.commit()
     conn.close()
@@ -1290,7 +1302,7 @@ def get_approved_companies(admin = Depends(get_admin_user)):
     all_companies = [row[0] for row in cursor.fetchall()]
     
     today_bj = beijing_now().strftime("%Y-%m-%d")
-    cursor.execute("SELECT DISTINCT company FROM exam_records WHERE date(created_at, '+8 hours') = ?", (today_bj,))
+    cursor.execute("SELECT DISTINCT company FROM exam_records WHERE date(created_at) = ?", (today_bj,))
     today_companies = set([row[0] for row in cursor.fetchall()])
     conn.close()
     
@@ -1869,9 +1881,9 @@ def save_exam_record(data: dict):
 
         # 插入答题记录
         cursor.execute('''
-            INSERT INTO exam_records (name, company, exam_type, score, answered_count, correct_count, duration)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (name, company, exam_type, score, answered_count, correct_count, duration))
+            INSERT INTO exam_records (name, company, exam_type, score, answered_count, correct_count, duration, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (name, company, exam_type, score, answered_count, correct_count, duration, beijing_now().strftime("%Y-%m-%d %H:%M:%S")))
 
         record_id = cursor.lastrowid
 
