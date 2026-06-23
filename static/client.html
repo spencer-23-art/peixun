@@ -336,7 +336,6 @@
       <form id="form-record" onsubmit="handleSubmit(event)">
         <!-- 新增：身份证识别录入 -->
         <div class="form-group">
-          <label>身份证识别录入 (自动填表)</label>
           <div class="form-grid" style="grid-template-columns: 1fr; gap: 10px; margin-bottom: 15px; max-width: 100%;">
             <div style="position: relative; width: 100%;">
               <button type="button" class="btn btn-primary" style="width: 100%; padding: 12px; font-weight: 600; font-size: 0.95rem; display: flex; justify-content: center; align-items: center; gap: 8px;" onclick="toggleIdCardChoice()">🪪 身份证识别录入</button>
@@ -361,7 +360,6 @@
 
         <!-- 第一行：照片位 -->
         <div class="form-group">
-          <label>第一行：电子照片 (点击区域可拍照或上传，系统自动压缩至120K-199K)</label>
           <div class="photo-uploader" onclick="document.getElementById('photo-input').click()">
             <input type="file" id="photo-input" accept="image/*" onchange="handlePhotoChange(event)">
             <div class="photo-uploader-placeholder" id="uploader-placeholder">
@@ -377,7 +375,6 @@
 
         <!-- 第二行：信息录入 -->
         <div class="form-group">
-          <label>第二行：基本与岗位信息</label>
           <div class="form-grid">
             <div class="form-group">
               <label for="name">姓名 *</label>
