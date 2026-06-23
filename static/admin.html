@@ -581,9 +581,10 @@
       <div class="filter-card">
         <div class="filter-grid exam-filter-grid">
           <!-- 工作单位 -->
-          <div class="filter-item">
+          <div class="filter-item" style="position: relative;" id="exam-company-wrapper">
             <label class="filter-label">工作单位</label>
-            <input type="text" id="exam-filter-company" class="form-control filter-control" placeholder="输入工作单位模糊搜索" oninput="handleExamCompanyFilterChange()">
+            <input type="text" id="exam-filter-company" class="form-control filter-control" placeholder="输入或选择单位" onfocus="showCompanyDropdown()" oninput="handleExamCompanyInput()" onblur="hideCompanyDropdown()" autocomplete="off">
+            <div id="exam-company-dropdown" style="display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: rgba(30, 27, 75, 0.98); border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; max-height: 200px; overflow-y: auto; z-index: 9999; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); box-shadow: 0 10px 25px -5px rgba(0,0,0,0.6);"></div>
           </div>
           <!-- 考试科目 -->
           <div class="filter-item">
@@ -2047,27 +2048,91 @@
       loadExamRecords();
     }
 
+    var allCompanies = [];
+
     async function loadExamCompanyOptions() {
       try {
         var response = await fetch('/api/companies', {
           headers: { 'Authorization': token }
         });
         var result = await response.json();
-        
         if (response.ok && result.code === 200) {
-          var select = document.getElementById('exam-filter-company');
-          if (select && result.data && result.data.length > 0) {
-            result.data.forEach(function(c) {
-              var option = document.createElement('option');
-              option.value = c;
-              option.textContent = c;
-              select.appendChild(option);
-            });
-          }
+          allCompanies = result.data || [];
         }
       } catch (err) {
         console.error('加载公司选项失败', err);
       }
+    }
+
+    function showCompanyDropdown() {
+      var dropdown = document.getElementById('exam-company-dropdown');
+      if (dropdown) {
+        dropdown.style.display = 'block';
+        renderCompanyDropdown(document.getElementById('exam-filter-company').value.trim());
+      }
+    }
+
+    function hideCompanyDropdown() {
+      setTimeout(function() {
+        var dropdown = document.getElementById('exam-company-dropdown');
+        if (dropdown) {
+          dropdown.style.display = 'none';
+        }
+      }, 200);
+    }
+
+    function handleExamCompanyInput() {
+      var val = document.getElementById('exam-filter-company').value.trim();
+      renderCompanyDropdown(val);
+      examRecordsPage = 1;
+      loadExamRecords();
+    }
+
+    function renderCompanyDropdown(filterText) {
+      var dropdown = document.getElementById('exam-company-dropdown');
+      if (!dropdown) return;
+      dropdown.innerHTML = '';
+      
+      var filtered = allCompanies;
+      if (filterText) {
+        var lowerText = filterText.toLowerCase();
+        filtered = allCompanies.filter(function(c) {
+          return c.toLowerCase().indexOf(lowerText) !== -1;
+        });
+      }
+      
+      if (filtered.length === 0) {
+        var noMatch = document.createElement('div');
+        noMatch.style.padding = '8px 12px';
+        noMatch.style.color = 'var(--text-muted, #94a3b8)';
+        noMatch.style.fontSize = '0.85rem';
+        noMatch.textContent = '无匹配单位';
+        dropdown.appendChild(noMatch);
+        return;
+      }
+      
+      filtered.forEach(function(c) {
+        var item = document.createElement('div');
+        item.style.padding = '8px 12px';
+        item.style.color = '#fff';
+        item.style.fontSize = '0.9rem';
+        item.style.cursor = 'pointer';
+        item.style.transition = 'background 0.2s';
+        item.textContent = c;
+        
+        item.onmouseover = function() { item.style.background = 'rgba(99, 102, 241, 0.2)'; };
+        item.onmouseout = function() { item.style.background = 'transparent'; };
+        
+        item.onmousedown = function(e) {
+          e.preventDefault();
+          document.getElementById('exam-filter-company').value = c;
+          dropdown.style.display = 'none';
+          examRecordsPage = 1;
+          loadExamRecords();
+        };
+        
+        dropdown.appendChild(item);
+      });
     }
 
     function handleExamNameSearch() {
@@ -2082,6 +2147,8 @@
       document.getElementById('exam-filter-name').value = '';
       examFilterName = '';
       examRecordsPage = 1;
+      var dropdown = document.getElementById('exam-company-dropdown');
+      if (dropdown) dropdown.style.display = 'none';
       loadExamRecords();
     }
 
