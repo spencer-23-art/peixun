@@ -564,6 +564,7 @@
               <th>人员基本信息</th>
               <th>工作单位与岗位权限 / 地址</th>
               <th>申请时间与人员</th>
+              <th style="width: 80px; text-align: center;">操作</th>
             </tr>
           </thead>
           <tbody id="restore-tbody">
@@ -582,9 +583,7 @@
           <!-- 工作单位 -->
           <div class="filter-item">
             <label class="filter-label">工作单位</label>
-            <select id="exam-filter-company" class="form-control filter-control" onchange="handleExamCompanyFilterChange()">
-              <option value="">全部单位</option>
-            </select>
+            <input type="text" id="exam-filter-company" class="form-control filter-control" placeholder="输入工作单位模糊搜索" oninput="handleExamCompanyFilterChange()">
           </div>
           <!-- 考试科目 -->
           <div class="filter-item">
@@ -768,7 +767,10 @@
     <div class="glass-container" style="max-width: 700px; margin-top: 0; padding: 25px; position: relative; max-height: 80vh; overflow-y: auto;" onclick="event.stopPropagation()">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
         <h3 style="background: linear-gradient(to right, #ffffff, #c7d2fe); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">答题详情</h3>
-        <button class="btn btn-secondary" onclick="closeExamDetailModal()" style="width: auto; padding: 6px 12px;">关闭</button>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn-primary" onclick="downloadExamDetail()" style="width: auto; padding: 6px 12px; background: #10b981; border-color: #10b981;">下载答题过程</button>
+          <button class="btn btn-secondary" onclick="closeExamDetailModal()" style="width: auto; padding: 6px 12px;">关闭</button>
+        </div>
       </div>
       <div id="exam-detail-content"></div>
     </div>
@@ -996,6 +998,9 @@
             h += '  <div style="font-size:0.85rem;color:var(--text-main);">' + formatTime(r.created_at) + '</div>';
             h += '  <div style="font-size:0.8rem;color:var(--text-muted);margin-top:4px;">提交人: ' + escapeHtml(r.recorder_name || '--') + '</div>';
             h += '</td>';
+            h += '<td style="text-align:center;">';
+            h += '  <button class="btn" onclick="deleteRestoreGate(' + r.id + ')" style="background:#ef4444;border-color:#ef4444;color:#fff;padding:2px 8px;border-radius:4px;cursor:pointer;font-size:0.8rem;width:auto;height:auto;line-height:1.5;">删除</button>';
+            h += '</td>';
             tr.innerHTML = h;
             tbody.appendChild(tr);
           } catch (rowErr) {
@@ -1005,7 +1010,35 @@
         updateRestoreCheckAllState();
       } catch (e) {
         console.error('[RESTORE] FATAL:', e);
-        tbody.innerHTML = '<tr><td colspan="5" style="color:red;padding:20px;">渲染错误: ' + e.message + '</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" style="color:red;padding:20px;">渲染错误: ' + e.message + '</td></tr>';
+      }
+    }
+
+    // 删除门禁恢复记录
+    async function deleteRestoreGate(id) {
+      if (!confirm("确定要删除这条门禁恢复申请记录吗？")) {
+        return;
+      }
+      try {
+        var formData = new FormData();
+        formData.append('ids', id);
+        var response = await fetch('/api/admin/delete_restore_gate', {
+          method: 'POST',
+          headers: { 'Authorization': token },
+          body: formData
+        });
+        var result = await response.json();
+        if (response.ok && result.code === 200) {
+          showAlert('success', '删除成功');
+          selectedRestoreRecordsMap.delete(id);
+          deselectedRestoreRecordIds.delete(id);
+          loadRestoreRecords();
+        } else {
+          showAlert('error', result.message || result.detail || '删除失败');
+        }
+      } catch (err) {
+        console.error('删除门禁恢复失败', err);
+        showAlert('error', '删除网络请求失败');
       }
     }
 
@@ -2052,7 +2085,10 @@
       loadExamRecords();
     }
 
+    var currentExamDetailId = null;
+
     async function viewExamDetail(recordId) {
+      currentExamDetailId = recordId;
       try {
         var response = await fetch('/api/admin/exam_record_detail/' + recordId, {
           headers: { 'Authorization': token }
@@ -2068,6 +2104,43 @@
       } catch (err) {
         console.error('获取答题详情失败', err);
         showAlert('error', '获取答题详情失败');
+      }
+    }
+
+    async function downloadExamDetail() {
+      if (!currentExamDetailId) {
+        showAlert('error', '未找到当前查看的答题记录');
+        return;
+      }
+      try {
+        var response = await fetch('/api/admin/exam_records/' + currentExamDetailId + '/download', {
+          headers: { 'Authorization': token }
+        });
+        if (!response.ok) {
+          throw new Error('网络响应失败');
+        }
+        var blob = await response.blob();
+        var contentDisposition = response.headers.get('content-disposition');
+        var filename = '答题详情.docx';
+        if (contentDisposition) {
+          var match = contentDisposition.match(/filename\*=UTF-8''(.+)/i);
+          if (match) {
+            filename = decodeURIComponent(match[1]);
+          } else {
+            var match2 = contentDisposition.match(/filename="?([^"]+)"?/);
+            if (match2) {
+              filename = match2[1];
+            }
+          }
+        }
+        var link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = filename;
+        link.click();
+        URL.revokeObjectURL(link.href);
+      } catch (err) {
+        console.error('下载失败', err);
+        showAlert('error', '下载答题详情文档失败');
       }
     }
 

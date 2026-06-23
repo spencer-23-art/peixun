@@ -1699,6 +1699,31 @@ def get_restore_records(admin = Depends(get_admin_user)):
     conn.close()
     return {"code": 200, "data": records}
 
+# 删除门禁恢复申请记录（仅管理员）
+@app.post("/api/admin/delete_restore_gate")
+def delete_restore_gate(ids: str = Form(...), admin = Depends(get_admin_user)):
+    if not ids:
+        raise HTTPException(status_code=400, detail="请选择需要删除的记录")
+        
+    id_list = [int(x) for x in ids.split(',') if x.strip()]
+    if not id_list:
+        raise HTTPException(status_code=400, detail="无有效记录ID")
+        
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    placeholders = ','.join(['?'] * len(id_list))
+    update_query = f'''
+    UPDATE records
+    SET gate_restore_status = NULL, is_restore_downloaded = 0
+    WHERE id IN ({placeholders})
+    '''
+    cursor.execute(update_query, id_list)
+    conn.commit()
+    conn.close()
+    return {"code": 200, "message": "门禁恢复记录删除成功"}
+
+
 # 门禁恢复导出 - 仅 CSV 导入表 (并更新 is_restore_downloaded)
 @app.get("/api/admin/export/restore/csv")
 def export_restore_csv(ids: str = None, admin = Depends(get_admin_user)):
@@ -2031,6 +2056,113 @@ def get_exam_record_detail(record_id: int, current_user = Depends(get_admin_user
     except Exception as e:
         print(f"获取答题详情失败: {e}")
         raise HTTPException(status_code=500, detail="获取答题详情失败")
+
+# 导出答题过程 Word（仅管理员）
+@app.get("/api/admin/exam_records/{record_id}/download")
+def download_exam_record(record_id: int, admin = Depends(get_admin_user)):
+    from docx import Document
+    from docx.shared import Pt, RGBColor
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    import io
+    import urllib.parse
+    from fastapi.responses import StreamingResponse
+    
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    # 查 exam_records
+    cursor.execute("SELECT * FROM exam_records WHERE id = ?", (record_id,))
+    record = cursor.fetchone()
+    if not record:
+        conn.close()
+        raise HTTPException(status_code=404, detail="未找到对应的答题记录")
+        
+    # 查 exam_details
+    cursor.execute("SELECT * FROM exam_details WHERE exam_record_id = ? ORDER BY id", (record_id,))
+    details = cursor.fetchall()
+    conn.close()
+    
+    doc = Document()
+    
+    # 设置大标题
+    title = doc.add_paragraph()
+    title_run = title.add_run("在线答题过程及详情报告")
+    title_run.font.size = Pt(16)
+    title_run.bold = True
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    
+    # 基本信息表格
+    table = doc.add_table(rows=3, cols=4)
+    table.style = 'Table Grid'
+    
+    # 表格内容填充
+    def set_cell_text(row_idx, col_idx, label, val):
+        row = table.rows[row_idx]
+        row.cells[col_idx].text = label
+        row.cells[col_idx].paragraphs[0].runs[0].bold = True
+        row.cells[col_idx+1].text = str(val or "")
+        
+    set_cell_text(0, 0, "姓名", record['name'])
+    set_cell_text(0, 2, "工作单位", record['company'] or "暂无单位")
+    set_cell_text(1, 0, "考试科目", record['exam_type'])
+    
+    is_pass = record['score'] >= 90
+    set_cell_text(1, 2, "得分", f"{record['score']}分 ({'通过' if is_pass else '未通过'})")
+    
+    set_cell_text(2, 0, "答题用时", record['duration'])
+    set_cell_text(2, 2, "提交时间", record['created_at'])
+    
+    doc.add_paragraph() # 空行
+    
+    # 答题详情
+    h = doc.add_paragraph()
+    h_run = h.add_run("答题详情记录")
+    h_run.bold = True
+    h_run.font.size = Pt(12)
+    
+    for idx, item in enumerate(details):
+        p = doc.add_paragraph()
+        p.add_run(f"{idx + 1}. 题目：{item['question']}\n").bold = True
+        
+        user_ans = item['user_answer']
+        corr_ans = item['correct_answer']
+        is_correct = item['is_correct'] == 1
+        
+        p.add_run("   您的答案：")
+        user_run = p.add_run(f"{user_ans}")
+        if is_correct:
+            user_run.font.color.rgb = RGBColor(16, 185, 129) # 绿
+        else:
+            user_run.font.color.rgb = RGBColor(239, 68, 68) # 红
+            
+        p.add_run("    正确答案：")
+        p.add_run(f"{corr_ans}").font.color.rgb = RGBColor(16, 185, 129)
+        
+        p.add_run("    判定结果：")
+        res_run = p.add_run("回答正确" if is_correct else "回答错误")
+        res_run.bold = True
+        if is_correct:
+            res_run.font.color.rgb = RGBColor(16, 185, 129)
+        else:
+            res_run.font.color.rgb = RGBColor(239, 68, 68)
+            
+    # 输出到 stream
+    file_stream = io.BytesIO()
+    doc.save(file_stream)
+    file_stream.seek(0)
+    
+    filename = f"{record['company'] or '单位'}_{record['name']}_{record['exam_type']}答题详情.docx"
+    encoded_filename = urllib.parse.quote(filename)
+    headers = {
+        'Content-Disposition': f"attachment; filename*=UTF-8''{encoded_filename}"
+    }
+    return StreamingResponse(
+        file_stream, 
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document", 
+        headers=headers
+    )
+
 
 # ---------------- 静态页面路由 ----------------
 
