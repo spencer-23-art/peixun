@@ -361,7 +361,7 @@
 
         <!-- 第一行：照片位 -->
         <div class="form-group">
-          <label>第一行：电子照片 (点击区域可拍照或上传，系统自动压缩至200K内)</label>
+          <label>第一行：电子照片 (点击区域可拍照或上传，系统自动压缩至120K-199K)</label>
           <div class="photo-uploader" onclick="document.getElementById('photo-input').click()">
             <input type="file" id="photo-input" accept="image/*" onchange="handlePhotoChange(event)">
             <div class="photo-uploader-placeholder" id="uploader-placeholder">
@@ -707,53 +707,87 @@
     let currentEditRecordId = null;
     let historyData = [];
 
-    function compressCanvasToBlob(canvas, maxSizeKB, callback) {
-      let quality = 0.9;
-      function compressLoop() {
-        canvas.toBlob((blob) => {
-          if (blob.size <= maxSizeKB * 1024 || quality <= 0.1) {
-            callback(blob);
-          } else {
-            quality -= 0.15;
-            compressLoop();
-          }
-        }, 'image/jpeg', quality);
+    function compressImageFile(file, minSizeKB, maxSizeKB, callback) {
+      if (typeof maxSizeKB === 'function') {
+        callback = maxSizeKB;
+        maxSizeKB = minSizeKB;
+        minSizeKB = 0;
       }
-      compressLoop();
-    }
 
-    function compressImageFile(file, maxSizeKB, callback) {
       if (!file.type.startsWith('image/')) {
         showAlert('error', '所选文件不是有效的图片！');
         return;
       }
+
       const reader = new FileReader();
       reader.onload = function(e) {
         const img = new Image();
-        img.onload = function() {
-          let width = img.width;
-          let height = img.height;
-          const MAX_PIXELS = 1800; 
-          
-          if (width > height) {
-            if (width > MAX_PIXELS) {
-              height = Math.round((height * MAX_PIXELS) / width);
-              width = MAX_PIXELS;
+        img.onload = async function() {
+          let scale = 1.0;
+          const MAX_PIXELS = 1800;
+          let w = img.width;
+          let h = img.height;
+          if (w > h) {
+            if (w > MAX_PIXELS) {
+              h = Math.round((h * MAX_PIXELS) / w);
+              w = MAX_PIXELS;
             }
           } else {
-            if (height > MAX_PIXELS) {
-              width = Math.round((width * MAX_PIXELS) / height);
-              height = MAX_PIXELS;
+            if (h > MAX_PIXELS) {
+              w = Math.round((w * MAX_PIXELS) / h);
+              h = MAX_PIXELS;
             }
           }
 
-          const canvas = document.createElement('canvas');
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(img, 0, 0, width, height);
+          let canvas = document.createElement('canvas');
+          let ctx = canvas.getContext('2d');
+          let bestBlob = null;
+          const minBytes = minSizeKB * 1024;
+          const maxBytes = maxSizeKB * 1024;
 
-          compressCanvasToBlob(canvas, maxSizeKB, callback);
+          // 尺寸缩放迭代（最多尝试 4 次尺寸调整）
+          for (let sAttempt = 0; sAttempt < 4; sAttempt++) {
+            canvas.width = w * scale;
+            canvas.height = h * scale;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+            let lowQ = 0.05;
+            let highQ = 1.0;
+            let localBestBlob = null;
+
+            // 质量二分法迭代（尝试 7 次，可精确到 1% 左右的质量差异）
+            for (let qAttempt = 0; qAttempt < 7; qAttempt++) {
+              const quality = (lowQ + highQ) / 2;
+              const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', quality));
+
+              if (blob.size >= minBytes && blob.size <= maxBytes) {
+                callback(blob);
+                return;
+              }
+
+              localBestBlob = blob;
+
+              if (blob.size > maxBytes) {
+                highQ = quality; // 太大了，降低质量
+              } else {
+                lowQ = quality;  // 太小了，提升质量
+              }
+            }
+
+            bestBlob = localBestBlob;
+
+            // 根据二分结果微调尺寸比例
+            if (localBestBlob.size > maxBytes) {
+              scale *= 0.75; // 质量降到最低依然超标，缩小尺寸再试
+            } else if (localBestBlob.size < minBytes) {
+              if (scale >= 2.0) break; // 防止无限放大
+              scale *= 1.4;  // 质量满格依然不够，放大尺寸再试（针对背景极简单的图）
+            }
+          }
+
+          // 兜底返回最接近目标区间的 Blob
+          callback(bestBlob);
         };
         img.src = e.target.result;
       };
@@ -1404,10 +1438,10 @@
           <circle cx="12" cy="12" r="10" stroke-opacity="0.25"></circle>
           <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4"></path>
         </svg>
-        <p>正在自动压缩照片(限制200K内)...</p>
+        <p>正在自动压缩照片(控制在120K-199K)...</p>
       `;
 
-      compressImageFile(file, 200, (blob) => {
+      compressImageFile(file, 120, 199, (blob) => {
         compressedPhotoBlob = blob;
         const blobUrl = URL.createObjectURL(blob);
         preview.src = blobUrl;
