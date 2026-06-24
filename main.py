@@ -1041,7 +1041,8 @@ def download_word(record_id: int, token: str = None, authorization: str = Header
                 "联系电话": row['phone'],
                 "岗位": row['job'],
                 "常住地址": row['address'],
-                "工作单位": row['company'] or ''
+                "工作单位": row['company'] or '',
+                "created_at": row['created_at']
             }
             temp_word_path = generate_record_card(record_data, perm_id_img_path)
             
@@ -1143,7 +1144,8 @@ async def create_record(
                 "联系电话": phone,
                 "岗位": job,
                 "常住地址": address,
-                "工作单位": current_user['company']
+                "工作单位": current_user['company'],
+                "created_at": beijing_now().strftime("%Y-%m-%d %H:%M:%S")
             }
             word_path = generate_record_card(record_data, perm_id_img_path)
             
@@ -1272,7 +1274,8 @@ async def update_record(
                 "联系电话": phone,
                 "岗位": job,
                 "常住地址": address,
-                "工作单位": current_user['company']
+                "工作单位": current_user['company'],
+                "created_at": record['created_at']
             }
             new_word_path = generate_record_card(record_data, perm_id_img_path)
             

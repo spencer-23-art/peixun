@@ -1055,7 +1055,21 @@ def generate_record_card(record_data, id_card_img_path):
     output_path = os.path.join(CARDS_DIR, card_filename).replace('\\', '/')
     
     doc = Document(template_path)
-    now = datetime.datetime.now()
+    
+    # 优先解析传入的录入日期 (北京时间)，如无则默认为当前北京时间
+    created_at = record_data.get('created_at')
+    record_date = None
+    if created_at:
+        try:
+            if ' ' in created_at:
+                record_date = datetime.datetime.strptime(created_at.split(' ')[0], "%Y-%m-%d")
+            else:
+                record_date = datetime.datetime.strptime(created_at, "%Y-%m-%d")
+        except Exception:
+            pass
+            
+    if not record_date:
+        record_date = datetime.datetime.utcnow() + datetime.timedelta(hours=8)
     
     replacements = {
         '[[NAME]]': record_data.get('工作单位', ''),
@@ -1064,9 +1078,9 @@ def generate_record_card(record_data, id_card_img_path):
         '[[GENDER]]': record_data.get('性别', ''),
         '[[AGE]]': str(record_data.get('年龄', '')),
         '[[PHONE]]': str(record_data.get('联系电话', '')),
-        '[[YEAR]]': str(now.year),
-        '[[MONTH]]': str(now.month),
-        '[[DAY]]': str(now.day)
+        '[[YEAR]]': str(record_date.year),
+        '[[MONTH]]': str(record_date.month),
+        '[[DAY]]': str(record_date.day)
     }
     
     replaced_img = False
