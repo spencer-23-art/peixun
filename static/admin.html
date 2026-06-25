@@ -979,8 +979,8 @@
             return (a.is_restore_downloaded || 0) - (b.is_restore_downloaded || 0);
           }
           var tA = 0, tB = 0;
-          try { tA = a.created_at ? new Date(a.created_at.replace(' ', 'T') + 'Z').getTime() : 0; } catch(e) {}
-          try { tB = b.created_at ? new Date(b.created_at.replace(' ', 'T') + 'Z').getTime() : 0; } catch(e) {}
+          try { tA = a.created_at ? new Date(a.created_at.replace(' ', 'T')).getTime() : 0; } catch(e) {}
+          try { tB = b.created_at ? new Date(b.created_at.replace(' ', 'T')).getTime() : 0; } catch(e) {}
           return tB - tA;
         });
         if (finalRecords.length === 0) {
@@ -1345,7 +1345,7 @@
         if (a.is_gate_downloaded !== b.is_gate_downloaded) {
           return a.is_gate_downloaded - b.is_gate_downloaded; // ASC (0 排在 1 前面)
         }
-        return new Date(b.created_at.replace(' ', 'T') + 'Z') - new Date(a.created_at.replace(' ', 'T') + 'Z');
+        return new Date(b.created_at.replace(' ', 'T')) - new Date(a.created_at.replace(' ', 'T'));
       });
       
       if (finalRecords.length === 0) {
@@ -1884,7 +1884,7 @@
     // 时间格式化
     function formatTime(isoStr) {
       if (!isoStr) return '';
-      const d = new Date(isoStr.replace(' ', 'T') + 'Z');
+      const d = new Date(isoStr.replace(' ', 'T'));
       if (isNaN(d.getTime())) return isoStr;
       return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
     }
@@ -1987,7 +1987,7 @@
     function formatDateTime(dateStr) {
       if (!dateStr) return '';
       try {
-        var date = new Date(dateStr);
+        var date = new Date(dateStr.replace(' ', 'T'));
         var year = date.getFullYear();
         var month = String(date.getMonth() + 1).padStart(2, '0');
         var day = String(date.getDate()).padStart(2, '0');
