@@ -2078,11 +2078,10 @@
         }
         
         var rowClassAttr = !isToday ? ' class="downloaded-row"' : '';
-        var arrow = hasHistory ? '<span id="arrow-' + record.id + '" style="margin-right: 8px; color: var(--primary-color); font-size: 0.8rem; transition: transform 0.2s; display: inline-block;">▶</span>' : '';
-        var badge = hasHistory ? ' <span style="background: rgba(99, 102, 241, 0.18); color: #a5b4fc; font-size: 0.75rem; padding: 1px 6px; border-radius: 4px; margin-left: 6px; font-weight: 500; border: 1px solid rgba(99, 102, 241, 0.3);">多次答题 (' + record.history.length + ')</span>' : '';
+        var badge = hasHistory ? ' <span style="background: rgba(99, 102, 241, 0.18); color: #a5b4fc; font-size: 0.75rem; padding: 1px 6px; border-radius: 4px; margin-left: 6px; font-weight: 500; border: 1px solid rgba(99, 102, 241, 0.3);">答题' + record.history.length + '次</span>' : '';
         
         html += '<tr' + rowClassAttr + (hasHistory ? ' style="cursor: pointer;" onclick="toggleHistoryRow(' + record.id + ')"' : '') + '>' +
-          '<td>' + arrow + escapeHtml(record.name) + badge + '</td>' +
+          '<td>' + escapeHtml(record.name) + badge + '</td>' +
           '<td>' + escapeHtml(record.company) + '</td>' +
           '<td>' + escapeHtml(record.exam_type) + '</td>' +
           '<td style="font-weight: 600; color: ' + (isPass ? '#10b981' : '#ef4444') + ';">' + record.score + '分</td>' +
