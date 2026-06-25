@@ -2,14 +2,11 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# 换 Debian 国内源（清华镜像）加速 apt-get 安装
-RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
-        sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list.d/debian.sources && \
-        sed -i 's/security.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list.d/debian.sources; \
-    else \
-        sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list && \
-        sed -i 's/security.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list; \
-    fi
+# 换 Debian 国内源（阿里源）加速 apt-get 安装
+RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/* 2>/dev/null || true && \
+    sed -i 's/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/* 2>/dev/null || true && \
+    sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list 2>/dev/null || true && \
+    sed -i 's/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list 2>/dev/null || true
 
 # 安装 OpenCV 和 ONNXRuntime 运行所需的系统级 C++ 运行时及图形基础库
 RUN apt-get update && apt-get install -y \
