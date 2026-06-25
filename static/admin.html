@@ -2054,8 +2054,10 @@
       
       noDataDiv.style.display = 'none';
       
-      tbody.innerHTML = records.map(function(record) {
+      var html = '';
+      records.forEach(function(record) {
         var isPass = record.score >= 90;
+        var hasHistory = record.history && record.history.length > 1;
         
         // 判断是否为当天答题
         var isToday = false;
@@ -2076,17 +2078,70 @@
         }
         
         var rowClassAttr = !isToday ? ' class="downloaded-row"' : '';
+        var arrow = hasHistory ? '<span id="arrow-' + record.id + '" style="margin-right: 8px; color: var(--primary-color); font-size: 0.8rem; transition: transform 0.2s; display: inline-block;">▶</span>' : '';
+        var badge = hasHistory ? ' <span style="background: rgba(99, 102, 241, 0.18); color: #a5b4fc; font-size: 0.75rem; padding: 1px 6px; border-radius: 4px; margin-left: 6px; font-weight: 500; border: 1px solid rgba(99, 102, 241, 0.3);">多次答题 (' + record.history.length + ')</span>' : '';
         
-        return '<tr' + rowClassAttr + '>' +
-          '<td>' + escapeHtml(record.name) + '</td>' +
+        html += '<tr' + rowClassAttr + (hasHistory ? ' style="cursor: pointer;" onclick="toggleHistoryRow(' + record.id + ')"' : '') + '>' +
+          '<td>' + arrow + escapeHtml(record.name) + badge + '</td>' +
           '<td>' + escapeHtml(record.company) + '</td>' +
           '<td>' + escapeHtml(record.exam_type) + '</td>' +
           '<td style="font-weight: 600; color: ' + (isPass ? '#10b981' : '#ef4444') + ';">' + record.score + '分</td>' +
           '<td>' + (isPass ? '<span style="color: #10b981; font-weight: 600;">通过</span>' : '<span style="color: #ef4444; font-weight: 600;">未通过</span>') + '</td>' +
           '<td>' + formatDateTime(record.created_at) + '</td>' +
-          '<td><button class="btn btn-primary" style="padding: 4px 10px; font-size: 0.85rem;" onclick="viewExamDetail(' + record.id + ')">查看详情</button></td>' +
+          '<td><button class="btn btn-primary" style="padding: 4px 10px; font-size: 0.85rem;" onclick="event.stopPropagation(); viewExamDetail(' + record.id + ')">查看详情</button></td>' +
           '</tr>';
-      }).join('');
+          
+        if (hasHistory) {
+          var subTableHtml = '<tr id="history-row-' + record.id + '" style="display: none; background: rgba(0, 0, 0, 0.25);">' +
+            '<td colspan="7" style="padding: 12px 20px;">' +
+            '  <div style="border-left: 3px solid var(--primary-color); padding-left: 12px; margin: 4px 0 10px 0; font-size: 0.88rem; font-weight: 600; color: #a5b4fc;">历史考试明细记录：</div>' +
+            '  <table style="width: 100%; border-collapse: collapse; font-size: 0.82rem; background: rgba(255, 255, 255, 0.02); border-radius: 6px; overflow: hidden; border: 1px solid rgba(255,255,255,0.05);">' +
+            '    <thead>' +
+            '      <tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.08); text-align: left; color: var(--text-muted); background: rgba(255, 255, 255, 0.02);">' +
+            '        <th style="padding: 8px 12px; width: 60px;">序号</th>' +
+            '        <th style="padding: 8px 12px;">答题交卷时间</th>' +
+            '        <th style="padding: 8px 12px; width: 120px;">考试用时</th>' +
+            '        <th style="padding: 8px 12px; width: 100px;">得分</th>' +
+            '        <th style="padding: 8px 12px; width: 100px;">评定结果</th>' +
+            '        <th style="padding: 8px 12px; width: 120px;">操作</th>' +
+            '      </tr>' +
+            '    </thead>' +
+            '    <tbody>';
+            
+          record.history.forEach(function(hItem, hIdx) {
+            var hPass = hItem.score >= 90;
+            subTableHtml += '<tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.04); color: var(--text-main);">' +
+              '  <td style="padding: 8px 12px; color: var(--text-muted);">' + (hIdx + 1) + '</td>' +
+              '  <td style="padding: 8px 12px;">' + formatDateTime(hItem.created_at) + '</td>' +
+              '  <td style="padding: 8px 12px;">' + hItem.duration + '</td>' +
+              '  <td style="padding: 8px 12px; font-weight: 600; color: ' + (hPass ? '#10b981' : '#ef4444') + ';">' + hItem.score + '分</td>' +
+              '  <td style="padding: 8px 12px;">' + (hPass ? '<span style="color: #10b981; font-weight: 500;">通过</span>' : '<span style="color: #ef4444; font-weight: 500;">未通过</span>') + '</td>' +
+              '  <td style="padding: 6px 12px;"><button class="btn btn-secondary" style="padding: 2px 8px; font-size: 0.75rem; background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border);" onclick="event.stopPropagation(); viewExamDetail(' + hItem.id + ')">查看详情</button></td>' +
+              '</tr>';
+          });
+          
+          subTableHtml += '    </tbody>' +
+            '  </table>' +
+            '</td>' +
+            '</tr>';
+          html += subTableHtml;
+        }
+      });
+      tbody.innerHTML = html;
+    }
+    
+    // 切换折叠显示多次答题的历史行
+    function toggleHistoryRow(recordId) {
+      var row = document.getElementById('history-row-' + recordId);
+      var arrow = document.getElementById('arrow-' + recordId);
+      if (!row) return;
+      if (row.style.display === 'none') {
+        row.style.display = 'table-row';
+        if (arrow) arrow.style.transform = 'rotate(90deg)';
+      } else {
+        row.style.display = 'none';
+        if (arrow) arrow.style.transform = 'none';
+      }
     }
 
     // 渲染考试记录的分页按钮

@@ -1976,41 +1976,52 @@ def get_exam_records(company: str = '', exam_type: str = '', name: str = '',
             base_query += " AND name LIKE ?"
             params.append(f"%{name}%")
             
-        total = 0
-        if limit > 0:
-            count_query = f"SELECT COUNT(*) {base_query}"
-            cursor.execute(count_query, params)
-            total = cursor.fetchone()[0]
-            
-            query = f"SELECT * {base_query} ORDER BY created_at DESC LIMIT ? OFFSET ?"
-            offset = (page - 1) * limit
-            cursor.execute(query, params + [limit, offset])
-        else:
-            query = f"SELECT * {base_query} ORDER BY created_at DESC"
-            cursor.execute(query, params)
-            
+        # 查出全部符合条件的记录，以便在内存中去重合并多次答题
+        query = f"SELECT * {base_query} ORDER BY created_at DESC"
+        cursor.execute(query, params)
         records = cursor.fetchall()
         
-        result = []
+        grouped = {}
         for r in records:
-            result.append({
+            key = (r['name'], r['company'], r['exam_type'])
+            if key not in grouped:
+                grouped[key] = {
+                    "id": r['id'],
+                    "name": r['name'],
+                    "company": r['company'],
+                    "exam_type": r['exam_type'],
+                    "score": r['score'],
+                    "answered_count": r['answered_count'],
+                    "correct_count": r['correct_count'],
+                    "duration": r['duration'],
+                    "created_at": r['created_at'],
+                    "history": []
+                }
+            grouped[key]["history"].append({
                 "id": r['id'],
-                "name": r['name'],
-                "company": r['company'],
-                "exam_type": r['exam_type'],
                 "score": r['score'],
                 "answered_count": r['answered_count'],
                 "correct_count": r['correct_count'],
                 "duration": r['duration'],
                 "created_at": r['created_at']
             })
+            
+        grouped_list = list(grouped.values())
+        total = len(grouped_list)
         
+        # 进行分页
+        if limit > 0:
+            offset = (page - 1) * limit
+            paginated_records = grouped_list[offset : offset + limit]
+        else:
+            paginated_records = grouped_list
+            
         conn.close()
         
         return {
             "code": 200, 
-            "data": result,
-            "total": total if limit > 0 else len(result),
+            "data": paginated_records,
+            "total": total,
             "page": page,
             "limit": limit
         }
