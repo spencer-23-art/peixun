@@ -1150,7 +1150,7 @@ def generate_record_card(record_data, id_card_img_path):
 # ================= 5. 定期清理守护线程 =================
 def cleanup_old_words():
     now = time.time()
-    one_week_ago = now - 7 * 24 * 3600  # 一周前
+    one_month_ago = now - 30 * 24 * 3600  # 一个月前 (30天)
     
     import glob
     
@@ -1161,24 +1161,24 @@ def cleanup_old_words():
         for docx_file in glob.glob(os.path.join(CARDS_DIR, "*.docx")):
             try:
                 mtime = os.path.getmtime(docx_file)
-                if mtime < one_week_ago:
+                if mtime < one_month_ago:
                     os.remove(docx_file)
                     filename = os.path.basename(docx_file)
                     cursor.execute("UPDATE records SET word_path = NULL WHERE word_path LIKE ?", (f"%{filename}",))
-                    print(f"[Cleanup] 已成功自动清理 7 天前的登记卡 Word 文件: {filename}")
+                    print(f"[Cleanup] 已成功自动清理 30 天前的登记卡 Word 文件: {filename}")
             except Exception as e:
                 print(f"[Error] 自动清理文件 {docx_file} 失败: {e}")
         conn.commit()
         conn.close()
         
-    # 2. 扫描 idcards 目录下的裁剪后持久化身份证照片，也仅保留一周
+    # 2. 扫描 idcards 目录下的裁剪后持久化身份证照片，也仅保留一个月
     if os.path.exists(IDCARD_SAVE_DIR):
         for id_img_file in glob.glob(os.path.join(IDCARD_SAVE_DIR, "*")):
             try:
                 mtime = os.path.getmtime(id_img_file)
-                if mtime < one_week_ago:
+                if mtime < one_month_ago:
                     os.remove(id_img_file)
-                    print(f"[Cleanup] 已成功自动清理 7 天前的身份证裁剪照片: {os.path.basename(id_img_file)}")
+                    print(f"[Cleanup] 已成功自动清理 30 天前的身份证裁剪照片: {os.path.basename(id_img_file)}")
             except Exception as e:
                 print(f"[Error] 自动清理身份证照片 {id_img_file} 失败: {e}")
                 
