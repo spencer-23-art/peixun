@@ -750,6 +750,12 @@
 
     // 提交考试
     async function submitExam() {
+      const btnSubmit = document.getElementById('btn-submit');
+      if (btnSubmit) {
+        btnSubmit.disabled = true;
+        btnSubmit.textContent = '正在交卷...';
+      }
+
       if (examData.timerInterval) {
         clearInterval(examData.timerInterval);
       }
@@ -794,11 +800,19 @@
           correctCount = result.data.correct_count;
           totalCount = result.data.total_count || totalCount;
         } else {
-          alert('成绩保存失败: ' + (result.message || '服务器判分异常'));
+          alert('成绩保存失败: ' + (result.message || result.detail || '服务器判分异常'));
+          if (btnSubmit) {
+            btnSubmit.disabled = false;
+            btnSubmit.textContent = '交卷';
+          }
         }
       } catch (error) {
         console.error('保存答题记录失败:', error);
         alert('提交考卷网络错误，请稍后重试');
+        if (btnSubmit) {
+          btnSubmit.disabled = false;
+          btnSubmit.textContent = '交卷';
+        }
       }
       
       // 更新结果页面
