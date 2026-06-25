@@ -6,6 +6,17 @@
   <title>培训信息录入系统 - 管理后台</title>
   <link rel="stylesheet" href="/static/css/style.css?v=1.0.6">
   <style>
+    #filter-company, #exam-filter-company {
+      cursor: pointer;
+      background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      background-size: 16px;
+      padding-right: 36px;
+    }
+    #filter-company:focus, #exam-filter-company:focus {
+      background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236366f1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+    }
     /* 区域标签样式 */
     .region-tag {
       display: inline-flex;
@@ -490,11 +501,10 @@
             </div>
           </div>
           <!-- 工作单位 -->
-          <div class="filter-item">
+          <div class="filter-item" style="position: relative;" id="records-company-wrapper">
             <label class="filter-label">工作单位</label>
-            <select id="filter-company" class="form-control filter-control" onchange="handleCompanyFilterChange()">
-              <option value="">全部单位</option>
-            </select>
+            <input type="text" id="filter-company" class="form-control filter-control" placeholder="输入或选择单位" onfocus="showRecordsCompanyDropdown()" onclick="showRecordsCompanyDropdown()" oninput="handleRecordsCompanyInput()" onblur="hideRecordsCompanyDropdown()" autocomplete="off">
+            <div id="records-company-dropdown" style="display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: rgba(15, 23, 42, 0.98); border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; max-height: 200px; overflow-y: auto; z-index: 9999; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); box-shadow: 0 10px 25px -5px rgba(0,0,0,0.6);"></div>
           </div>
           <!-- 姓名搜索 -->
           <div class="filter-item">
@@ -583,8 +593,8 @@
           <!-- 工作单位 -->
           <div class="filter-item" style="position: relative;" id="exam-company-wrapper">
             <label class="filter-label">工作单位</label>
-            <input type="text" id="exam-filter-company" class="form-control filter-control" placeholder="输入或选择单位" onfocus="showCompanyDropdown()" oninput="handleExamCompanyInput()" onblur="hideCompanyDropdown()" autocomplete="off">
-            <div id="exam-company-dropdown" style="display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: rgba(30, 27, 75, 0.98); border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; max-height: 200px; overflow-y: auto; z-index: 9999; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); box-shadow: 0 10px 25px -5px rgba(0,0,0,0.6);"></div>
+            <input type="text" id="exam-filter-company" class="form-control filter-control" placeholder="输入或选择单位" onfocus="showCompanyDropdown()" onclick="showCompanyDropdown()" oninput="handleExamCompanyInput()" onblur="hideCompanyDropdown()" autocomplete="off">
+            <div id="exam-company-dropdown" style="display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: rgba(15, 23, 42, 0.98); border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; max-height: 200px; overflow-y: auto; z-index: 9999; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); box-shadow: 0 10px 25px -5px rgba(0,0,0,0.6);"></div>
           </div>
           <!-- 考试科目 -->
           <div class="filter-item">
@@ -678,6 +688,18 @@
                 </div>
                 <div id="cfg-regions-container" style="display: flex; flex-wrap: wrap; gap: 8px; min-height: 46px; padding: 10px; border: 1px dashed var(--glass-border); border-radius: 6px; background: rgba(255,255,255,0.02);">
                   <!-- 动态生成的区域 Tag -->
+                </div>
+              </div>
+
+              <!-- 岗位/工种设置 -->
+              <div class="form-group" style="margin-bottom: 25px; text-align: left;">
+                <label style="display: block; margin-bottom: 8px; font-size: 0.9rem; color: var(--text-muted);">客户端岗位/工种列表：</label>
+                <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                  <input type="text" id="cfg-new-job" class="form-control" style="margin-bottom: 0; flex: 1;" placeholder="输入新岗位 (如: 钳工)">
+                  <button type="button" class="btn btn-secondary" onclick="addJobTag()" style="width: auto; padding: 0 16px; margin-bottom: 0;">添加</button>
+                </div>
+                <div id="cfg-jobs-container" style="display: flex; flex-wrap: wrap; gap: 8px; min-height: 46px; padding: 10px; border: 1px dashed var(--glass-border); border-radius: 6px; background: rgba(255,255,255,0.02);">
+                  <!-- 动态生成的岗位 Tag -->
                 </div>
               </div>
 
@@ -1145,6 +1167,8 @@
     }
 
     // 0. 加载所有已审核通过且未删除的单位列表
+    var recordsAllCompanies = [];
+    
     async function loadCompanies() {
       try {
         const response = await fetch('/api/admin/companies', {
@@ -1152,25 +1176,96 @@
         });
         const result = await response.json();
         if (response.ok && result.code === 200) {
-          const select = document.getElementById('filter-company');
-          const currentVal = select.value;
-          
-          select.innerHTML = '<option value="">全部单位</option>';
-          result.data.forEach(c => {
-            const opt = document.createElement('option');
-            opt.value = c;
-            opt.innerText = c;
-            if (c === currentVal) {
-              opt.selected = true;
-            }
-            select.appendChild(opt);
-          });
-          
-          filterCompany = select.value;
+          recordsAllCompanies = result.data || [];
         }
       } catch (err) {
         console.error('加载单位列表发生网络错误', err);
       }
+    }
+    
+    // 已录入培训数据 - 工作单位可搜索下拉
+    function showRecordsCompanyDropdown() {
+      var dropdown = document.getElementById('records-company-dropdown');
+      if (dropdown) {
+        dropdown.style.display = 'block';
+        renderRecordsCompanyDropdown('');
+      }
+    }
+    
+    function hideRecordsCompanyDropdown() {
+      setTimeout(function() {
+        var dropdown = document.getElementById('records-company-dropdown');
+        if (dropdown) {
+          dropdown.style.display = 'none';
+        }
+      }, 200);
+    }
+    
+    function handleRecordsCompanyInput() {
+      var val = document.getElementById('filter-company').value.trim();
+      renderRecordsCompanyDropdown(val);
+      // 防抖触发筛选
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(function() {
+        filterCompany = val;
+        recordsPage = 1;
+        loadRecords();
+      }, 300);
+    }
+    
+    function renderRecordsCompanyDropdown(filterText) {
+      var dropdown = document.getElementById('records-company-dropdown');
+      if (!dropdown) return;
+      dropdown.innerHTML = '';
+      
+      // "全部单位" 选项
+      var allItem = document.createElement('div');
+      allItem.style.cssText = 'padding: 8px 12px; color: var(--accent-color, #10b981); font-size: 0.9rem; cursor: pointer; transition: background 0.2s; font-weight: 600; border-bottom: 1px solid rgba(255,255,255,0.08);';
+      allItem.textContent = '全部单位';
+      allItem.onmouseover = function() { allItem.style.background = 'rgba(16, 185, 129, 0.15)'; };
+      allItem.onmouseout = function() { allItem.style.background = 'transparent'; };
+      allItem.onmousedown = function(e) {
+        e.preventDefault();
+        document.getElementById('filter-company').value = '';
+        dropdown.style.display = 'none';
+        filterCompany = '';
+        recordsPage = 1;
+        loadRecords();
+      };
+      dropdown.appendChild(allItem);
+      
+      var filtered = recordsAllCompanies;
+      if (filterText) {
+        var lowerText = filterText.toLowerCase();
+        filtered = recordsAllCompanies.filter(function(c) {
+          return c.toLowerCase().indexOf(lowerText) !== -1;
+        });
+      }
+      
+      if (filtered.length === 0) {
+        var noMatch = document.createElement('div');
+        noMatch.style.cssText = 'padding: 8px 12px; color: var(--text-muted, #94a3b8); font-size: 0.85rem;';
+        noMatch.textContent = '无匹配单位';
+        dropdown.appendChild(noMatch);
+        return;
+      }
+      
+      filtered.forEach(function(c) {
+        var item = document.createElement('div');
+        item.style.cssText = 'padding: 8px 12px; color: #fff; font-size: 0.9rem; cursor: pointer; transition: background 0.2s;';
+        item.textContent = c;
+        item.onmouseover = function() { item.style.background = 'rgba(99, 102, 241, 0.2)'; };
+        item.onmouseout = function() { item.style.background = 'transparent'; };
+        item.onmousedown = function(e) {
+          e.preventDefault();
+          document.getElementById('filter-company').value = c;
+          dropdown.style.display = 'none';
+          filterCompany = c;
+          recordsPage = 1;
+          loadRecords();
+        };
+        dropdown.appendChild(item);
+      });
     }
 
     async function loadSystemRegions() {
@@ -2068,7 +2163,7 @@
       var dropdown = document.getElementById('exam-company-dropdown');
       if (dropdown) {
         dropdown.style.display = 'block';
-        renderCompanyDropdown(document.getElementById('exam-filter-company').value.trim());
+        renderCompanyDropdown('');
       }
     }
 
@@ -2257,6 +2352,7 @@
     }
 
     let configuredRegions = [];
+    let configuredJobs = [];
 
     function renderRegionTags() {
       const container = document.getElementById('cfg-regions-container');
@@ -2297,6 +2393,48 @@
     function removeRegionTag(index) {
       configuredRegions.splice(index, 1);
       renderRegionTags();
+    }
+
+    // 岗位/工种 Tag 管理
+    function renderJobTags() {
+      const container = document.getElementById('cfg-jobs-container');
+      if (!container) return;
+      container.innerHTML = '';
+      if (configuredJobs.length === 0) {
+        container.innerHTML = '<span style="color: var(--text-muted); font-size: 0.85rem; padding: 4px 0;">暂无配置岗位/工种，请添加</span>';
+        return;
+      }
+      configuredJobs.forEach((job, index) => {
+        const tag = document.createElement('div');
+        tag.className = 'region-tag';
+        tag.innerHTML = `
+          <span>${escapeHtml(job)}</span>
+          <span class="remove-btn" onclick="removeJobTag(${index})">&times;</span>
+        `;
+        container.appendChild(tag);
+      });
+    }
+
+    function addJobTag() {
+      const input = document.getElementById('cfg-new-job');
+      if (!input) return;
+      const val = input.value.trim();
+      if (!val) {
+        alert('岗位名称不能为空');
+        return;
+      }
+      if (configuredJobs.includes(val)) {
+        alert('该岗位已在列表中');
+        return;
+      }
+      configuredJobs.push(val);
+      renderJobTags();
+      input.value = '';
+    }
+
+    function removeJobTag(index) {
+      configuredJobs.splice(index, 1);
+      renderJobTags();
     }
 
     function switchConfigSubTab(subTab) {
@@ -2426,6 +2564,10 @@
           const regionsStr = result.data.regions || '';
           configuredRegions = regionsStr.split(',').map(r => r.trim()).filter(r => r.length > 0);
           renderRegionTags();
+          
+          const jobsStr = result.data.job_types || '';
+          configuredJobs = jobsStr.split(',').map(j => j.trim()).filter(j => j.length > 0);
+          renderJobTags();
         } else {
           showAlert('error', '加载系统配置失败');
         }
@@ -2446,6 +2588,7 @@
       formData.append('start_time', startTime);
       formData.append('end_time', endTime);
       formData.append('regions', configuredRegions.join(','));
+      formData.append('job_types', configuredJobs.join(','));
       
       try {
         const response = await fetch('/api/admin/config', {

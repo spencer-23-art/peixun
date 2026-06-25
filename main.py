@@ -1297,36 +1297,42 @@ async def update_record(
     return {"code": 200, "message": "信息修改成功！"}
 
 # 获取所有已审核通过且未删除用户的单位列表（去重，仅管理员）
+# 排序逻辑：按 exam_records 中最后答题完毕时间降序，最近有人答完题的单位排最前面
 @app.get("/api/admin/companies")
 def get_approved_companies(admin = Depends(get_admin_user)):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("SELECT DISTINCT company FROM users WHERE role != 'admin' AND status = 'approved' AND company IS NOT NULL AND company != ''")
-    all_companies = [row[0] for row in cursor.fetchall()]
-    
-    today_bj = beijing_now().strftime("%Y-%m-%d")
-    cursor.execute("SELECT DISTINCT company FROM exam_records WHERE date(created_at) = ?", (today_bj,))
-    today_companies = set([row[0] for row in cursor.fetchall()])
+    query = """
+        SELECT u.company, MAX(e.created_at) AS last_exam_time
+        FROM users u
+        LEFT JOIN exam_records e ON u.company = e.company
+        WHERE u.role != 'admin' AND u.status = 'approved' AND u.company IS NOT NULL AND u.company != ''
+        GROUP BY u.company
+        ORDER BY
+            CASE WHEN MAX(e.created_at) IS NULL THEN 1 ELSE 0 END ASC,
+            MAX(e.created_at) DESC,
+            u.company ASC
+    """
+    cursor.execute(query)
+    sorted_companies = [row[0] for row in cursor.fetchall()]
     conn.close()
-    
-    sorted_companies = sorted(all_companies, key=lambda c: 0 if c in today_companies else 1)
     return {"code": 200, "data": sorted_companies}
 
 # 获取所有已审核通过用户的单位列表（公开接口，供答题页面使用）
-# 按照注册用户在 records 表中提交的人员信息数量进行降序排序。如果某些单位没有在 records 中提交信息，则排到后面。
+# 排序逻辑：按 exam_records 中最后答题完毕时间降序，最近有人答完题的单位排最前面
 @app.get("/api/companies")
 def get_companies():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     query = """
-        SELECT u.company, MAX(r.created_at) AS last_submit_time
+        SELECT u.company, MAX(e.created_at) AS last_exam_time
         FROM users u
-        LEFT JOIN records r ON u.id = r.user_id
+        LEFT JOIN exam_records e ON u.company = e.company
         WHERE u.role != 'admin' AND u.company IS NOT NULL AND u.company != ''
         GROUP BY u.company
-        ORDER BY 
-            CASE WHEN MAX(r.created_at) IS NULL THEN 1 ELSE 0 END ASC,
-            MAX(r.created_at) DESC,
+        ORDER BY
+            CASE WHEN MAX(e.created_at) IS NULL THEN 1 ELSE 0 END ASC,
+            MAX(e.created_at) DESC,
             u.company ASC
     """
     cursor.execute(query)
@@ -2203,6 +2209,14 @@ def get_admin():
     with open("static/admin.html", "r", encoding="utf-8") as f:
         return HTMLResponse(content=f.read(), headers=headers)
 
+# 获取可用岗位/工种列表（公开接口，供客户端动态加载使用）
+@app.get("/api/job_types")
+def get_job_types():
+    default_jobs = '普工,木工,泥工,钢筋工,电焊工,电工,安拆工,塔吊司机,吊车司机,信号工,电梯司机,管理人员,安全员'
+    jobs_str = get_config('job_types', default_jobs)
+    jobs_list = [j.strip() for j in jobs_str.split(',') if j.strip()]
+    return {"code": 200, "job_types": jobs_list}
+
 # 获取可用区域列表（公开接口，无需登录）
 @app.get("/api/regions")
 def get_regions():
@@ -2256,12 +2270,14 @@ def delete_exam_subject(name: str = Form(...), admin = Depends(get_admin_user)):
 # 获取考试配置（仅管理员）
 @app.get("/api/admin/config")
 def get_configs_api(admin = Depends(get_admin_user)):
+    default_jobs = '普工,木工,泥工,钢筋工,电焊工,电工,安拆工,塔吊司机,吊车司机,信号工,电梯司机,管理人员,安全员'
     return {
         "code": 200,
         "data": {
             "exam_start_time": get_config('exam_start_time', '08:00:00')[:5],
             "exam_end_time": get_config('exam_end_time', '12:00:00')[:5],
-            "regions": get_config('regions', '三元肥,尿素塔')
+            "regions": get_config('regions', '三元肥,尿素塔'),
+            "job_types": get_config('job_types', default_jobs)
         }
     }
 
@@ -2271,6 +2287,7 @@ def save_config_api(
     start_time: str = Form(...),
     end_time: str = Form(...),
     regions: str = Form(""),
+    job_types: str = Form(""),
     admin = Depends(get_admin_user)
 ):
     if len(start_time) == 5:
@@ -2290,6 +2307,7 @@ def save_config_api(
         cursor.execute("INSERT OR REPLACE INTO configs (key, value) VALUES ('exam_start_time', ?)", (start_time,))
         cursor.execute("INSERT OR REPLACE INTO configs (key, value) VALUES ('exam_end_time', ?)", (end_time,))
         cursor.execute("INSERT OR REPLACE INTO configs (key, value) VALUES ('regions', ?)", (regions.strip(),))
+        cursor.execute("INSERT OR REPLACE INTO configs (key, value) VALUES ('job_types', ?)", (job_types.strip(),))
         conn.commit()
         return {"code": 200, "message": "配置保存成功"}
     except Exception as e:

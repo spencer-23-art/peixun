@@ -457,20 +457,7 @@
             <div class="form-group">
               <label for="job">岗位/工种 *</label>
               <select id="job" class="form-control" required>
-                <option value="" disabled selected>请选择岗位/工种</option>
-                <option value="普工">普工</option>
-                <option value="木工">木工</option>
-                <option value="泥工">泥工</option>
-                <option value="钢筋工">钢筋工</option>
-                <option value="电焊工">电焊工</option>
-                <option value="电工">电工</option>
-                <option value="安拆工">安拆工</option>
-                <option value="塔吊司机">塔吊司机</option>
-                <option value="吊车司机">吊车司机</option>
-                <option value="信号工">信号工</option>
-                <option value="电梯司机">电梯司机</option>
-                <option value="管理人员">管理人员</option>
-                <option value="安全员">安全员</option>
+                <option value="" disabled selected>正在加载岗位列表...</option>
               </select>
             </div>
             <div class="form-group">
@@ -694,9 +681,31 @@
       }
     }
 
+    // 动态加载岗位/工种列表
+    async function loadJobTypes() {
+      try {
+        const response = await fetch('/api/job_types');
+        const result = await response.json();
+        if (response.ok && result.code === 200 && result.job_types) {
+          const jobSelect = document.getElementById('job');
+          jobSelect.innerHTML = '<option value="" disabled selected>请选择岗位/工种</option>';
+          result.job_types.forEach(job => {
+            const opt = document.createElement('option');
+            opt.value = job;
+            opt.text = job;
+            jobSelect.appendChild(opt);
+          });
+          fillSavedFields();
+        }
+      } catch (err) {
+        console.error('加载岗位列表失败', err);
+      }
+    }
+
     // 初始化获取用户信息与区域列表
     (async () => {
       await loadRegions();
+      await loadJobTypes();
       await fetchUserStatus();
     })();
 
