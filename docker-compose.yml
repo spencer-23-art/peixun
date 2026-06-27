@@ -11,13 +11,13 @@ services:
       # 不会出现"重启即全员掉线"。切勿随意更改，更改后所有旧 token 立即失效。
       PEIXUN_SECRET_KEY: "f3a9c1e7b4d24e8a9c5f1b6e0d3a7c2e8b9f4a1c6d5e0b7a3f2c8e9d1b4a6c5"
     volumes:
-      - ./uploads:/app/uploads # 挂载图片目录，与代码解耦
+      - /data/peixun/uploads:/app/uploads # 挂载图片目录，与代码解耦
       - ./static:/app/static   # 挂载静态网页目录，后续 git pull 静态 HTML 可热生效，无需重新构建容器
       - ./main.py:/app/main.py # 挂载主后端代码
       - ./ocr_handler.py:/app/ocr_handler.py # 挂载OCR模块
       - ./start_server.py:/app/start_server.py # 挂载启动脚本
       # 挂载 SQLite 数据库文件，防止容器重建时数据丢失，与代码解耦
-      - ./peixun.db:/app/peixun.db
+      - /data/peixun/peixun.db:/app/peixun.db
       # 挂载题库目录，防止容器升级或重建时动态上传的题库丢失，与代码解耦
-      - ./shiti:/app/shiti
+      - /data/peixun/shiti:/app/shiti
     restart: always
