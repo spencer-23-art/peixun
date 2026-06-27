@@ -749,6 +749,7 @@ def login(request: Request, username: str = Form(...), password: str = Form(...)
         "data": {
             "token": token,
             "role": user['role'],
+            "username": user['username'],
             "real_name": user['real_name'],
             "company": user['company']
         }
@@ -2355,6 +2356,167 @@ def update_admin_password(
     except Exception as e:
         print(f"[Error] 修改管理员密码失败: {e}")
         raise HTTPException(status_code=500, detail="修改密码失败")
+    finally:
+        conn.close()
+
+# 获取二级管理员列表（仅超级管理员）
+@app.get("/api/admin/sub_admins")
+def get_sub_admins(admin = Depends(get_admin_user)):
+    if admin['username'] != 'admin':
+        raise HTTPException(status_code=403, detail="无权执行此操作，仅限超级管理员")
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT id, username, real_name, company, status, role FROM users WHERE role = 'admin' AND username != 'admin'")
+        rows = cursor.fetchall()
+        sub_admins = []
+        for r in rows:
+            sub_admins.append({
+                "id": r["id"],
+                "username": r["username"],
+                "real_name": r["real_name"],
+                "company": r["company"],
+                "status": r["status"],
+                "role": r["role"]
+            })
+        return {"code": 200, "data": sub_admins}
+    except Exception as e:
+        print(f"[Error] 获取二级管理员列表失败: {e}")
+        raise HTTPException(status_code=500, detail="获取列表失败")
+    finally:
+        conn.close()
+
+# 添加二级管理员（仅超级管理员）
+@app.post("/api/admin/add_sub_admin")
+def add_sub_admin(
+    username: str = Form(...),
+    password: str = Form(...),
+    real_name: str = Form("二级管理员"),
+    company: str = Form("管理部"),
+    admin = Depends(get_admin_user)
+):
+    if admin['username'] != 'admin':
+        raise HTTPException(status_code=403, detail="无权执行此操作，仅限超级管理员")
+    
+    username_clean = username.strip()
+    password_clean = password.strip()
+    if not username_clean or not password_clean:
+        raise HTTPException(status_code=400, detail="用户名和密码不能为空")
+    if len(password_clean) < 6:
+        raise HTTPException(status_code=400, detail="密码长度不能少于6位")
+
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT id FROM users WHERE username = ?", (username_clean,))
+        if cursor.fetchone():
+            raise HTTPException(status_code=400, detail="该用户名已存在")
+        
+        hashed_pwd = encrypt_pwd(password_clean)
+        cursor.execute(
+            "INSERT INTO users (username, password, real_name, company, status, role) VALUES (?, ?, ?, ?, ?, ?)",
+            (username_clean, hashed_pwd, real_name.strip(), company.strip(), 'approved', 'admin')
+        )
+        conn.commit()
+        return {"code": 200, "message": "二级管理员添加成功"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[Error] 添加二级管理员失败: {e}")
+        raise HTTPException(status_code=500, detail="添加失败")
+    finally:
+        conn.close()
+
+# 删除二级管理员（仅超级管理员）
+@app.post("/api/admin/delete_sub_admin")
+def delete_sub_admin(
+    sub_admin_id: int = Form(...),
+    admin = Depends(get_admin_user)
+):
+    if admin['username'] != 'admin':
+        raise HTTPException(status_code=403, detail="无权执行此操作，仅限超级管理员")
+    
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT username FROM users WHERE id = ?", (sub_admin_id,))
+        row = cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="该管理员不存在")
+        if row[0] == 'admin':
+            raise HTTPException(status_code=400, detail="不能删除超级管理员")
+        
+        cursor.execute("DELETE FROM users WHERE id = ?", (sub_admin_id,))
+        conn.commit()
+        return {"code": 200, "message": "二级管理员删除成功"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[Error] 删除二级管理员失败: {e}")
+        raise HTTPException(status_code=500, detail="删除失败")
+    finally:
+        conn.close()
+
+# 修改二级管理员账户名称和密码（仅超级管理员）
+@app.post("/api/admin/update_sub_admin")
+def update_sub_admin(
+    sub_admin_id: int = Form(...),
+    new_username: str = Form(...),
+    new_password: str = Form(None), # 留空表示不修改
+    real_name: str = Form(None),
+    company: str = Form(None),
+    admin = Depends(get_admin_user)
+):
+    if admin['username'] != 'admin':
+        raise HTTPException(status_code=403, detail="无权执行此操作，仅限超级管理员")
+    
+    new_username_clean = new_username.strip()
+    if not new_username_clean:
+        raise HTTPException(status_code=400, detail="用户名不能为空")
+
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT username FROM users WHERE id = ?", (sub_admin_id,))
+        row = cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="该管理员不存在")
+        if row[0] == 'admin':
+            raise HTTPException(status_code=400, detail="不能在此接口修改超级管理员")
+
+        # 检查新用户名是否冲突 (排除自身)
+        cursor.execute("SELECT id FROM users WHERE username = ? AND id != ?", (new_username_clean, sub_admin_id))
+        if cursor.fetchone():
+            raise HTTPException(status_code=400, detail="用户名已存在")
+
+        if new_password and new_password.strip():
+            new_password_clean = new_password.strip()
+            if len(new_password_clean) < 6:
+                raise HTTPException(status_code=400, detail="密码长度不能少于6位")
+            hashed_pwd = encrypt_pwd(new_password_clean)
+            cursor.execute(
+                "UPDATE users SET username = ?, password = ? WHERE id = ?",
+                (new_username_clean, hashed_pwd, sub_admin_id)
+            )
+        else:
+            cursor.execute(
+                "UPDATE users SET username = ? WHERE id = ?",
+                (new_username_clean, sub_admin_id)
+            )
+            
+        if real_name is not None:
+            cursor.execute("UPDATE users SET real_name = ? WHERE id = ?", (real_name.strip(), sub_admin_id))
+        if company is not None:
+            cursor.execute("UPDATE users SET company = ? WHERE id = ?", (company.strip(), sub_admin_id))
+            
+        conn.commit()
+        return {"code": 200, "message": "二级管理员信息更新成功"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[Error] 更新二级管理员失败: {e}")
+        raise HTTPException(status_code=500, detail="更新失败")
     finally:
         conn.close()
 

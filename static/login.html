@@ -170,6 +170,7 @@
             const storage = remember ? localStorage : sessionStorage;
             storage.setItem('token', result.data.token);
             storage.setItem('role', result.data.role);
+            storage.setItem('username', result.data.username || '');
             storage.setItem('real_name', result.data.real_name);
             storage.setItem('company', result.data.company);
 

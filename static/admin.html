@@ -746,6 +746,29 @@
                 <button class="btn btn-primary" onclick="changeAdminPassword()" style="width: auto; padding: 10px 24px; font-size: 0.95rem;">保存新密码</button>
               </div>
             </div>
+            <!-- 二级管理员管理（仅超级管理员 admin 可见） -->
+            <div id="sub-admins-section" class="glass-container" style="max-width: 100%; margin: 20px 0 0 0; padding: 30px; border: 1px solid var(--glass-border); border-radius: 12px; background: rgba(255, 255, 255, 0.02); box-sizing: border-box; width: 100%; display: none;">
+              <h3 style="margin-bottom: 20px; font-size: 1.25rem; color: var(--text-main); border-bottom: 1px solid var(--glass-border); padding-bottom: 12px; text-align: left; display: flex; justify-content: space-between; align-items: center;">
+                <span>👥 二级管理员账户管理</span>
+                <button class="btn btn-primary" onclick="showAddSubAdminModal()" style="width: auto; padding: 6px 16px; font-size: 0.85rem; margin: 0;">添加二级管理员</button>
+              </h3>
+              
+              <div class="table-wrapper">
+                <table>
+                  <thead>
+                    <tr>
+                      <th style="text-align: left;">账号名称 (用户名)</th>
+                      <th style="text-align: left;">真实姓名</th>
+                      <th style="text-align: left;">公司/部门</th>
+                      <th style="text-align: center; width: 150px;">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="sub-admins-tbody">
+                    <!-- 动态生成二级管理员列表 -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -785,6 +808,34 @@
     </div>
   </div>
 
+  <!-- 二级管理员模态框 -->
+  <div id="sub-admin-modal" class="modal" onclick="closeSubAdminModal()">
+    <div class="glass-container" style="max-width: 400px; margin-top: 0; padding: 25px; position: relative;" onclick="event.stopPropagation()">
+      <h3 id="sub-admin-modal-title" style="margin-bottom: 15px; text-align: left; background: linear-gradient(to right, #ffffff, #c7d2fe); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">添加二级管理员</h3>
+      <input type="hidden" id="sub-admin-id">
+      <div class="form-group" style="margin-bottom: 15px;">
+        <label for="sub-admin-username">账号名称 (用户名) *</label>
+        <input type="text" id="sub-admin-username" class="form-control" placeholder="请输入二级管理员用户名" required>
+      </div>
+      <div class="form-group" style="margin-bottom: 15px;">
+        <label for="sub-admin-realname">真实姓名 *</label>
+        <input type="text" id="sub-admin-realname" class="form-control" placeholder="请输入真实姓名" required>
+      </div>
+      <div class="form-group" style="margin-bottom: 15px;">
+        <label for="sub-admin-company">公司/部门 *</label>
+        <input type="text" id="sub-admin-company" class="form-control" placeholder="请输入公司或部门名称" required>
+      </div>
+      <div class="form-group" style="margin-bottom: 20px;">
+        <label id="sub-admin-password-label" for="sub-admin-password">密码 *</label>
+        <input type="password" id="sub-admin-password" class="form-control" placeholder="请输入密码">
+      </div>
+      <div style="display: flex; gap: 10px;">
+        <button class="btn btn-primary" onclick="submitSubAdmin()" style="width: auto; padding: 8px 16px;">确定</button>
+        <button class="btn btn-secondary" onclick="closeSubAdminModal()" style="width: auto; padding: 8px 16px;">取消</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 答题详情模态框 -->
   <div id="exam-detail-modal" class="modal" onclick="closeExamDetailModal()">
     <div class="glass-container" style="max-width: 700px; margin-top: 0; padding: 25px; position: relative; max-height: 80vh; overflow-y: auto;" onclick="event.stopPropagation()">
@@ -814,6 +865,48 @@
       sessionStorage.clear();
       window.location.href = '/login';
     }
+
+    let currentAdminUsername = getSessionItem('username') || '';
+
+    // 初始化获取管理员详细信息，同步并校准本地 username 状态
+    async function initAdminInfo() {
+      try {
+        const response = await fetch('/api/user/status', {
+          headers: { 'Authorization': token }
+        });
+        const result = await response.json();
+        if (response.ok && result.code === 200) {
+          currentAdminUsername = result.data.username;
+          const storage = localStorage.getItem('token') ? localStorage : sessionStorage;
+          storage.setItem('username', currentAdminUsername);
+          updateAdminMenuTitle();
+        }
+      } catch (err) {
+        console.error('初始化管理员信息失败', err);
+      }
+    }
+
+    function updateAdminMenuTitle() {
+      const menuPassword = document.getElementById('cfg-menu-password');
+      if (menuPassword) {
+        if (currentAdminUsername === 'admin') {
+          menuPassword.innerHTML = '👥 管理员账户设置';
+          const activeConfigTab = document.querySelector('.config-menu-item.active');
+          if (activeConfigTab && activeConfigTab.id === 'cfg-menu-password') {
+            const subAdminSec = document.getElementById('sub-admins-section');
+            if (subAdminSec) subAdminSec.style.display = 'block';
+            loadSubAdmins();
+          }
+        } else {
+          menuPassword.innerHTML = '🔒 管理员密码修改';
+          const subAdminSec = document.getElementById('sub-admins-section');
+          if (subAdminSec) subAdminSec.style.display = 'none';
+        }
+      }
+    }
+
+    // 页面加载后立即获取最新的超管/二级管理员身份
+    initAdminInfo();
 
     // 统一处理 401 响应：清 session + 友好提示 + 跳登录页
     function handleAuthFail(response, result) {
@@ -2506,6 +2599,14 @@
       
       if (subTab === 'bank') {
         loadExamBanks();
+      } else if (subTab === 'password') {
+        const subAdminSec = document.getElementById('sub-admins-section');
+        if (currentAdminUsername === 'admin') {
+          if (subAdminSec) subAdminSec.style.display = 'block';
+          loadSubAdmins();
+        } else {
+          if (subAdminSec) subAdminSec.style.display = 'none';
+        }
       }
     }
 
@@ -2764,6 +2865,178 @@
         }
       } catch (err) {
         alert('修改密码时网络发生错误');
+      }
+    }
+
+    // 二级管理员列表数据缓存
+    let subAdminsList = [];
+
+    function escapeHTML(str) {
+      if (!str) return '';
+      return str.replace(/[&<>'"]/g, 
+        tag => ({
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          "'": '&#39;',
+          '"': '&quot;'
+        }[tag] || tag)
+      );
+    }
+
+    // 加载二级管理员列表
+    async function loadSubAdmins() {
+      if (currentAdminUsername !== 'admin') return;
+      try {
+        const response = await fetch('/api/admin/sub_admins', {
+          headers: { 'Authorization': token }
+        });
+        const result = await response.json();
+        if (response.ok && result.code === 200) {
+          subAdminsList = result.data || [];
+          const tbody = document.getElementById('sub-admins-tbody');
+          if (!tbody) return;
+          tbody.innerHTML = '';
+          if (subAdminsList.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">暂无二级管理员</td></tr>`;
+            return;
+          }
+          subAdminsList.forEach((item, index) => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td style="text-align: left;">${escapeHTML(item.username)}</td>
+              <td style="text-align: left;">${escapeHTML(item.real_name)}</td>
+              <td style="text-align: left;">${escapeHTML(item.company)}</td>
+              <td style="text-align: center;">
+                <button class="btn btn-secondary" onclick="showEditSubAdminModalByIndex(${index})" style="width: auto; padding: 4px 10px; font-size: 0.8rem; margin: 0 4px;">修改</button>
+                <button class="btn btn-danger" onclick="deleteSubAdmin(${item.id}, '${escapeHTML(item.username)}')" style="width: auto; padding: 4px 10px; font-size: 0.8rem; margin: 0 4px; background: #ef4444; border-color: #ef4444;">删除</button>
+              </td>
+            `;
+            tbody.appendChild(tr);
+          });
+        } else {
+          console.error('加载二级管理员列表失败', result.detail);
+        }
+      } catch (err) {
+        console.error('加载二级管理员列表时网络发生错误', err);
+      }
+    }
+
+    function showAddSubAdminModal() {
+      document.getElementById('sub-admin-id').value = '';
+      document.getElementById('sub-admin-username').value = '';
+      document.getElementById('sub-admin-username').disabled = false;
+      document.getElementById('sub-admin-realname').value = '';
+      document.getElementById('sub-admin-company').value = '';
+      document.getElementById('sub-admin-password').value = '';
+      document.getElementById('sub-admin-modal-title').innerText = '添加二级管理员';
+      document.getElementById('sub-admin-password-label').innerText = '密码 *';
+      document.getElementById('sub-admin-password').placeholder = '请输入密码';
+      
+      document.getElementById('sub-admin-modal').style.display = 'flex';
+    }
+
+    function showEditSubAdminModalByIndex(index) {
+      const item = subAdminsList[index];
+      if (!item) return;
+
+      document.getElementById('sub-admin-id').value = item.id;
+      document.getElementById('sub-admin-username').value = item.username;
+      document.getElementById('sub-admin-username').disabled = false;
+      document.getElementById('sub-admin-realname').value = item.real_name;
+      document.getElementById('sub-admin-company').value = item.company;
+      document.getElementById('sub-admin-password').value = '';
+      document.getElementById('sub-admin-modal-title').innerText = '修改二级管理员信息';
+      document.getElementById('sub-admin-password-label').innerText = '新密码 (留空表示不修改)';
+      document.getElementById('sub-admin-password').placeholder = '留空表示不修改密码';
+      
+      document.getElementById('sub-admin-modal').style.display = 'flex';
+    }
+
+    function closeSubAdminModal() {
+      document.getElementById('sub-admin-modal').style.display = 'none';
+    }
+
+    async function submitSubAdmin() {
+      const id = document.getElementById('sub-admin-id').value;
+      const usernameVal = document.getElementById('sub-admin-username').value.trim();
+      const realnameVal = document.getElementById('sub-admin-realname').value.trim();
+      const companyVal = document.getElementById('sub-admin-company').value.trim();
+      const passwordVal = document.getElementById('sub-admin-password').value.trim();
+
+      if (!usernameVal || !realnameVal || !companyVal) {
+        alert('请填写所有必填字段！');
+        return;
+      }
+
+      if (!id && !passwordVal) {
+        alert('添加二级管理员时密码不能为空！');
+        return;
+      }
+
+      if (passwordVal && passwordVal.length < 6) {
+        alert('密码长度不能低于6位！');
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('username', usernameVal);
+      formData.append('real_name', realnameVal);
+      formData.append('company', companyVal);
+      if (passwordVal) {
+        formData.append('password', passwordVal);
+      }
+
+      let url = '/api/admin/add_sub_admin';
+      if (id) {
+        url = '/api/admin/update_sub_admin';
+        formData.append('sub_admin_id', id);
+        formData.append('new_username', usernameVal);
+        formData.append('new_password', passwordVal);
+      }
+
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Authorization': token },
+          body: formData
+        });
+        const result = await response.json();
+        if (response.ok && result.code === 200) {
+          showAlert('success', id ? '二级管理员更新成功' : '二级管理员添加成功');
+          closeSubAdminModal();
+          loadSubAdmins();
+        } else {
+          alert(result.detail || '操作失败');
+        }
+      } catch (err) {
+        alert('提交时网络发生错误');
+      }
+    }
+
+    async function deleteSubAdmin(id, name) {
+      if (!confirm(`确定要删除二级管理员 "${name}" 吗？此操作无法撤销！`)) {
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('sub_admin_id', id);
+
+      try {
+        const response = await fetch('/api/admin/delete_sub_admin', {
+          method: 'POST',
+          headers: { 'Authorization': token },
+          body: formData
+        });
+        const result = await response.json();
+        if (response.ok && result.code === 200) {
+          showAlert('success', '二级管理员删除成功');
+          loadSubAdmins();
+        } else {
+          alert(result.detail || '删除失败');
+        }
+      } catch (err) {
+        alert('删除时网络发生错误');
       }
     }
 
