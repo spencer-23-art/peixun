@@ -344,7 +344,7 @@
                 <button type="button" style="width: 100%; padding: 14px; background: transparent; border: none; color: #e0e0e0; font-size: 0.95rem; font-weight: 600; cursor: pointer; text-align: center;" onclick="hideIdCardChoice(); document.getElementById('idcard-album-input').click();">📂 从相册选择</button>
               </div>
             </div>
-            <input type="file" id="idcard-file-input" accept="image/*" capture="environment" style="display: none;" onchange="handleIdCardFile(event)">
+            <input type="file" id="idcard-file-input" accept="image/*" style="display: none;" onchange="handleIdCardFile(event)">
             <input type="file" id="idcard-album-input" accept="image/*" style="display: none;" onchange="handleIdCardFile(event)">
             
             <div id="idcard-preview-container" style="display: none; align-items: center; gap: 12px; padding: 10px; background: rgba(255,255,255,0.02); border: 1px dashed var(--glass-border); border-radius: 8px; width: 100%;">
@@ -378,11 +378,11 @@
           <div class="form-grid">
             <div class="form-group">
               <label for="name">姓名 *</label>
-              <input type="text" id="name" class="form-control" placeholder="请输入姓名" required>
+              <input type="text" id="name" class="form-control" placeholder="请先进行身份证识别" required disabled style="background: rgba(255,255,255,0.05); opacity: 0.6; cursor: not-allowed;">
             </div>
             <div class="form-group">
               <label for="nation">民族 *</label>
-              <select id="nation" class="form-control" required>
+              <select id="nation" class="form-control" required disabled style="background: rgba(255,255,255,0.05); opacity: 0.6; cursor: not-allowed;">
                 <option value="" disabled selected>请选择民族</option>
                 <option value="汉族">汉族</option>
                 <option value="壮族">壮族</option>
@@ -444,7 +444,7 @@
             </div>
             <div class="form-group">
               <label for="id_card">身份证号 *</label>
-              <input type="text" id="id_card" class="form-control" placeholder="请输入18位身份证号" required pattern="[0-9]{10}[01][0-9]{6}[0-9xX]">
+              <input type="text" id="id_card" class="form-control" placeholder="请先进行身份证识别" required pattern="[0-9]{10}[01][0-9]{6}[0-9xX]" disabled style="background: rgba(255,255,255,0.05); opacity: 0.6; cursor: not-allowed;">
             </div>
             <div class="form-group">
               <label for="phone">联系电话 *</label>
@@ -762,7 +762,7 @@
             let highQ = 1.0;
             let localBestBlob = null;
 
-            // 质量二分法迭代（尝试 7 次，可精确到 1% 左右的质量差异）
+            // 质量二分法迭代（尝试 7 次，可精确到 1% 左右 of quality difference）
             for (let qAttempt = 0; qAttempt < 7; qAttempt++) {
               const quality = (lowQ + highQ) / 2;
               const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', quality));
@@ -1271,9 +1271,27 @@
       currentEditRecordId = id;
 
       // 回填表单数据
-      document.getElementById('name').value = record.name;
-      document.getElementById('nation').value = record.nation;
-      document.getElementById('id_card').value = record.id_card;
+      const nameField = document.getElementById('name');
+      const nationField = document.getElementById('nation');
+      const idCardField = document.getElementById('id_card');
+      
+      nameField.disabled = false;
+      nameField.style.opacity = '';
+      nameField.style.cursor = '';
+      nameField.placeholder = '请输入姓名';
+      
+      nationField.disabled = false;
+      nationField.style.opacity = '';
+      nationField.style.cursor = '';
+      
+      idCardField.disabled = false;
+      idCardField.style.opacity = '';
+      idCardField.style.cursor = '';
+      idCardField.placeholder = '请输入18位身份证号';
+
+      nameField.value = record.name;
+      nationField.value = record.nation;
+      idCardField.value = record.id_card;
       document.getElementById('phone').value = record.phone;
       document.getElementById('address').value = record.address;
       // 动态处理 job 选项以支持历史脏数据的兼容回填
@@ -1373,6 +1391,25 @@
     function cancelEdit() {
       currentEditRecordId = null;
       document.getElementById('form-record').reset();
+      
+      // 恢复禁用的样式和属性
+      const nameField = document.getElementById('name');
+      const nationField = document.getElementById('nation');
+      const idCardField = document.getElementById('id_card');
+      
+      nameField.disabled = true;
+      nameField.style.opacity = '0.6';
+      nameField.style.cursor = 'not-allowed';
+      nameField.placeholder = '请先进行身份证识别';
+      
+      nationField.disabled = true;
+      nationField.style.opacity = '0.6';
+      nationField.style.cursor = 'not-allowed';
+      
+      idCardField.disabled = true;
+      idCardField.style.opacity = '0.6';
+      idCardField.style.cursor = 'not-allowed';
+      idCardField.placeholder = '请先进行身份证识别';
 
       // 重置身份证识别区域
       document.getElementById('id_card_img_path').value = '';
@@ -1522,6 +1559,25 @@
 
           document.getElementById('form-record').reset();
           
+          // 重新禁用
+          const nameField = document.getElementById('name');
+          const nationField = document.getElementById('nation');
+          const idCardField = document.getElementById('id_card');
+          
+          nameField.disabled = true;
+          nameField.style.opacity = '0.6';
+          nameField.style.cursor = 'not-allowed';
+          nameField.placeholder = '请先进行身份证识别';
+          
+          nationField.disabled = true;
+          nationField.style.opacity = '0.6';
+          nationField.style.cursor = 'not-allowed';
+          
+          idCardField.disabled = true;
+          idCardField.style.opacity = '0.6';
+          idCardField.style.cursor = 'not-allowed';
+          idCardField.placeholder = '请先进行身份证识别';
+          
           // 重置身份证识别区域
           document.getElementById('id_card_img_path').value = '';
           document.getElementById('idcard-preview-container').style.display = 'none';
@@ -1592,6 +1648,25 @@
     function handleIdCardFile(event) {
       const file = event.target.files[0];
       if (file) {
+        // 开始新识别前，清空旧的数据并重新禁用，避免残留旧信息
+        document.getElementById('name').value = '';
+        document.getElementById('name').disabled = true;
+        document.getElementById('name').style = 'background: #3a3a4a; color: #888; cursor: not-allowed;';
+        document.getElementById('name').placeholder = '请先进行身份证识别';
+        
+        document.getElementById('nation').value = '';
+        document.getElementById('nation').disabled = true;
+        document.getElementById('nation').style = 'background: #3a3a4a; color: #888; cursor: not-allowed;';
+        
+        document.getElementById('id_card').value = '';
+        document.getElementById('id_card').disabled = true;
+        document.getElementById('id_card').style = 'background: #3a3a4a; color: #888; cursor: not-allowed;';
+        document.getElementById('id_card').placeholder = '请先进行身份证识别';
+        
+        document.getElementById('id_card_img_path').value = '';
+        document.getElementById('idcard-preview-container').style.display = 'none';
+        document.getElementById('idcard-preview-img').src = '';
+
         const submitBtn = document.getElementById('btn-submit');
         submitBtn.disabled = true;
         submitBtn.innerText = '正在压缩身份证图片...';
@@ -1620,9 +1695,28 @@
         submitBtn.disabled = false;
         submitBtn.innerText = currentEditRecordId ? '确 认 修 改 信 息' : '确 认 提 交 信 息';
         
-        if (response.ok && result.name && result.id_card) {
-          document.getElementById('name').value = result.name;
-          document.getElementById('id_card').value = result.id_card;
+        if (response.ok && (result.name || result.id_card)) {
+          // 解除禁用
+          const nameField = document.getElementById('name');
+          const nationField = document.getElementById('nation');
+          const idCardField = document.getElementById('id_card');
+          
+          nameField.disabled = false;
+          nameField.style.opacity = '';
+          nameField.style.cursor = '';
+          nameField.placeholder = '请输入姓名';
+          
+          nationField.disabled = false;
+          nationField.style.opacity = '';
+          nationField.style.cursor = '';
+          
+          idCardField.disabled = false;
+          idCardField.style.opacity = '';
+          idCardField.style.cursor = '';
+          idCardField.placeholder = '请输入18位身份证号';
+
+          nameField.value = result.name || '';
+          idCardField.value = result.id_card || '';
           
           const nationSelect = document.getElementById('nation');
           const matchedNation = result.nation.endsWith('族') ? result.nation : result.nation + '族';

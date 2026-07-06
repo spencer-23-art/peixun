@@ -523,6 +523,19 @@ def init_db():
     cursor.execute("INSERT OR IGNORE INTO configs (key, value) VALUES ('exam_end_time', '12:00:00')")
     cursor.execute("INSERT OR IGNORE INTO configs (key, value) VALUES ('regions', '三元肥,尿素塔')")
         
+    # 答题审批表
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS exam_approvals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        id_last6 TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        company TEXT DEFAULT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+    ''')
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_exam_approvals_status ON exam_approvals (status)")
+
     # 建立索引以优化检索和排序性能
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_records_name ON records (name)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_records_created_at ON records (created_at)")
@@ -979,10 +992,22 @@ async def api_ocr_idcard(file: UploadFile = File(...)):
         with open(temp_path, "wb") as f:
             shutil.copyfileobj(file.file, f)
             
-        result = ocr_idcard_process(temp_path)
-        
+        try:
+            # 优先使用 Celery 异步队列 (保障并发与稳定性)
+            from app.tasks import ocr_idcard_task
+            task = ocr_idcard_task.delay(temp_path)
+            result = task.get(timeout=8)
+        except Exception as celery_err:
+            print(f"[OCR-Fallback] Celery/Redis 队列异常，启用本地降级运行: {celery_err}")
+            # 降级：直接在主线程中调用原有的 OCR 处理逻辑
+            result = ocr_idcard_process(temp_path)
+            
         if os.path.exists(temp_path):
-            os.remove(temp_path)
+            try: os.remove(temp_path)
+            except: pass
+            
+        if result and "id_number" in result and "id_card" not in result:
+            result["id_card"] = result["id_number"]
             
         return {"code": 200, **result}
     except Exception as e:
@@ -991,6 +1016,53 @@ async def api_ocr_idcard(file: UploadFile = File(...)):
             except: pass
         print(f"[Error] OCR 识别失败: {e}")
         raise HTTPException(status_code=500, detail="身份证识别失败，请重试或手动输入")
+
+# 新接口一：提交异步 OCR 任务
+@app.post("/idcard/ocr")
+async def submit_ocr_task(file: UploadFile = File(...)):
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in ['.jpg', '.jpeg', '.png', '.bmp']:
+        raise HTTPException(status_code=400, detail="Unsupported image format. Allowed: jpg, jpeg, png, bmp")
+        
+    temp_ids_dir = "uploads/temp_ids"
+    os.makedirs(temp_ids_dir, exist_ok=True)
+    temp_filename = f"ocr_raw_{uuid.uuid4().hex}{ext}"
+    temp_path = os.path.join(temp_ids_dir, temp_filename).replace('\\', '/')
+    
+    try:
+        with open(temp_path, "wb") as f:
+            shutil.copyfileobj(file.file, f)
+            
+        from app.tasks import ocr_idcard_task
+        task = ocr_idcard_task.delay(temp_path)
+        return {"task_id": task.id}
+    except Exception as e:
+        if os.path.exists(temp_path):
+            try: os.remove(temp_path)
+            except: pass
+        raise HTTPException(status_code=500, detail=f"Failed to submit task: {str(e)}")
+
+# 新接口二：查询异步 OCR 任务结果
+@app.get("/idcard/result/{task_id}")
+async def get_ocr_result(task_id: str):
+    from celery.result import AsyncResult
+    from app.celery_app import celery_app
+    res = AsyncResult(task_id, app=celery_app)
+    
+    if res.status == 'SUCCESS':
+        return {
+            "status": "success",
+            "data": res.result
+        }
+    elif res.status in ['PENDING', 'RECEIVED', 'STARTED', 'RETRY']:
+        return {
+            "status": "pending"
+        }
+    else:
+        return {
+            "status": "failed",
+            "error": str(res.result) if res.result else "Unknown task execution failure"
+        }
 
 @app.get("/api/record/download_word/{record_id}")
 def download_word(record_id: int, token: str = None, authorization: str = Header(None)):
@@ -1296,6 +1368,115 @@ async def update_record(
     conn.commit()
     conn.close()
     return {"code": 200, "message": "信息修改成功！"}
+
+# 管理员修改培训人员记录（无权属检查）
+@app.post("/api/admin/record/update")
+async def admin_update_record(
+    record_id: int = Form(...),
+    name: str = Form(...),
+    nation: str = Form(...),
+    id_card: str = Form(...),
+    phone: str = Form(...),
+    address: str = Form(...),
+    job: str = Form(...),
+    education: str = Form(...),
+    region_auth: str = Form(""),
+    id_card_img_path: str = Form(None),
+    photo: UploadFile = File(None),
+    admin = Depends(get_admin_user)
+):
+    if not validate_id_card(id_card):
+        raise HTTPException(status_code=400, detail="身份证号码格式不正确")
+
+    # 解析身份证
+    gender, age = parse_id_card(id_card)
+
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    # 确认记录存在
+    cursor.execute("SELECT * FROM records WHERE id = ?", (record_id,))
+    record = cursor.fetchone()
+    if not record:
+        conn.close()
+        raise HTTPException(status_code=404, detail="该人员记录不存在")
+        
+    photo_path = record['photo_path']
+    if photo and photo.filename:
+        # 保存新照片
+        file_ext = os.path.splitext(photo.filename)[1]
+        if not file_ext:
+            file_ext = '.jpg'
+        filename = f"{record['user_id']}_{int(datetime.now().timestamp())}{file_ext}"
+        new_photo_path = os.path.join(UPLOAD_DIR, filename).replace('\\', '/')
+        
+        with open(new_photo_path, "wb") as f:
+            shutil.copyfileobj(photo.file, f)
+            
+        # 尝试删除旧照片
+        if photo_path and os.path.exists(photo_path):
+            try:
+                os.remove(photo_path)
+            except Exception:
+                pass
+        photo_path = new_photo_path
+        
+    # 原本的 word 路径
+    old_word_path = record['word_path']
+    new_word_path = old_word_path
+    
+    idcard_save_dir = "uploads/idcards"
+    os.makedirs(idcard_save_dir, exist_ok=True)
+    perm_id_img_path = os.path.join(idcard_save_dir, f"{id_card}.png").replace('\\', '/')
+    
+    # 1. 检查是否有新上传并裁剪的身份证
+    if safe_temp_id_path(id_card_img_path):
+        try:
+            # 覆盖原永久照片
+            shutil.copy2(id_card_img_path, perm_id_img_path)
+            # 删除临时照片
+            try: os.remove(id_card_img_path)
+            except: pass
+        except Exception as e:
+            print(f"Error copying new idcard image: {e}")
+            
+    # 2. 如果永久照片存在，重新生成 Word 登记卡
+    if os.path.exists(perm_id_img_path):
+        try:
+            # 获取该用户的单位名称
+            cursor.execute("SELECT company FROM users WHERE id = ?", (record['user_id'],))
+            user_row = cursor.fetchone()
+            company_name = user_row['company'] if user_row else ''
+            
+            record_data = {
+                "姓名": name,
+                "性别": gender,
+                "年龄": age,
+                "联系电话": phone,
+                "岗位": job,
+                "常住地址": address,
+                "工作单位": company_name,
+                "created_at": record['created_at']
+            }
+            new_word_path = generate_record_card(record_data, perm_id_img_path)
+            
+            # 如果生成了新的 Word 且路径发生变化，删除旧 of Word
+            if old_word_path and new_word_path != old_word_path and os.path.exists(old_word_path):
+                try: os.remove(old_word_path)
+                except: pass
+        except Exception as e:
+            print(f"Error regenerating word card: {e}")
+            
+    cursor.execute('''
+    UPDATE records 
+    SET name = ?, nation = ?, id_card = ?, phone = ?, address = ?, job = ?, education = ?, region_auth = ?, gender = ?, age = ?, photo_path = ?, word_path = ?
+    WHERE id = ?
+    ''', (name, nation, id_card, phone, address, job, education, region_auth, gender, age, photo_path, new_word_path, record_id))
+    
+    conn.commit()
+    conn.close()
+    return {"code": 200, "message": "管理员修改记录成功！"}
 
 # 获取所有已审核通过且未删除用户的单位列表（去重，仅管理员）
 # 排序逻辑：按 exam_records 中最后答题完毕时间降序，最近有人答完题的单位排最前面
@@ -1808,6 +1989,120 @@ async def upload_exam_bank(
     return {"code": 200, "message": f"{exam_type}题库更新成功", "question_count": count}
 
 # ---------------- 考试相关接口 ----------------
+
+# 考试身份验证（无需登录）
+@app.post("/api/exam/verify")
+def exam_verify(data: dict):
+    name = (data.get('name') or '').strip()
+    id_last6 = (data.get('id_last6') or '').strip()
+    
+    if not name or not id_last6 or len(id_last6) != 6:
+        raise HTTPException(status_code=400, detail="请输入姓名和身份证号后六位")
+    
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    # 查找身份证后六位匹配的记录
+    cursor.execute("""
+        SELECT r.*, u.company FROM records r
+        LEFT JOIN users u ON r.user_id = u.id
+        WHERE SUBSTR(r.id_card, -6) = ?
+    """, (id_last6,))
+    id_matches = cursor.fetchall()
+    
+    if id_matches:
+        # 身份证后六位匹配到了，检查姓名
+        for r in id_matches:
+            if r['name'] == name:
+                conn.close()
+                return {"code": 200, "matched": True, "company": r['company'] or ''}
+        # 身份证后六位匹配但姓名不匹配
+        conn.close()
+        return {"code": 200, "matched": False, "error": "name_mismatch"}
+    
+    # 身份证后六位不匹配，检查姓名是否存在
+    cursor.execute("SELECT id FROM records WHERE name = ?", (name,))
+    name_matches = cursor.fetchall()
+    
+    if name_matches:
+        # 姓名匹配但身份证后六位不匹配
+        conn.close()
+        return {"code": 200, "matched": False, "error": "id_mismatch"}
+    
+    # 都不匹配，检查审批表
+    cursor.execute("""
+        SELECT * FROM exam_approvals
+        WHERE name = ? AND id_last6 = ?
+        ORDER BY created_at DESC LIMIT 1
+    """, (name, id_last6))
+    approval = cursor.fetchone()
+    
+    if approval:
+        if approval['status'] == 'approved':
+            conn.close()
+            return {"code": 200, "matched": True, "company": approval['company'] or '', "approved": True}
+        elif approval['status'] == 'pending':
+            conn.close()
+            return {"code": 200, "matched": False, "error": "pending_approval"}
+        elif approval['status'] == 'rejected':
+            # 被拒绝后可以重新提交
+            cursor.execute("""
+                INSERT INTO exam_approvals (name, id_last6, status, created_at)
+                VALUES (?, ?, 'pending', ?)
+            """, (name, id_last6, beijing_now().strftime("%Y-%m-%d %H:%M:%S")))
+            conn.commit()
+            conn.close()
+            return {"code": 200, "matched": False, "error": "not_found"}
+    
+    # 完全没有记录，创建审批申请
+    cursor.execute("""
+        INSERT INTO exam_approvals (name, id_last6, status, created_at)
+        VALUES (?, ?, 'pending', ?)
+    """, (name, id_last6, beijing_now().strftime("%Y-%m-%d %H:%M:%S")))
+    conn.commit()
+    conn.close()
+    return {"code": 200, "matched": False, "error": "not_found"}
+
+# 获取答题审批列表（管理员）
+@app.get("/api/admin/exam-approvals")
+def get_exam_approvals(admin = Depends(get_admin_user)):
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM exam_approvals ORDER BY CASE WHEN status='pending' THEN 0 ELSE 1 END, created_at DESC")
+    approvals = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return {"code": 200, "data": approvals}
+
+# 审批答题申请（管理员）
+@app.put("/api/admin/exam-approvals/{approval_id}/approve")
+def approve_exam_approval(approval_id: int, data: dict = None, admin = Depends(get_admin_user)):
+    company = ''
+    if data:
+        company = (data.get('company') or '').strip()
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("UPDATE exam_approvals SET status = 'approved', company = ? WHERE id = ?", (company, approval_id))
+    if cursor.rowcount == 0:
+        conn.close()
+        raise HTTPException(status_code=404, detail="审批记录不存在")
+    conn.commit()
+    conn.close()
+    return {"code": 200, "message": "已批准该答题申请"}
+
+# 拒绝答题申请（管理员）
+@app.put("/api/admin/exam-approvals/{approval_id}/reject")
+def reject_exam_approval(approval_id: int, admin = Depends(get_admin_user)):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("UPDATE exam_approvals SET status = 'rejected' WHERE id = ?", (approval_id,))
+    if cursor.rowcount == 0:
+        conn.close()
+        raise HTTPException(status_code=404, detail="审批记录不存在")
+    conn.commit()
+    conn.close()
+    return {"code": 200, "message": "已拒绝该答题申请"}
 
 # 获取试题（无需登录）
 @app.get("/api/get_questions")

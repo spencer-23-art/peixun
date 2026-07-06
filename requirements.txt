@@ -8,3 +8,8 @@ modelscope
 opencv-python-headless
 pyyaml
 numpy
+celery
+redis<5.0.0
+Pillow
+aiofiles
+document-preprocessor

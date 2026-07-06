@@ -1,0 +1,16 @@
+[Unit]
+Description=Peixun FastAPI Web Server
+After=network.target redis-server.service peixun-celery.service
+Wants=redis-server.service peixun-celery.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/peixun
+ExecStart=/usr/bin/python3 start_server.py
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

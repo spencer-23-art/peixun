@@ -472,31 +472,39 @@
 
         <div class="alert alert-error" id="start-error" style="display:none;"></div>
 
-        <form id="start-form" onsubmit="startExam(event)" style="display:flex; flex-direction:column; gap:14px;">
+        <form id="start-form" onsubmit="return false;" style="display:flex; flex-direction:column; gap:14px;">
           <div class="form-group">
             <label for="exam-name">姓名</label>
             <input type="text" id="exam-name" class="form-control" placeholder="请输入您的姓名" required>
           </div>
 
-          <div class="form-group" style="position: relative;">
-            <label for="exam-company">工作单位</label>
-            <input type="text" id="exam-company" class="form-control" placeholder="选择工作单位" autocomplete="off" readonly required>
-            <div id="exam-company-dropdown"></div>
-          </div>
-
-          <div class="form-group" id="other-company-group" style="display: none;">
-            <label for="exam-company-other">请输入单位名称</label>
-            <input type="text" id="exam-company-other" class="form-control" placeholder="请输入您的工作单位名称">
-          </div>
-
           <div class="form-group">
+            <label for="exam-id-last6">身份证号后六位</label>
+            <input type="text" id="exam-id-last6" class="form-control" placeholder="请输入身份证号后六位" maxlength="6" required>
+          </div>
+
+          <div class="form-group" id="exam-company-group" style="display: none;">
+            <label for="exam-company-display">工作单位</label>
+            <input type="text" id="exam-company-display" class="form-control" disabled style="background: rgba(255,255,255,0.05); color: #aaa; cursor: not-allowed; opacity: 0.8;">
+          </div>
+
+          <div class="form-group" id="exam-company-manual-group" style="display: none;">
+            <label for="exam-company-manual">工作单位</label>
+            <input type="text" id="exam-company-manual" class="form-control" placeholder="请输入您的工作单位名称">
+          </div>
+
+          <div class="form-group" id="exam-type-group" style="display: none;">
             <label for="exam-type">考试科目</label>
             <select id="exam-type" class="form-control" required>
               <option value="">正在加载科目列表...</option>
             </select>
           </div>
 
-          <div class="exam-info-box">
+          <div class="start-footer" style="padding:0;" id="verify-footer">
+            <button type="button" class="btn btn-primary" onclick="verifyIdentity()">验证身份</button>
+          </div>
+
+          <div class="exam-info-box" id="exam-info-box" style="display: none;">
             <svg viewBox="0 0 24 24" fill="none" stroke="var(--primary-color, #6366f1)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
             <div>
               <p class="info-title">考试说明</p>
@@ -504,8 +512,8 @@
             </div>
           </div>
 
-          <div class="start-footer" style="padding:0;">
-            <button type="submit" class="btn btn-primary">开始答题</button>
+          <div class="start-footer" style="padding:0; display: none;" id="start-footer">
+            <button type="button" class="btn btn-primary" onclick="doStartExam()">开始答题</button>
           </div>
         </form>
       </div>
@@ -608,21 +616,79 @@
       document.getElementById(panelId).classList.remove('hidden');
     }
 
-    // 开始考试
-    async function startExam(e) {
-      e.preventDefault();
+    // 身份验证与开始考试逻辑
+    let verifiedCompany = '';
+    let isApprovedUser = false;
 
-      const name = document.getElementById('exam-name').value;
-      const examCompanyInput = document.getElementById('exam-company').value.trim();
+    async function verifyIdentity() {
+      const name = document.getElementById('exam-name').value.trim();
+      const idLast6 = document.getElementById('exam-id-last6').value.trim();
+
+      if (!name || !idLast6 || idLast6.length !== 6) {
+        document.getElementById('start-error').textContent = '请输入姓名和身份证号后六位';
+        document.getElementById('start-error').style.display = 'block';
+        return;
+      }
+
+      document.getElementById('start-error').style.display = 'none';
+
+      try {
+        const response = await fetch('/api/exam/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, id_last6: idLast6 })
+        });
+        const result = await response.json();
+
+        if (result.matched) {
+          verifiedCompany = result.company || '';
+          isApprovedUser = !!result.approved;
+
+          if (isApprovedUser) {
+            // 审批通过的用户，手动输入工作单位
+            document.getElementById('exam-company-group').style.display = 'none';
+            document.getElementById('exam-company-manual-group').style.display = 'block';
+          } else {
+            // 正常匹配，自动填充工作单位
+            document.getElementById('exam-company-display').value = verifiedCompany;
+            document.getElementById('exam-company-group').style.display = 'block';
+            document.getElementById('exam-company-manual-group').style.display = 'none';
+          }
+
+          document.getElementById('exam-type-group').style.display = 'block';
+          document.getElementById('exam-info-box').style.display = 'flex';
+          document.getElementById('start-footer').style.display = 'block';
+          document.getElementById('verify-footer').style.display = 'none';
+        } else {
+          if (result.error === 'name_mismatch') {
+            alert('姓名错误，请检查您输入的姓名是否与已录入信息一致！');
+          } else if (result.error === 'id_mismatch') {
+            alert('身份证号后六位错误，请检查您输入的身份证号后六位是否正确！');
+          } else if (result.error === 'pending_approval') {
+            alert('答题申请正在审批中，请联系管理员审批后再进行答题！');
+          } else if (result.error === 'not_found') {
+            alert('信息未录入，请联系管理员！答题申请已自动提交，审批通过后可重新验证开始答题。');
+          } else {
+            alert(result.detail || '验证失败，请重试');
+          }
+        }
+      } catch (error) {
+        console.error('验证失败:', error);
+        alert('验证身份失败，网络故障');
+      }
+    }
+
+    async function doStartExam() {
+      const name = document.getElementById('exam-name').value.trim();
       const examType = document.getElementById('exam-type').value;
 
-      let company = examCompanyInput;
-      if (examCompanyInput === '其他单位') {
-        company = document.getElementById('exam-company-other').value.trim();
+      let company = verifiedCompany;
+      if (isApprovedUser) {
+        company = document.getElementById('exam-company-manual').value.trim();
       }
 
       if (!name || !company || !examType) {
-        document.getElementById('start-error').textContent = '请填写完整信息';
+        document.getElementById('start-error').textContent = '请填写完整信息（姓名、工作单位、考试科目）';
         document.getElementById('start-error').style.display = 'block';
         return;
       }
@@ -648,127 +714,6 @@
         console.error('加载试题失败:', error);
         alert('加载试题失败，请稍后重试');
       }
-    }
-
-    function fillCompanyValue(companyValue) {
-      if (!companyValue) return;
-      const input = document.getElementById('exam-company');
-      const otherGroup = document.getElementById('other-company-group');
-      const otherInput = document.getElementById('exam-company-other');
-
-      if (companyValue === '其他单位') {
-        input.value = '其他单位';
-        otherGroup.style.display = 'block';
-        otherInput.required = true;
-      } else {
-        input.value = companyValue;
-        otherGroup.style.display = 'none';
-        otherInput.required = false;
-        otherInput.value = '';
-      }
-    }
-
-    let examCompanyList = [];
-
-    async function loadCompanies() {
-      try {
-        const response = await fetch('/api/companies');
-        const result = await response.json();
-        if (result.code === 200 && result.data && result.data.length > 0) {
-          examCompanyList = result.data;
-        } else {
-          examCompanyList = [];
-        }
-        if (examData.company) {
-          fillCompanyValue(examData.company);
-        }
-      } catch (error) {
-        console.error('加载工作单位失败:', error);
-        examCompanyList = [];
-      }
-    }
-
-    function showExamCompanyDropdown() {
-      var dropdown = document.getElementById('exam-company-dropdown');
-      if (dropdown) {
-        dropdown.style.display = 'block';
-        renderExamCompanyDropdown('');
-      }
-    }
-
-    function hideExamCompanyDropdown() {
-      setTimeout(function() {
-        var dropdown = document.getElementById('exam-company-dropdown');
-        if (dropdown) dropdown.style.display = 'none';
-      }, 200);
-    }
-
-    function handleExamCompanyInput() {
-      var val = document.getElementById('exam-company').value.trim();
-      renderExamCompanyDropdown(val);
-      var otherGroup = document.getElementById('other-company-group');
-      var otherInput = document.getElementById('exam-company-other');
-      if (val === '其他单位') {
-        otherGroup.style.display = 'block';
-        otherInput.required = true;
-      } else {
-        otherGroup.style.display = 'none';
-        otherInput.required = false;
-        otherInput.value = '';
-      }
-    }
-
-    function renderExamCompanyDropdown(filterText) {
-      var dropdown = document.getElementById('exam-company-dropdown');
-      if (!dropdown) return;
-      dropdown.innerHTML = '';
-
-      var filtered = examCompanyList;
-      if (filterText) {
-        var lowerText = filterText.toLowerCase();
-        filtered = examCompanyList.filter(function(c) {
-          return c.toLowerCase().indexOf(lowerText) !== -1;
-        });
-      }
-
-      filtered.forEach(function(c) {
-        var item = document.createElement('div');
-        item.style.cssText = 'padding: 10px 14px; color: #fff; font-size: 13px; cursor: pointer; transition: background 0.2s; border-bottom: 1px solid rgba(255,255,255,0.05);';
-        item.textContent = c;
-        item.onmouseover = function() { item.style.background = 'rgba(99, 102, 241, 0.2)'; };
-        item.onmouseout = function() { item.style.background = 'transparent'; };
-        item.onmousedown = function(e) {
-          e.preventDefault();
-          document.getElementById('exam-company').value = c;
-          dropdown.style.display = 'none';
-          document.getElementById('other-company-group').style.display = 'none';
-          document.getElementById('exam-company-other').required = false;
-          document.getElementById('exam-company-other').value = '';
-        };
-        dropdown.appendChild(item);
-      });
-
-      if (filtered.length === 0) {
-        var noMatch = document.createElement('div');
-        noMatch.style.cssText = 'padding: 8px 14px; color: #94a3b8; font-size: 12px;';
-        noMatch.textContent = '无匹配单位';
-        dropdown.appendChild(noMatch);
-      }
-
-      var otherItem = document.createElement('div');
-      otherItem.style.cssText = 'padding: 10px 14px; color: #10b981; font-size: 13px; cursor: pointer; transition: background 0.2s; border-top: 1px solid rgba(255,255,255,0.1); font-weight: 500;';
-      otherItem.textContent = '其他单位（手动输入）';
-      otherItem.onmouseover = function() { otherItem.style.background = 'rgba(16, 185, 129, 0.15)'; };
-      otherItem.onmouseout = function() { otherItem.style.background = 'transparent'; };
-      otherItem.onmousedown = function(e) {
-        e.preventDefault();
-        document.getElementById('exam-company').value = '其他单位';
-        dropdown.style.display = 'none';
-        document.getElementById('other-company-group').style.display = 'block';
-        document.getElementById('exam-company-other').required = true;
-        document.getElementById('exam-company-other').focus();
-      };
-      dropdown.appendChild(otherItem);
     }
 
     async function loadExamSubjects() {
@@ -805,16 +750,9 @@
     }
 
     document.addEventListener('DOMContentLoaded', function() {
-      loadCompanies();
       loadExamSubjects();
       updateStatusBarTime();
       setInterval(updateStatusBarTime, 30000);
-
-      var companyInput = document.getElementById('exam-company');
-      companyInput.addEventListener('focus', showExamCompanyDropdown);
-      companyInput.addEventListener('click', showExamCompanyDropdown);
-      companyInput.addEventListener('input', handleExamCompanyInput);
-      companyInput.addEventListener('blur', hideExamCompanyDropdown);
     });
 
     async function loadQuestions(examType) {
@@ -1048,7 +986,16 @@
       if (examData.name) {
         document.getElementById('exam-name').value = examData.name;
       }
-      await loadCompanies();
+      // 重置验证状态和界面
+      verifiedCompany = '';
+      isApprovedUser = false;
+      document.getElementById('exam-company-group').style.display = 'none';
+      document.getElementById('exam-company-manual-group').style.display = 'none';
+      document.getElementById('exam-type-group').style.display = 'none';
+      document.getElementById('exam-info-box').style.display = 'none';
+      document.getElementById('start-footer').style.display = 'none';
+      document.getElementById('verify-footer').style.display = 'block';
+      document.getElementById('exam-id-last6').value = '';
       document.getElementById('exam-type').value = '';
     }
   </script>

@@ -66,62 +66,34 @@ def init_ppocrv6():
             for char in char_list:
                 df.write(char + '\n')
         
+        # 引入 monkey patch 解决 rapidocr_onnxruntime 对 rec_keys_path 参数传递的 Bug
+        import rapidocr_onnxruntime.utils
+        orig_update_rec_params = rapidocr_onnxruntime.utils.UpdateParameters.update_rec_params
+
+        def patched_update_rec_params(self, config, rec_dict):
+            res_config = orig_update_rec_params(self, config, rec_dict)
+            if 'rec_keys_path' in rec_dict:
+                res_config['keys_path'] = rec_dict['rec_keys_path']
+            return res_config
+
+        rapidocr_onnxruntime.utils.UpdateParameters.update_rec_params = patched_update_rec_params
+
         # 2. 直接使用官方高阶 API 实例化，传入自定义的模型路径和字典文件
         # 避免由于不同机器/容器中 rapidocr_onnxruntime 版本不同导致没有 init_module 私有属性的 Bug
         OCR_ENGINE = RapidOCR(
             det_model_path=det_path,
             rec_model_path=rec_path,
-            rec_keys_path=dict_txt_path
+            rec_keys_path=dict_txt_path,
+            use_angle_cls=False
         )
         
         print("[Success] PP-OCRv6 Tiny ONNX 引擎加载成功！")
         return OCR_ENGINE
     except Exception as e:
         print(f"[Warning] 无法加载 PP-OCRv6，回退至默认 OCR 模型: {e}")
-        OCR_ENGINE = RapidOCR()
+        OCR_ENGINE = RapidOCR(use_angle_cls=False)
         return OCR_ENGINE
 
-def init_ppocrv6_no_cls():
-    """初始化一个关闭 angle_cls 的 OCR 引擎，专用于方向检测"""
-    global OCR_ENGINE_NO_CLS
-    if OCR_ENGINE_NO_CLS is not None:
-        return OCR_ENGINE_NO_CLS
-    
-    # 确保主引擎已加载（以便复用其初始化后的字典和流程）
-    main_engine = init_ppocrv6()
-    
-    try:
-        import rapidocr_onnxruntime
-        root_dir = Path(rapidocr_onnxruntime.__file__).resolve().parent
-        config = read_yaml(str(root_dir / 'config.yaml'))
-        config = _concat_model_path(config)
-        
-        # 复用主引擎的模型路径
-        if hasattr(main_engine, 'text_detector') and hasattr(main_engine.text_detector, 'model_path'):
-            config['Det']['model_path'] = main_engine.text_detector.model_path
-        if hasattr(main_engine, 'text_recognizer') and hasattr(main_engine.text_recognizer, 'model_path'):
-            config['Rec']['model_path'] = main_engine.text_recognizer.model_path
-        if hasattr(main_engine, 'text_recognizer') and hasattr(main_engine.text_recognizer, 'keys_path'):
-            config['Rec']['keys_path'] = main_engine.text_recognizer.keys_path
-            
-        OCR_ENGINE_NO_CLS = RapidOCR()
-        if hasattr(main_engine, 'text_detector'):
-            OCR_ENGINE_NO_CLS.text_detector = main_engine.text_detector
-        if hasattr(main_engine, 'text_recognizer'):
-            OCR_ENGINE_NO_CLS.text_recognizer = main_engine.text_recognizer
-        if hasattr(main_engine, 'text_cls'):
-            OCR_ENGINE_NO_CLS.text_cls = main_engine.text_cls
-            
-        OCR_ENGINE_NO_CLS.use_text_det = True
-        OCR_ENGINE_NO_CLS.use_angle_cls = False # 关键：不使用角度分类器
-        
-        print("[Success] PP-OCRv6 No-CLS 引擎加载成功（用于方向判定）！")
-        return OCR_ENGINE_NO_CLS
-    except Exception as e:
-        print(f"[Warning] 无法加载 PP-OCRv6 No-CLS，回退至默认 OCR 模型: {e}")
-        OCR_ENGINE_NO_CLS = RapidOCR()
-        OCR_ENGINE_NO_CLS.use_angle_cls = False
-        return OCR_ENGINE_NO_CLS
 
 # ================= 2. 图像裁剪核心算法 (移植自 run.py) =================
 TARGET_ASPECT_RATIO = 3.37 / 2.13
@@ -167,15 +139,7 @@ def _four_point_transform(image, pts):
     m = cv2.getPerspectiveTransform(rect, dst)
     return cv2.warpPerspective(image, m, (max_width, max_height), borderValue=(255, 255, 255))
 
-def normalize_card_orientation(warped):
-    if warped is None:
-        return None
-    h, w = warped.shape[:2]
-    if h == 0 or w == 0:
-        return warped
-    if h > w:
-        warped = cv2.rotate(warped, cv2.ROTATE_90_CLOCKWISE)
-    return warped
+
 
 def _scan_content_bound(signal, threshold, max_trim, forward=True, min_run=3):
     length = len(signal)
@@ -236,153 +200,8 @@ def trim_document_borders(img, max_trim_ratio=0.005):
         return img
     return img[top:bottom + 1, left:right + 1]
 
-def _estimate_content_bbox(img):
-    if img is None or img.size == 0:
-        return None
-    if len(img.shape) == 3:
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    else:
-        gray = img.copy()
-    h, w = gray.shape[:2]
-    if h < 20 or w < 20:
-        return (0, 0, w - 1, h - 1)
-    blur = cv2.GaussianBlur(gray, (5, 5), 0)
-    grad_x = cv2.Sobel(blur, cv2.CV_32F, 1, 0, ksize=3)
-    grad_y = cv2.Sobel(blur, cv2.CV_32F, 0, 1, ksize=3)
-    grad = cv2.magnitude(grad_x, grad_y)
-    bg_level = float(np.median(np.concatenate([
-        blur[:3, :].reshape(-1),
-        blur[-3:, :].reshape(-1),
-        blur[:, :3].reshape(-1),
-        blur[:, -3:].reshape(-1),
-    ])))
-    diff = cv2.absdiff(blur, np.full_like(blur, int(round(bg_level))))
-    col_signal = np.percentile(diff, 80, axis=0) + np.percentile(grad, 80, axis=0) * 0.6
-    row_signal = np.percentile(diff, 80, axis=1) + np.percentile(grad, 80, axis=1) * 0.6
-    col_threshold = max(float(np.median(col_signal) + np.std(col_signal) * 0.8), 6.0)
-    row_threshold = max(float(np.median(row_signal) + np.std(row_signal) * 0.8), 6.0)
-    xs = np.where(col_signal >= col_threshold)[0]
-    ys = np.where(row_signal >= row_threshold)[0]
-    if len(xs) < 2 or len(ys) < 2:
-        return None
-    left = max(0, int(xs[0]))
-    right = min(w - 1, int(xs[-1]))
-    top = max(0, int(ys[0]))
-    bottom = min(h - 1, int(ys[-1]))
-    if right <= left or bottom <= top:
-        return None
-    return (left, top, right, bottom)
-
-def _mean_region(mat, x1, y1, x2, y2):
-    h, w = mat.shape[:2]
-    x1 = max(0, min(w, int(round(x1))))
-    x2 = max(0, min(w, int(round(x2))))
-    y1 = max(0, min(h, int(round(y1))))
-    y2 = max(0, min(h, int(round(y2))))
-    if x2 <= x1 or y2 <= y1:
-        return 0.0
-    return float(np.mean(mat[y1:y2, x1:x2]))
-
-def _score_id_front_layout(img):
-    if img is None or img.size == 0 or len(img.shape) != 3:
-        return 0.0
-    h0, w0 = img.shape[:2]
-    if h0 < 40 or w0 < 60:
-        return 0.0
-    work = img
-    if max(h0, w0) > 640:
-        scale = 640.0 / max(h0, w0)
-        work = cv2.resize(img, None, fx=scale, fy=scale)
-    h, w = work.shape[:2]
-    hsv = cv2.cvtColor(work, cv2.COLOR_BGR2HSV)
-    gray = cv2.cvtColor(work, cv2.COLOR_BGR2GRAY)
-    s = hsv[:, :, 1].astype(np.float32) / 255.0
-    dark = np.clip((185.0 - gray.astype(np.float32)) / 185.0, 0.0, 1.0)
-    blur = cv2.GaussianBlur(gray, (3, 3), 0)
-    grad_x = cv2.Sobel(blur, cv2.CV_32F, 1, 0, ksize=3)
-    grad_y = cv2.Sobel(blur, cv2.CV_32F, 0, 1, ksize=3)
-    grad = cv2.magnitude(grad_x, grad_y)
-    if grad.max() > 0:
-        grad = np.clip(grad / max(float(np.percentile(grad, 95)), 1.0), 0.0, 1.0)
-    photo_energy = s * 0.45 + dark * 0.35 + grad * 0.20
-    text_energy = dark * 0.75 + grad * 0.25
-    right_photo = _mean_region(photo_energy, w * 0.54, h * 0.18, w * 0.98, h * 0.90)
-    left_photo = _mean_region(photo_energy, w * 0.02, h * 0.10, w * 0.46, h * 0.82)
-    bottom_text = _mean_region(text_energy, w * 0.08, h * 0.62, w * 0.92, h * 0.96)
-    top_text = _mean_region(text_energy, w * 0.08, h * 0.04, w * 0.92, h * 0.38)
-    return (right_photo - left_photo) * 4200.0 + (bottom_text - top_text) * 2400.0
-
-def _score_card_uprightness(img, is_special_cert=False):
-    if img is None or img.size == 0:
-        return -1e9
-    bbox = _estimate_content_bbox(img)
-    if bbox is None:
-        return -1e9
-    left, top, right, bottom = bbox
-    h, w = img.shape[:2]
-    bw = max(1, right - left + 1)
-    bh = max(1, bottom - top + 1)
-    area_ratio = (bw * bh) / max(float(h * w), 1.0)
-    center_x = (left + right) / 2.0
-    center_y = (top + bottom) / 2.0
-    if len(img.shape) == 3:
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    else:
-        gray = img.copy()
-    _, mask = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-    mask = cv2.morphologyEx(
-        mask,
-        cv2.MORPH_OPEN,
-        cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)),
-        iterations=1,
-    )
-    mass = mask.astype(np.float32) / 255.0
-    mid_y = h // 2
-    mid_x = w // 2
-    top_mass = float(np.sum(mass[:mid_y, :]))
-    bottom_mass = float(np.sum(mass[mid_y:, :]))
-    left_mass = float(np.sum(mass[:, :mid_x]))
-    right_mass = float(np.sum(mass[:, mid_x:]))
-    score = area_ratio * 1200.0
-    if not is_special_cert:
-        score += (bottom_mass - top_mass) / max(h * w, 1.0) * 1800.0
-        score += (right_mass - left_mass) / max(h * w, 1.0) * 1200.0
-        score += (center_y / max(h, 1.0)) * 380.0
-        score += (center_x / max(w, 1.0)) * 220.0
-        score += _score_id_front_layout(img)
-    else:
-        score += area_ratio * 400.0
-    return score
-
-def _orient_card_result(img, is_special_cert=False):
-    if img is None or img.size == 0:
-        return img
-    h, w = img.shape[:2]
-    if h > w:
-        img = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
-    if is_special_cert:
-        return img
-    score0 = _score_card_uprightness(img, is_special_cert=False)
-    rot180 = cv2.rotate(img, cv2.ROTATE_180)
-    score180 = _score_card_uprightness(rot180, is_special_cert=False)
-    if score180 > score0 + 80:
-        return rot180
-    return img
-
-def _orient_card_by_content_box(img, is_special_cert=False):
-    if img is None or img.size == 0:
-        return img
-    if is_special_cert:
-        return img
-    bbox = _estimate_content_bbox(img)
-    if bbox is None:
-        return img
-    left, top, right, bottom = bbox
-    box_w = right - left + 1
-    box_h = bottom - top + 1
-    if box_h > box_w * 1.08:
-        return cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
-    return img
+# 方向矫正函数统一从 app.orient 导入，避免重复代码
+from app.orient import orient_card_result as _orient_card_result
 
 def pad_image_to_ratio(img):
     """将图片调整到目标比例(1.585:1)。
@@ -618,15 +437,7 @@ def clean_name_string(name_str):
         name_str = name_str.replace("葡", "蔺")
     return name_str
 
-def is_valid_name(_text_raw, text_cleaned):
-    if not (2 <= len(text_cleaned) <= 4):
-        return False
-    strict_labels = ["姓名", "性别", "民族", "出生", "住址", "号码", "公民身份", "身份"]
-    if text_cleaned in strict_labels:
-        return False
-    if any(char.isdigit() for char in text_cleaned):
-        return False
-    return True
+
 
 def extract_nation(full_text):
     nations = ["汉", "壮", "满", "回", "苗", "维吾尔", "土家", "彝", "蒙古", "藏", "布依", "侗", "瑶", "朝鲜", "白", "哈尼", "哈萨克", "黎", "傣", "畲", "傈僳", "东乡", "拉祜", "水", "佤", "纳西", "羌", "土", "仫佬", "锡伯", "柯尔克孜", "达斡尔", "景颇", "毛南", "撒拉", "布朗", "塔吉克", "阿昌", "普米", "鄂温克", "怒", "京", "基诺", "德昂", "保安", "俄罗斯", "裕固", "乌孜别克", "门巴", "鄂伦春", "独龙", "塔塔尔", "赫哲", "高山", "珞巴", "仡佬"]
@@ -952,50 +763,79 @@ def _anchor_orientation_score(ocr_results):
 
 def ocr_idcard_process(image_path):
     engine = init_ppocrv6()
+    name, id_card, nation = "", "", ""
 
-    # ===== Step 1: 读取图像（支持 EXIF 自动旋转，不主动旋转） =====
+    # ===== Step 1: 读取图像（支持 EXIF 自动旋转，如果是竖屏先旋转90度） =====
     img_cv = _read_and_auto_orient(image_path)
     if img_cv is None:
         raise ValueError("无法解析身份证图片。")
+    
+    h_orig, w_orig = img_cv.shape[:2]
+    if w_orig < h_orig:
+        img_cv = cv2.rotate(img_cv, cv2.ROTATE_90_CLOCKWISE)
     print(f"[OCR-Debug] 原图尺寸: {img_cv.shape[1]}x{img_cv.shape[0]}")
 
-    try:
-        ocr_res, _ = engine(img_cv)
-        if ocr_res:
-            print("[OCR-Debug] All OCR results:")
-            for idx, line in enumerate(ocr_res):
-                print(f"  [{idx}] {line[1]} @ {line[0]}")
-    except Exception as e:
-        print(f"[OCR-Debug] OCR识别失败: {e}")
-        ocr_res = None
-    name, id_card, nation = smart_extract_info(ocr_res)
-    print(f"[OCR-Debug] 识别结果: name='{name}', id_card='{id_card}', nation='{nation}'")
-
-    # ===== Step 3: 裁切卡面（保留裁切逻辑，不旋转） =====
-    # 优先用 OCR 文字框裁切（文字一定在卡面上）
+    # ===== Step 1.5: 优先尝试使用 document-preprocessor 进行旋转与裁切 =====
     img_cropped = None
     crop_method = "none"
-    if ocr_res and len(ocr_res) >= 2:
-        ocr_cropped = _crop_by_ocr_boxes(img_cv, ocr_res)
-        if ocr_cropped is not None and ocr_cropped.size != 0 and ocr_cropped.shape[:2] != img_cv.shape[:2]:
-            img_cropped = ocr_cropped
-            crop_method = "ocr_boxes"
-            print(f"[OCR-Debug] 使用 OCR 文字框裁切成功")
+    
+    try:
+        from document_preprocessor import DocumentPreprocessor
+        import PIL.Image
+        print("[OCR-Debug] 尝试使用 document-preprocessor...")
+        preprocessor = DocumentPreprocessor()
+        pil_img = PIL.Image.fromarray(cv2.cvtColor(img_cv, cv2.COLOR_BGR2RGB))
+        pil_warped = preprocessor.detect_and_warp_document(pil_img)
+        if pil_warped is not pil_img:
+            img_cropped = cv2.cvtColor(np.array(pil_warped), cv2.COLOR_RGB2BGR)
+            
+            # 如果裁切出来的卡面是竖屏状态，先旋转90度成横屏，再进行缩放，防止图像被强行拉伸变形
+            h_c, w_c = img_cropped.shape[:2]
+            if h_c > w_c:
+                img_cropped = cv2.rotate(img_cropped, cv2.ROTATE_90_CLOCKWISE)
+                
+            img_cropped = cv2.resize(img_cropped, (856, 540))
+            crop_method = "document_preprocessor"
+            print("[OCR-Debug] document-preprocessor 裁切成功")
+    except Exception as e:
+        print(f"[OCR-Debug] document-preprocessor 失败: {e}")
 
-    # 兜底：OCR裁切失败 → 颜色检测
-    if img_cropped is None or img_cropped.size == 0:
-        img_cropped = _crop_id_card_image(img_cv)
-        crop_method = "color_detection"
+    # ===== Step 3: 裁切卡面（保留原有 OpenCV/OCR 裁切逻辑作为 Fallback） =====
+    if img_cropped is None:
+        print("[OCR-Debug] document-preprocessor 失败或不可用，进入 OpenCV/OCR 裁切兜底...")
+        # 先用 OCR 识别，以便通过文字框裁切
+        try:
+            ocr_res, _ = engine(img_cv)
+            if ocr_res:
+                print("[OCR-Debug] All OCR results:")
+                for idx, line in enumerate(ocr_res):
+                    print(f"  [{idx}] {line[1]} @ {line[0]}")
+        except Exception as e:
+            print(f"[OCR-Debug] OCR识别失败: {e}")
+            ocr_res = None
+            
+        if ocr_res and len(ocr_res) >= 2:
+            ocr_cropped = _crop_by_ocr_boxes(img_cv, ocr_res)
+            if ocr_cropped is not None and ocr_cropped.size != 0 and ocr_cropped.shape[:2] != img_cv.shape[:2]:
+                img_cropped = ocr_cropped
+                crop_method = "ocr_boxes"
+                print(f"[OCR-Debug] 使用 OCR 文字框裁切成功")
 
-    # 兜底2：仍无法裁切 → 用原图
-    if img_cropped is None or img_cropped.size == 0:
-        img_cropped = img_cv.copy()
-        crop_method = "original"
-        print(f"[OCR-Debug] 所有裁剪方法均失败，使用原图")
+        # 兜底：OCR裁切失败 → 颜色检测
+        if img_cropped is None or img_cropped.size == 0:
+            img_cropped = _crop_id_card_image(img_cv)
+            crop_method = "color_detection"
+
+        # 兜底2：仍无法裁切 → 用原图
+        if img_cropped is None or img_cropped.size == 0:
+            img_cropped = img_cv.copy()
+            crop_method = "original"
+            print(f"[OCR-Debug] 所有裁剪方法均失败，使用原图")
 
     print(f"[OCR-Debug] 裁剪方法: {crop_method}, 裁剪后尺寸: {img_cropped.shape[1]}x{img_cropped.shape[0]}")
 
-    # ===== Step 4: pad 到身份证比例（不旋转） =====
+    # ===== Step 4: 方向矫正 + pad 到身份证比例 =====
+    img_cropped = _orient_card_result(img_cropped)
     img_cropped = pad_image_to_ratio(img_cropped)
 
     # ===== Step 5: 裁切后重新 OCR（裁切后文字更清晰，可能识别更准） =====
