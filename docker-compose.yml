@@ -16,6 +16,7 @@ services:
       - ./main.py:/app/main.py # 挂载主后端代码
       - ./ocr_handler.py:/app/ocr_handler.py # 挂载OCR模块
       - ./start_server.py:/app/start_server.py # 挂载启动脚本
+      - ./app:/app/app         # 挂载 app 模块目录
       # 挂载 SQLite 数据库文件，防止容器重建时数据丢失，与代码解耦
       - /data/peixun/peixun.db:/app/peixun.db
       # 挂载题库目录，防止容器升级或重建时动态上传的题库丢失，与代码解耦

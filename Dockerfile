@@ -27,6 +27,7 @@ RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple -r re
 
 # 复制代码、静态文件和登记卡模板
 COPY main.py ocr_handler.py start_server.py /app/
+COPY app/ /app/app/
 COPY static/ /app/static/
 COPY 登记卡.docx /app/
 
