@@ -591,10 +591,6 @@
         <svg style="width:16px;height:16px;margin-right:8px;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
         在线答题
       </div>
-      <div class="sidebar-menu-item" id="side-nav-record-updates" onclick="handleSidebarTab('record-updates')">
-        <svg style="width:16px;height:16px;margin-right:8px;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-        信息修改审批
-      </div>
       <div class="sidebar-menu-item" id="side-nav-config" onclick="handleSidebarTab('config')">
         <svg style="width:16px;height:16px;margin-right:8px;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3"/></svg>
         系统配置
@@ -620,26 +616,27 @@
       </button>
       <h2 style="margin: 0; font-size: 1.3rem;">培训信息后台管理中心</h2>
     </div>
-    <div class="user-info">
-      <span>当前管理员：<strong>系统管理员</strong></span>
-      <!-- 消息提醒小铃铛 -->
-      <div class="bell-container" id="bell-container" onclick="toggleBellDropdown(event)">
-        <span class="bell-icon">🔔</span>
-        <span class="bell-badge" id="bell-badge">0</span>
-        
-        <!-- PC端消息下拉菜单 -->
-        <div class="bell-dropdown" id="bell-dropdown" onclick="event.stopPropagation()">
-          <div class="bell-title">待处理审批消息</div>
-          <div class="bell-item" onclick="switchAdminTab('exam')">
-            <span>待审批答题申请</span>
-            <span class="bell-item-count" id="bell-count-exam">0</span>
-          </div>
-          <div class="bell-item" onclick="switchAdminTab('record-updates')">
-            <span>待审批信息修改</span>
-            <span class="bell-item-count" id="bell-count-record">0</span>
-          </div>
+    <!-- 消息提醒小铃铛 -->
+    <div class="bell-container" id="bell-container" onclick="toggleBellDropdown(event)">
+      <span class="bell-icon">🔔</span>
+      <span class="bell-badge" id="bell-badge">0</span>
+      
+      <!-- PC端消息下拉菜单 -->
+      <div class="bell-dropdown" id="bell-dropdown" onclick="event.stopPropagation()">
+        <div class="bell-title">待处理审批消息</div>
+        <div class="bell-item" onclick="switchAdminTab('exam')">
+          <span>待审批答题申请</span>
+          <span class="bell-item-count" id="bell-count-exam">0</span>
+        </div>
+        <div class="bell-item" onclick="openRecordUpdatesModal()">
+          <span>待审批信息修改</span>
+          <span class="bell-item-count" id="bell-count-record">0</span>
         </div>
       </div>
+    </div>
+
+    <div class="user-info">
+      <span>当前管理员：<strong>系统管理员</strong></span>
       <button class="btn-logout" onclick="logout()">退出后台</button>
     </div>
   </div>
@@ -670,7 +667,6 @@
       <div class="admin-nav-item" id="nav-pending" onclick="switchAdminTab('pending')">注册用户管理</div>
       <div class="admin-nav-item" id="nav-restore" onclick="switchAdminTab('restore')">门禁恢复管理</div>
       <div class="admin-nav-item" id="nav-exam" onclick="switchAdminTab('exam')">在线答题</div>
-      <div class="admin-nav-item" id="nav-record-updates" onclick="switchAdminTab('record-updates')">信息修改审批</div>
       <div class="admin-nav-item" id="nav-config" onclick="switchAdminTab('config')">系统配置</div>
     </div>
 
@@ -890,25 +886,6 @@
       </div>
     </div>
     
-    <!-- TAB 6: 信息修改审批 -->
-    <div class="tab-content" id="admin-content-record-updates">
-      <div style="margin-top: 15px; overflow-x: auto;">
-        <table class="admin-table" style="min-width: 900px;">
-          <thead>
-            <tr>
-              <th style="width: 140px;">申请人 / 原单位</th>
-              <th style="width: 120px;">申请时间</th>
-              <th>修改对比（旧值 / 新值）</th>
-              <th style="width: 100px;">新头像</th>
-              <th style="width: 150px;">操作</th>
-            </tr>
-          </thead>
-          <tbody id="record-updates-tbody"></tbody>
-        </table>
-        <div id="record-updates-no-data" class="no-data" style="display: none; padding: 20px; text-align: center; color: var(--text-muted);">暂无信息修改申请</div>
-      </div>
-    </div>
-
     <!-- TAB 5: 系统配置 -->
     <div class="tab-content" id="admin-content-config">
       <div class="config-split-container" style="display: flex; gap: 24px; width: 100%; align-items: flex-start; max-width: 1100px; margin: 20px auto 0 auto; box-sizing: border-box;">
@@ -1387,6 +1364,21 @@
     setInterval(loadBadgeCount, 15000);
 
     // ================== 新增：人员信息修改审批处理 JS ==================
+    function openRecordUpdatesModal() {
+      const modal = document.getElementById('record-updates-modal');
+      if (modal) {
+        modal.style.display = 'flex';
+        loadRecordUpdates();
+      }
+    }
+
+    function closeRecordUpdatesModal() {
+      const modal = document.getElementById('record-updates-modal');
+      if (modal) {
+        modal.style.display = 'none';
+      }
+    }
+
     async function loadRecordUpdates() {
       try {
         const response = await fetch('/api/admin/record-updates', {
@@ -1591,13 +1583,6 @@
         loadExamRecords();
         loadExamCompanyOptions();
         loadExamApprovals();
-      } else if (tab === 'record-updates') {
-        document.getElementById('nav-record-updates').classList.add('active');
-        document.getElementById('admin-content-record-updates').classList.add('active');
-        if (btnExcel) btnExcel.style.display = 'none';
-        if (btnGate) btnGate.style.display = 'none';
-        if (btnRestore) btnRestore.style.display = 'none';
-        loadRecordUpdates();
       } else if (tab === 'config') {
         document.getElementById('nav-config').classList.add('active');
         document.getElementById('admin-content-config').classList.add('active');
@@ -4240,6 +4225,31 @@
     })();
   </script>
   
+  <!-- 人员信息修改审批模态弹窗 (仅管理员) -->
+  <div class="bell-modal-overlay" id="record-updates-modal" onclick="closeRecordUpdatesModal()">
+    <div class="glass-container" onclick="event.stopPropagation()" style="width: 92%; max-width: 1000px; max-height: 85vh; overflow-y: auto; padding: 20px; box-sizing: border-box; background: #1e293b; border: 1px solid rgba(255,255,255,0.15); box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 12px; margin-bottom: 16px;">
+        <h3 style="margin: 0; font-size: 1.2rem; color: var(--text-main);">人员信息修改审批</h3>
+        <span style="cursor:pointer; font-size:1.6rem; color:var(--text-muted); line-height: 1;" onclick="closeRecordUpdatesModal()">&times;</span>
+      </div>
+      <div style="overflow-x: auto; width: 100%;">
+        <table class="admin-table" style="min-width: 800px; width: 100%;">
+          <thead>
+            <tr>
+              <th style="width: 150px;">申请人 / 原单位</th>
+              <th style="width: 120px;">申请时间</th>
+              <th>修改对比（旧值 / 新值）</th>
+              <th style="width: 100px;">新头像</th>
+              <th style="width: 150px;">操作</th>
+            </tr>
+          </thead>
+          <tbody id="record-updates-tbody"></tbody>
+        </table>
+        <div id="record-updates-no-data" class="no-data" style="display: none; padding: 30px; text-align: center; color: var(--text-muted); font-size: 0.95rem;">暂无信息修改申请</div>
+      </div>
+    </div>
+  </div>
+
   <!-- 移动端消息提示弹窗遮罩 -->
   <div class="bell-modal-overlay" id="bell-modal-overlay" onclick="toggleBellModal(false)">
     <div class="bell-modal-card" onclick="event.stopPropagation()">
@@ -4252,7 +4262,7 @@
         <span class="bell-item-count" id="bell-modal-count-exam">0</span>
       </div>
       <div style="height:8px;"></div>
-      <div class="bell-item" onclick="switchAdminTab('record-updates'); toggleBellModal(false);">
+      <div class="bell-item" onclick="openRecordUpdatesModal(); toggleBellModal(false);">
         <span>待审批信息修改</span>
         <span class="bell-item-count" id="bell-modal-count-record">0</span>
       </div>
