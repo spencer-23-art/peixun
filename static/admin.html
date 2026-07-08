@@ -1349,21 +1349,23 @@
 
     async function loadAndRenderBellMessages() {
       try {
-        const [resExam, resRecord] = await Promise.all([
+        const [resExam, resRecord, resPending] = await Promise.all([
           fetch('/api/admin/exam-approvals', { headers: { 'Authorization': token } }).then(r => r.json()),
-          fetch('/api/admin/record-updates', { headers: { 'Authorization': token } }).then(r => r.json())
+          fetch('/api/admin/record-updates', { headers: { 'Authorization': token } }).then(r => r.json()),
+          fetch('/api/admin/pending', { headers: { 'Authorization': token } }).then(r => r.json())
         ]);
         
         const examList = (resExam.code === 200 ? resExam.data : []) || [];
         const recordList = (resRecord.code === 200 ? resRecord.data : []) || [];
+        const userList = (resPending.code === 200 ? resPending.data : []) || [];
         
-        renderBellMessages(examList, recordList);
+        renderBellMessages(examList, recordList, userList);
       } catch (err) {
         console.error('拉取消息详情失败', err);
       }
     }
 
-    function renderBellMessages(examList, recordList) {
+    function renderBellMessages(examList, recordList, userList) {
       const listContainer = document.getElementById('bell-messages-list');
       const noData = document.getElementById('bell-no-data');
       if (!listContainer) return;
@@ -1381,7 +1383,13 @@
         time_str: x.apply_time || ''
       }));
       
-      const allMsgs = [...pendingExams, ...pendingRecords].sort((a, b) => {
+      const pendingUsers = userList.filter(x => x.status === 'pending').map(x => ({
+        ...x,
+        msg_type: 'user',
+        time_str: x.created_at || ''
+      }));
+      
+      const allMsgs = [...pendingExams, ...pendingRecords, ...pendingUsers].sort((a, b) => {
         return b.time_str.localeCompare(a.time_str);
       });
       
@@ -1399,7 +1407,7 @@
           card.innerHTML = `
             <div style="font-weight: bold; color: #818cf8; font-size: 0.82rem; margin-bottom: 4px; display:flex; justify-content:space-between;">
               <span>📝 待审批答题</span>
-              <span style="font-size:0.7rem; color:var(--text-muted); font-weight:normal;">${item.time_str.substring(5, 16)}</span>
+              <span style="font-size:0.7rem; color:var(--text-muted); font-weight:normal;">${item.time_str ? item.time_str.substring(5, 16) : '未知时间'}</span>
             </div>
             <div style="font-size: 0.78rem; color: var(--text-main); margin-bottom: 8px; line-height: 1.4;">
               姓名: <strong>${escapeHtml(item.name)}</strong><br>
@@ -1413,7 +1421,7 @@
               <button class="btn btn-danger" style="padding: 3px 8px; font-size: 0.7rem; width: auto; background: var(--danger-color);" onclick="handleRejectExamDirect(${item.id})">拒绝</button>
             </div>
           `;
-        } else {
+        } else if (item.msg_type === 'record') {
           const fields = [
             { label: '姓名', key: 'name' },
             { label: '民族', key: 'nation' },
@@ -1440,7 +1448,7 @@
           card.innerHTML = `
             <div style="font-weight: bold; color: #34d399; font-size: 0.82rem; margin-bottom: 4px; display:flex; justify-content:space-between;">
               <span>👤 待审批修改</span>
-              <span style="font-size:0.7rem; color:var(--text-muted); font-weight:normal;">${item.time_str.substring(5, 16)}</span>
+              <span style="font-size:0.7rem; color:var(--text-muted); font-weight:normal;">${item.time_str ? item.time_str.substring(5, 16) : '未知时间'}</span>
             </div>
             <div style="font-size: 0.78rem; color: var(--text-main); margin-bottom: 8px; line-height: 1.4;">
               人员: <strong>${escapeHtml(item.old_name)}</strong> (${escapeHtml(item.old_company || '无单位')})
@@ -1451,6 +1459,22 @@
             <div style="display: flex; gap: 6px; justify-content: flex-end;">
               <button class="btn btn-success" style="padding: 3px 8px; font-size: 0.7rem; width: auto;" onclick="handleApproveRecordDirect(${item.update_id})">同意</button>
               <button class="btn btn-danger" style="padding: 3px 8px; font-size: 0.7rem; width: auto; background: var(--danger-color);" onclick="handleRejectRecordDirect(${item.update_id})">拒绝</button>
+            </div>
+          `;
+        } else if (item.msg_type === 'user') {
+          card.innerHTML = `
+            <div style="font-weight: bold; color: #fbbf24; font-size: 0.82rem; margin-bottom: 4px; display:flex; justify-content:space-between;">
+              <span>🔑 待审批注册用户</span>
+              <span style="font-size:0.7rem; color:var(--text-muted); font-weight:normal;">${item.time_str ? item.time_str.substring(5, 16) : '未知时间'}</span>
+            </div>
+            <div style="font-size: 0.78rem; color: var(--text-main); margin-bottom: 8px; line-height: 1.4;">
+              联系电话(账号): <strong>${escapeHtml(item.username)}</strong><br>
+              真实姓名: <strong>${escapeHtml(item.real_name)}</strong><br>
+              工作单位: <strong>${escapeHtml(item.company)}</strong>
+            </div>
+            <div style="display: flex; gap: 6px; justify-content: flex-end;">
+              <button class="btn btn-success" style="padding: 3px 8px; font-size: 0.7rem; width: auto;" onclick="handleApproveUserDirect(${item.id})">通过</button>
+              <button class="btn btn-danger" style="padding: 3px 8px; font-size: 0.7rem; width: auto; background: var(--danger-color);" onclick="handleRejectUserDirect(${item.id})">拒绝</button>
             </div>
           `;
         }
@@ -1549,186 +1573,64 @@
       }
     }
 
+    async function handleApproveUserDirect(userId) {
+      try {
+        const formData = new FormData();
+        formData.append('user_id', userId);
+        formData.append('action', 'approved');
+        
+        const response = await fetch('/api/admin/approve', {
+          method: 'POST',
+          headers: { 'Authorization': token },
+          body: formData
+        });
+        const result = await response.json();
+        if (response.ok && result.code === 200) {
+          showAlert('success', '用户注册已通过审批');
+          loadBadgeCount();
+          const activeTab = document.querySelector('.tab-content.active');
+          if (activeTab && activeTab.id === 'admin-content-pending') {
+            loadPendingUsers();
+          }
+        } else {
+          alert(result.detail || '操作失败');
+        }
+      } catch (err) {
+        showAlert('error', '网络错误');
+      }
+    }
+
+    async function handleRejectUserDirect(userId) {
+      try {
+        const formData = new FormData();
+        formData.append('user_id', userId);
+        formData.append('action', 'rejected');
+        
+        const response = await fetch('/api/admin/approve', {
+          method: 'POST',
+          headers: { 'Authorization': token },
+          body: formData
+        });
+        const result = await response.json();
+        if (response.ok && result.code === 200) {
+          showAlert('success', '用户注册已拒绝');
+          loadBadgeCount();
+          const activeTab = document.querySelector('.tab-content.active');
+          if (activeTab && activeTab.id === 'admin-content-pending') {
+            loadPendingUsers();
+          }
+        } else {
+          alert(result.detail || '操作失败');
+        }
+      } catch (err) {
+        showAlert('error', '网络错误');
+      }
+    }
+
     // 定时轮询，每隔15秒刷新一次提醒数
     setInterval(loadBadgeCount, 15000);
 
-    // ================== 新增：人员信息修改审批处理 JS ==================
-    function openRecordUpdatesModal() {
-      const modal = document.getElementById('record-updates-modal');
-      if (modal) {
-        modal.style.display = 'flex';
-        loadRecordUpdates();
-      }
-    }
-
-    function closeRecordUpdatesModal() {
-      const modal = document.getElementById('record-updates-modal');
-      if (modal) {
-        modal.style.display = 'none';
-      }
-    }
-
-    async function loadRecordUpdates() {
-      try {
-        const response = await fetch('/api/admin/record-updates', {
-          headers: { 'Authorization': token }
-        });
-        const result = await response.json();
-        if (response.ok && result.code === 200) {
-          renderRecordUpdates(result.data || []);
-        } else {
-          showAlert('error', result.detail || '获取人员信息修改列表失败');
-        }
-      } catch (err) {
-        showAlert('error', '网络错误，获取人员修改列表失败');
-      }
-    }
-
-    function renderRecordUpdates(updates) {
-      const tbody = document.getElementById('record-updates-tbody');
-      const noData = document.getElementById('record-updates-no-data');
-      if (!tbody) return;
-      tbody.innerHTML = '';
-      
-      if (updates.length === 0) {
-        noData.style.display = 'block';
-        return;
-      }
-      noData.style.display = 'none';
-      
-      updates.forEach(u => {
-        const tr = document.createElement('tr');
-        
-        const applicantInfo = `
-          <strong>${escapeHtml(u.old_name || '')}</strong><br>
-          <span style="font-size:0.8rem; color:var(--text-muted);">${escapeHtml(u.old_company || '无单位')}</span>
-        `;
-        
-        const fields = [
-          { label: '姓名', key: 'name' },
-          { label: '民族', key: 'nation' },
-          { label: '身份证', key: 'id_card' },
-          { label: '电话', key: 'phone' },
-          { label: '地址', key: 'address' },
-          { label: '岗位', key: 'job' },
-          { label: '学历', key: 'education' },
-          { label: '区域', key: 'region_auth' }
-        ];
-        
-        let diffRowsHtml = '';
-        fields.forEach(f => {
-          const oldVal = (u['old_' + f.key] || '').trim();
-          const newVal = (u['new_' + f.key] || '').trim();
-          
-          if (oldVal !== newVal) {
-            diffRowsHtml += `
-              <tr>
-                <th>${f.label}</th>
-                <td class="diff-cell-old">${escapeHtml(oldVal || '空')}</td>
-                <td class="diff-cell-new">${escapeHtml(newVal || '空')}</td>
-              </tr>
-            `;
-          }
-        });
-        
-        if (!diffRowsHtml) {
-          diffRowsHtml = '<tr><td colspan="3" style="text-align:center; color:var(--text-muted); padding: 8px;">无基本信息项变动</td></tr>';
-        }
-        
-        const diffTable = `
-          <table class="diff-table">
-            <thead>
-              <tr>
-                <th style="width:20%; padding: 4px 8px;">项目</th>
-                <th style="width:40%; padding: 4px 8px;">原信息</th>
-                <th style="width:40%; padding: 4px 8px;">修改后</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${diffRowsHtml}
-            </tbody>
-          </table>
-        `;
-        
-        let photoHtml = '<span style="color:var(--text-muted); font-size:0.8rem;">未修改头像</span>';
-        if (u.new_photo_path && u.new_photo_path !== u.old_photo_path) {
-          const rand = Math.random();
-          photoHtml = `
-            <div style="text-align:center;">
-              <a href="/${u.new_photo_path}?r=${rand}" target="_blank">
-                <img src="/${u.new_photo_path}?r=${rand}" style="width:64px; height:64px; border-radius:4px; object-fit:cover; border:1px solid rgba(255,255,255,0.15);" />
-              </a>
-              <div style="font-size:0.75rem; color:#4ade80; margin-top:2px;">新头像(待审)</div>
-            </div>
-          `;
-        }
-        
-        let actionButtons = '';
-        if (u.status === 'pending') {
-          actionButtons = `
-            <button class="btn btn-success" style="padding: 6px 10px; font-size: 0.8rem; width: auto;" onclick="handleApproveUpdate(${u.update_id})">同意修改</button>
-            <button class="btn btn-danger" style="padding: 6px 10px; font-size: 0.8rem; width: auto; margin-left: 6px; background: var(--danger-color);" onclick="handleRejectUpdate(${u.update_id})">拒绝</button>
-          `;
-        } else if (u.status === 'approved') {
-          actionButtons = '<span class="badge badge-approved" style="padding:4px 8px; font-size:0.8rem;">已同意</span>';
-        } else {
-          actionButtons = '<span class="badge badge-rejected" style="padding:4px 8px; font-size:0.8rem;">已拒绝</span>';
-        }
-        
-        tr.innerHTML = `
-          <td>${applicantInfo}</td>
-          <td style="font-size:0.8rem; color:var(--text-muted);">${escapeHtml(u.apply_time || '')}</td>
-          <td>${diffTable}</td>
-          <td>${photoHtml}</td>
-          <td>
-            <div class="action-row" style="justify-content: flex-start; gap: 4px;">
-              ${actionButtons}
-            </div>
-          </td>
-        `;
-        tbody.appendChild(tr);
-      });
-    }
-
-    async function handleApproveUpdate(updateId) {
-      if (!confirm('确定批准该修改申请吗？批准后将直接更新人员记录并覆盖旧数据。')) return;
-      try {
-        const response = await fetch(`/api/admin/record-updates/${updateId}/approve`, {
-          method: 'POST',
-          headers: { 'Authorization': token }
-        });
-        const result = await response.json();
-        if (response.ok && result.code === 200) {
-          showAlert('success', '已批准修改申请，人员信息更新成功');
-          loadRecordUpdates();
-          loadBadgeCount();
-        } else {
-          alert(result.detail || '审批批准失败');
-        }
-      } catch (err) {
-        showAlert('error', '审批网络错误');
-      }
-    }
-
-    async function handleRejectUpdate(updateId) {
-      if (!confirm('确定拒绝该修改申请吗？拒绝后临时上传的照片等将废弃。')) return;
-      try {
-        const response = await fetch(`/api/admin/record-updates/${updateId}/reject`, {
-          method: 'POST',
-          headers: { 'Authorization': token }
-        });
-        const result = await response.json();
-        if (response.ok && result.code === 200) {
-          showAlert('success', '已拒绝修改申请，已清理临时数据');
-          loadRecordUpdates();
-          loadBadgeCount();
-        } else {
-          alert(result.detail || '审批拒绝失败');
-        }
-      } catch (err) {
-        showAlert('error', '审批网络错误');
-      }
-    }
+    
 
     function switchAdminTab(tab) {
       document.querySelectorAll('.admin-nav-item').forEach(function(item) { item.classList.remove('active'); });

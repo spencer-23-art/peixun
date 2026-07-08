@@ -544,9 +544,13 @@ def init_db():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_exam_records_company ON exam_records (company)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_users_company ON users (company)")
     
-    # 自愈逻辑：给 users 增加 is_deleted 字段
+    # 自愈逻辑：给 users 增加 is_deleted 和 created_at 字段
     try:
         cursor.execute("ALTER TABLE users ADD COLUMN is_deleted INTEGER DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP")
     except sqlite3.OperationalError:
         pass
 
@@ -723,9 +727,10 @@ def register(username: str = Form(...), password: str = Form(...), real_name: st
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     try:
+        now_str = beijing_now().strftime("%Y-%m-%d %H:%M:%S")
         cursor.execute(
-            "INSERT INTO users (username, password, real_name, company, status, role) VALUES (?, ?, ?, ?, 'pending', 'user')",
-            (username.strip(), encrypt_pwd(password.strip()), real_name.strip(), company.strip())
+            "INSERT INTO users (username, password, real_name, company, status, role, created_at) VALUES (?, ?, ?, ?, 'pending', 'user', ?)",
+            (username.strip(), encrypt_pwd(password.strip()), real_name.strip(), company.strip(), now_str)
         )
         conn.commit()
         return {"code": 200, "message": "注册成功，请等待管理员审批！"}
@@ -853,7 +858,7 @@ def get_pending_users(admin = Depends(get_admin_user)):
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
-    cursor.execute("SELECT id, username, real_name, company, status FROM users WHERE role != 'admin' AND is_deleted = 0 ORDER BY id DESC")
+    cursor.execute("SELECT id, username, real_name, company, status, created_at FROM users WHERE role != 'admin' AND is_deleted = 0 ORDER BY id DESC")
     users = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return {"code": 200, "data": users}
@@ -2356,13 +2361,17 @@ def get_badge_count(admin = Depends(get_admin_user)):
     cursor.execute("SELECT COUNT(*) FROM record_updates WHERE status = 'pending'")
     record_pending = cursor.fetchone()[0]
     
+    cursor.execute("SELECT COUNT(*) FROM users WHERE role != 'admin' AND status = 'pending' AND is_deleted = 0")
+    user_pending = cursor.fetchone()[0]
+    
     conn.close()
     return {
         "code": 200,
         "data": {
             "exam_pending": exam_pending,
             "record_pending": record_pending,
-            "total": exam_pending + record_pending
+            "user_pending": user_pending,
+            "total": exam_pending + record_pending + user_pending
         }
     }
 
