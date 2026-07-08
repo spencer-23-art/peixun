@@ -727,11 +727,20 @@ def register(username: str = Form(...), password: str = Form(...), real_name: st
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     try:
-        now_str = beijing_now().strftime("%Y-%m-%d %H:%M:%S")
-        cursor.execute(
-            "INSERT INTO users (username, password, real_name, company, status, role, created_at) VALUES (?, ?, ?, ?, 'pending', 'user', ?)",
-            (username.strip(), encrypt_pwd(password.strip()), real_name.strip(), company.strip(), now_str)
-        )
+        try:
+            now_str = beijing_now().strftime("%Y-%m-%d %H:%M:%S")
+            cursor.execute(
+                "INSERT INTO users (username, password, real_name, company, status, role, created_at) VALUES (?, ?, ?, ?, 'pending', 'user', ?)",
+                (username.strip(), encrypt_pwd(password.strip()), real_name.strip(), company.strip(), now_str)
+            )
+        except sqlite3.OperationalError as e:
+            if "no column named created_at" in str(e):
+                cursor.execute(
+                    "INSERT INTO users (username, password, real_name, company, status, role) VALUES (?, ?, ?, ?, 'pending', 'user')",
+                    (username.strip(), encrypt_pwd(password.strip()), real_name.strip(), company.strip())
+                )
+            else:
+                raise e
         conn.commit()
         return {"code": 200, "message": "注册成功，请等待管理员审批！"}
     except sqlite3.IntegrityError:
@@ -858,8 +867,16 @@ def get_pending_users(admin = Depends(get_admin_user)):
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
-    cursor.execute("SELECT id, username, real_name, company, status, created_at FROM users WHERE role != 'admin' AND is_deleted = 0 ORDER BY id DESC")
-    users = [dict(row) for row in cursor.fetchall()]
+    try:
+        cursor.execute("SELECT id, username, real_name, company, status, created_at FROM users WHERE role != 'admin' AND is_deleted = 0 ORDER BY id DESC")
+        users = [dict(row) for row in cursor.fetchall()]
+    except sqlite3.OperationalError:
+        try:
+            cursor.execute("SELECT id, username, real_name, company, status FROM users WHERE role != 'admin' AND is_deleted = 0 ORDER BY id DESC")
+            users = [dict(row) for row in cursor.fetchall()]
+        except sqlite3.OperationalError:
+            cursor.execute("SELECT id, username, real_name, company, status FROM users WHERE role != 'admin' ORDER BY id DESC")
+            users = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return {"code": 200, "data": users}
 
@@ -2361,8 +2378,15 @@ def get_badge_count(admin = Depends(get_admin_user)):
     cursor.execute("SELECT COUNT(*) FROM record_updates WHERE status = 'pending'")
     record_pending = cursor.fetchone()[0]
     
-    cursor.execute("SELECT COUNT(*) FROM users WHERE role != 'admin' AND status = 'pending' AND is_deleted = 0")
-    user_pending = cursor.fetchone()[0]
+    try:
+        cursor.execute("SELECT COUNT(*) FROM users WHERE role != 'admin' AND status = 'pending' AND is_deleted = 0")
+        user_pending = cursor.fetchone()[0]
+    except sqlite3.OperationalError:
+        try:
+            cursor.execute("SELECT COUNT(*) FROM users WHERE role != 'admin' AND status = 'pending'")
+            user_pending = cursor.fetchone()[0]
+        except sqlite3.OperationalError:
+            user_pending = 0
     
     conn.close()
     return {
