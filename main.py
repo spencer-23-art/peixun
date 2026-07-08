@@ -544,6 +544,36 @@ def init_db():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_exam_records_company ON exam_records (company)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_users_company ON users (company)")
     
+    # 自愈逻辑：给 users 增加 is_deleted 字段
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN is_deleted INTEGER DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
+
+    # 人员信息修改申请表
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS record_updates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        record_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        nation TEXT NOT NULL,
+        id_card TEXT NOT NULL,
+        phone TEXT NOT NULL,
+        address TEXT NOT NULL,
+        job TEXT NOT NULL,
+        education TEXT NOT NULL,
+        region_auth TEXT,
+        photo_path TEXT,
+        id_card_img_path TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(record_id) REFERENCES records(id),
+        FOREIGN KEY(user_id) REFERENCES users(id)
+    )
+    ''')
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_record_updates_status ON record_updates (status)")
+    
     # 历史数据时区迁移自愈逻辑（将原本依赖 SQLite DEFAULT CURRENT_TIMESTAMP 存入的 UTC 时间迁移至北京时间 +8 小时，仅迁移一次）
     cursor.execute("SELECT value FROM configs WHERE key = 'timezone_fixed'")
     row = cursor.fetchone()
@@ -823,7 +853,7 @@ def get_pending_users(admin = Depends(get_admin_user)):
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
-    cursor.execute("SELECT id, username, real_name, company, status FROM users WHERE role != 'admin'")
+    cursor.execute("SELECT id, username, real_name, company, status FROM users WHERE role != 'admin' AND is_deleted = 0 ORDER BY id DESC")
     users = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return {"code": 200, "data": users}
@@ -859,10 +889,10 @@ def delete_user(user_id: int = Form(...), admin = Depends(get_admin_user)):
         conn.close()
         raise HTTPException(status_code=400, detail="无权删除管理员账户")
         
-    cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    cursor.execute("UPDATE users SET is_deleted = 1, username = username || '_deleted_' || id WHERE id = ?", (user_id,))
     conn.commit()
     conn.close()
-    return {"code": 200, "message": "用户删除成功"}
+    return {"code": 200, "message": "用户删除成功（已标记为已删除）"}
 
 # 删除培训人员记录（仅管理员，物理删除关联照片）
 @app.post("/api/admin/record/delete")
@@ -1298,6 +1328,47 @@ async def update_record(
         conn.close()
         raise HTTPException(status_code=403, detail="无权修改此记录，或记录不存在")
         
+    # 判断是否创建超过一星期（7天）
+    created_dt = datetime.strptime(record['created_at'], "%Y-%m-%d %H:%M:%S")
+    is_over_week = (beijing_now() - created_dt) > timedelta(days=7)
+    
+    if is_over_week:
+        # 1. 检查是否已经存在 pending 的申请
+        cursor.execute("SELECT id FROM record_updates WHERE record_id = ? AND status = 'pending'", (record_id,))
+        if cursor.fetchone():
+            conn.close()
+            raise HTTPException(status_code=400, detail="您的修改申请正在审批中，请勿重复提交")
+            
+        # 2. 如果用户上传了新照片，保存为临时文件以供审批
+        temp_photo_path = record['photo_path']
+        if photo and photo.filename:
+            file_ext = os.path.splitext(photo.filename)[1].lower()
+            if not file_ext:
+                file_ext = '.jpg'
+            filename = f"temp_update_record_{record_id}_{int(datetime.now().timestamp())}{file_ext}"
+            temp_photo_path = os.path.join(UPLOAD_DIR, filename).replace('\\', '/')
+            with open(temp_photo_path, "wb") as f:
+                shutil.copyfileobj(photo.file, f)
+        
+        # 3. 身份证照临时裁剪路径暂存
+        temp_id_card_img_path = None
+        if safe_temp_id_path(id_card_img_path):
+            temp_id_card_img_path = id_card_img_path
+            
+        # 4. 插入修改申请表
+        cursor.execute('''
+        INSERT INTO record_updates (
+            record_id, user_id, name, nation, id_card, phone, address, job, education, region_auth, photo_path, id_card_img_path, status, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+        ''', (
+            record_id, current_user['id'], name.strip(), nation.strip(), id_card.strip(), phone.strip(),
+            address.strip(), job.strip(), education.strip(), region_auth.strip(), temp_photo_path, temp_id_card_img_path,
+            beijing_now().strftime("%Y-%m-%d %H:%M:%S")
+        ))
+        conn.commit()
+        conn.close()
+        return {"code": 200, "message": "信息修改申请已提交，等待管理员审批", "pending_approval": True}
+
     photo_path = record['photo_path']
     if photo and photo.filename:
         # 保存新照片
@@ -2103,6 +2174,199 @@ def reject_exam_approval(approval_id: int, admin = Depends(get_admin_user)):
     conn.commit()
     conn.close()
     return {"code": 200, "message": "已拒绝该答题申请"}
+
+# ================== 新增：人员信息修改审批 & 消息提醒 API ==================
+
+# 1. 获取修改申请列表（管理员）
+@app.get("/api/admin/record-updates")
+def get_record_updates(admin = Depends(get_admin_user)):
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT 
+            ru.id as update_id, ru.record_id, ru.user_id, ru.status, ru.created_at as apply_time,
+            ru.name as new_name, ru.nation as new_nation, ru.id_card as new_id_card, ru.phone as new_phone,
+            ru.address as new_address, ru.job as new_job, ru.education as new_education, ru.region_auth as new_region_auth,
+            ru.photo_path as new_photo_path, ru.id_card_img_path as new_id_card_img_path,
+            r.name as old_name, r.nation as old_nation, r.id_card as old_id_card, r.phone as old_phone,
+            r.address as old_address, r.job as old_job, r.education as old_education, r.region_auth as old_region_auth,
+            r.photo_path as old_photo_path, r.word_path as old_word_path,
+            u.company as old_company
+        FROM record_updates ru
+        LEFT JOIN records r ON ru.record_id = r.id
+        LEFT JOIN users u ON ru.user_id = u.id
+        ORDER BY CASE WHEN ru.status='pending' THEN 0 ELSE 1 END, ru.created_at DESC
+    ''')
+    updates = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return {"code": 200, "data": updates}
+
+# 2. 批准人员信息修改申请（管理员）
+@app.post("/api/admin/record-updates/{update_id}/approve")
+def approve_record_update(update_id: int, admin = Depends(get_admin_user)):
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT * FROM record_updates WHERE id = ?", (update_id,))
+    update_req = cursor.fetchone()
+    if not update_req:
+        conn.close()
+        raise HTTPException(status_code=404, detail="申请记录不存在")
+        
+    if update_req['status'] != 'pending':
+        conn.close()
+        raise HTTPException(status_code=400, detail="该申请已被处理")
+        
+    record_id = update_req['record_id']
+    user_id = update_req['user_id']
+    
+    cursor.execute("SELECT * FROM records WHERE id = ?", (record_id,))
+    record = cursor.fetchone()
+    cursor.execute("SELECT company FROM users WHERE id = ?", (user_id,))
+    user = cursor.fetchone()
+    company = user['company'] if user else ''
+    
+    if not record:
+        conn.close()
+        raise HTTPException(status_code=404, detail="对应的培训人员记录不存在")
+        
+    # 处理头像照片的转正和旧照物理删除
+    final_photo_path = record['photo_path']
+    new_photo_req = update_req['photo_path']
+    if new_photo_req and new_photo_req != record['photo_path']:
+        if os.path.exists(new_photo_req):
+            formal_filename = os.path.basename(new_photo_req).replace("temp_update_record_", "")
+            formal_photo_path = os.path.join(UPLOAD_DIR, formal_filename).replace('\\', '/')
+            try:
+                os.rename(new_photo_req, formal_photo_path)
+                final_photo_path = formal_photo_path
+            except Exception:
+                final_photo_path = new_photo_req
+                
+            if record['photo_path'] and os.path.exists(record['photo_path']):
+                try: os.remove(record['photo_path'])
+                except: pass
+                
+    # 处理新身份证裁剪图片的转正
+    new_id_card = update_req['id_card']
+    idcard_save_dir = "uploads/idcards"
+    os.makedirs(idcard_save_dir, exist_ok=True)
+    perm_id_img_path = os.path.join(idcard_save_dir, f"{new_id_card}.png").replace('\\', '/')
+    
+    temp_id_card_img_path = update_req['id_card_img_path']
+    if temp_id_card_img_path and os.path.exists(temp_id_card_img_path):
+        try:
+            shutil.copy2(temp_id_card_img_path, perm_id_img_path)
+            try: os.remove(temp_id_card_img_path)
+            except: pass
+        except Exception as e:
+            print(f"Error copying idcard image during approval: {e}")
+            
+    # 解析新身份证信息并重新生成 Word 登记卡
+    gender, age = parse_id_card(new_id_card)
+    new_word_path = record['word_path']
+    if os.path.exists(perm_id_img_path):
+        try:
+            record_data = {
+                "姓名": update_req['name'],
+                "性别": gender,
+                "年龄": age,
+                "联系电话": update_req['phone'],
+                "岗位": update_req['job'],
+                "常住地址": update_req['address'],
+                "工作单位": company,
+                "created_at": record['created_at']
+            }
+            new_word_path = generate_record_card(record_data, perm_id_img_path)
+            
+            if record['word_path'] and new_word_path != record['word_path'] and os.path.exists(record['word_path']):
+                try: os.remove(record['word_path'])
+                except: pass
+        except Exception as e:
+            print(f"Error regenerating word card during approval: {e}")
+            
+    # 更新 records 记录
+    cursor.execute('''
+        UPDATE records 
+        SET name = ?, nation = ?, id_card = ?, phone = ?, address = ?, job = ?, education = ?, region_auth = ?, gender = ?, age = ?, photo_path = ?, word_path = ?
+        WHERE id = ?
+    ''', (
+        update_req['name'], update_req['nation'], new_id_card, update_req['phone'], update_req['address'],
+        update_req['job'], update_req['education'], update_req['region_auth'], gender, age, final_photo_path, new_word_path,
+        record_id
+    ))
+    
+    # 更新申请状态
+    cursor.execute("UPDATE record_updates SET status = 'approved' WHERE id = ?", (update_id,))
+    
+    conn.commit()
+    conn.close()
+    return {"code": 200, "message": "审批已通过，人员信息已更新"}
+
+# 3. 拒绝人员信息修改申请（管理员）
+@app.post("/api/admin/record-updates/{update_id}/reject")
+def reject_record_update(update_id: int, admin = Depends(get_admin_user)):
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT * FROM record_updates WHERE id = ?", (update_id,))
+    update_req = cursor.fetchone()
+    if not update_req:
+        conn.close()
+        raise HTTPException(status_code=404, detail="申请记录不存在")
+        
+    if update_req['status'] != 'pending':
+        conn.close()
+        raise HTTPException(status_code=400, detail="该申请已被处理")
+        
+    record_id = update_req['record_id']
+    cursor.execute("SELECT photo_path FROM records WHERE id = ?", (record_id,))
+    record = cursor.fetchone()
+    
+    # 物理删除临时生成的照片
+    temp_photo_path = update_req['photo_path']
+    if temp_photo_path and record and temp_photo_path != record['photo_path']:
+        if os.path.exists(temp_photo_path):
+            try: os.remove(temp_photo_path)
+            except: pass
+            
+    # 物理删除临时身份证照片
+    temp_id_card_img_path = update_req['id_card_img_path']
+    if temp_id_card_img_path and os.path.exists(temp_id_card_img_path):
+        try: os.remove(temp_id_card_img_path)
+        except: pass
+        
+    cursor.execute("UPDATE record_updates SET status = 'rejected' WHERE id = ?", (update_id,))
+    conn.commit()
+    conn.close()
+    return {"code": 200, "message": "审批已拒绝，原人员信息保持不变"}
+
+# 4. 获取管理员消息提醒数（答题没有数据的提醒 + 超过7天修改审批）
+@app.get("/api/admin/badge-count")
+def get_badge_count(admin = Depends(get_admin_user)):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT COUNT(*) FROM exam_approvals WHERE status = 'pending'")
+    exam_pending = cursor.fetchone()[0]
+    
+    cursor.execute("SELECT COUNT(*) FROM record_updates WHERE status = 'pending'")
+    record_pending = cursor.fetchone()[0]
+    
+    conn.close()
+    return {
+        "code": 200,
+        "data": {
+            "exam_pending": exam_pending,
+            "record_pending": record_pending,
+            "total": exam_pending + record_pending
+        }
+    }
+
+# =========================================================================
 
 # 获取试题（无需登录）
 @app.get("/api/get_questions")

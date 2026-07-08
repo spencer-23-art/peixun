@@ -6,6 +6,175 @@
   <title>培训信息录入系统 - 管理后台</title>
   <link rel="stylesheet" href="/static/css/style.css?v=1.0.6">
   <style>
+    /* 消息小铃铛与响应式消息审批 UI 样式 */
+    .bell-container {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      margin: 0 12px;
+      cursor: pointer;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      transition: all 0.2s ease;
+    }
+    .bell-container:hover {
+      background: rgba(255, 255, 255, 0.15);
+      border-color: rgba(255, 255, 255, 0.25);
+    }
+    .bell-icon {
+      font-size: 1.1rem;
+      color: var(--text-main);
+    }
+    .bell-badge {
+      position: absolute;
+      top: -3px;
+      right: -3px;
+      background: #ef4444;
+      color: white;
+      font-size: 0.65rem;
+      font-weight: bold;
+      border-radius: 10px;
+      padding: 1px 5px;
+      line-height: 1.2;
+      box-shadow: 0 2px 4px rgba(239, 68, 68, 0.3);
+      min-width: 15px;
+      text-align: center;
+      display: none;
+    }
+    
+    /* PC端下拉列表 */
+    .bell-dropdown {
+      display: none;
+      position: absolute;
+      right: 0;
+      top: 42px;
+      width: 240px;
+      background: #1e293b;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 8px;
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+      z-index: 1001;
+      padding: 12px;
+      text-align: left;
+    }
+    .bell-dropdown::before {
+      content: '';
+      position: absolute;
+      right: 12px;
+      top: -6px;
+      width: 10px;
+      height: 10px;
+      background: #1e293b;
+      border-left: 1px solid rgba(255, 255, 255, 0.15);
+      border-top: 1px solid rgba(255, 255, 255, 0.15);
+      transform: rotate(45deg);
+    }
+    .bell-title {
+      font-size: 0.9rem;
+      font-weight: bold;
+      color: var(--text-main);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      padding-bottom: 6px;
+      margin-bottom: 8px;
+    }
+    .bell-item {
+      padding: 8px;
+      border-radius: 6px;
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      transition: all 0.2s ease;
+      cursor: pointer;
+    }
+    .bell-item:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-main);
+    }
+    .bell-item-count {
+      background: rgba(99, 102, 241, 0.2);
+      color: #818cf8;
+      font-weight: bold;
+      border-radius: 12px;
+      padding: 1px 6px;
+      font-size: 0.7rem;
+    }
+    
+    /* 移动端模态消息框 */
+    .bell-modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(4px);
+      z-index: 2000;
+      justify-content: center;
+      align-items: center;
+    }
+    .bell-modal-card {
+      width: 85%;
+      max-width: 300px;
+      background: #1e293b;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.4);
+    }
+    
+    /* 双端响应式媒体查询 */
+    @media (max-width: 768px) {
+      .bell-dropdown {
+        display: none !important; /* 手机端强制禁用悬浮下拉 */
+      }
+      .user-info span {
+        display: none; /* 手机端隐藏管理员名字前缀以腾出头部位置 */
+      }
+      .user-info {
+        gap: 6px;
+      }
+    }
+    
+    /* 人员修改差异高亮对比样式 */
+    .diff-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+    .diff-table th, .diff-table td {
+      padding: 6px 10px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      text-align: left;
+    }
+    .diff-table th {
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text-muted);
+      width: 20%;
+    }
+    .diff-cell-old {
+      background: rgba(239, 68, 68, 0.08);
+      color: #f87171;
+      text-decoration: line-through;
+      width: 40%;
+    }
+    .diff-cell-new {
+      background: rgba(34, 197, 94, 0.12);
+      color: #4ade80;
+      font-weight: 500;
+      width: 40%;
+    }
+    .diff-cell-unchanged {
+      color: var(--text-main);
+      width: 40%;
+    }
+
     #filter-company, #exam-filter-company {
       cursor: pointer;
       background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
@@ -422,6 +591,10 @@
         <svg style="width:16px;height:16px;margin-right:8px;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
         在线答题
       </div>
+      <div class="sidebar-menu-item" id="side-nav-record-updates" onclick="handleSidebarTab('record-updates')">
+        <svg style="width:16px;height:16px;margin-right:8px;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+        信息修改审批
+      </div>
       <div class="sidebar-menu-item" id="side-nav-config" onclick="handleSidebarTab('config')">
         <svg style="width:16px;height:16px;margin-right:8px;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3"/></svg>
         系统配置
@@ -449,6 +622,24 @@
     </div>
     <div class="user-info">
       <span>当前管理员：<strong>系统管理员</strong></span>
+      <!-- 消息提醒小铃铛 -->
+      <div class="bell-container" id="bell-container" onclick="toggleBellDropdown(event)">
+        <span class="bell-icon">🔔</span>
+        <span class="bell-badge" id="bell-badge">0</span>
+        
+        <!-- PC端消息下拉菜单 -->
+        <div class="bell-dropdown" id="bell-dropdown" onclick="event.stopPropagation()">
+          <div class="bell-title">待处理审批消息</div>
+          <div class="bell-item" onclick="switchAdminTab('exam')">
+            <span>待审批答题申请</span>
+            <span class="bell-item-count" id="bell-count-exam">0</span>
+          </div>
+          <div class="bell-item" onclick="switchAdminTab('record-updates')">
+            <span>待审批信息修改</span>
+            <span class="bell-item-count" id="bell-count-record">0</span>
+          </div>
+        </div>
+      </div>
       <button class="btn-logout" onclick="logout()">退出后台</button>
     </div>
   </div>
@@ -479,6 +670,7 @@
       <div class="admin-nav-item" id="nav-pending" onclick="switchAdminTab('pending')">注册用户管理</div>
       <div class="admin-nav-item" id="nav-restore" onclick="switchAdminTab('restore')">门禁恢复管理</div>
       <div class="admin-nav-item" id="nav-exam" onclick="switchAdminTab('exam')">在线答题</div>
+      <div class="admin-nav-item" id="nav-record-updates" onclick="switchAdminTab('record-updates')">信息修改审批</div>
       <div class="admin-nav-item" id="nav-config" onclick="switchAdminTab('config')">系统配置</div>
     </div>
 
@@ -698,6 +890,25 @@
       </div>
     </div>
     
+    <!-- TAB 6: 信息修改审批 -->
+    <div class="tab-content" id="admin-content-record-updates">
+      <div style="margin-top: 15px; overflow-x: auto;">
+        <table class="admin-table" style="min-width: 900px;">
+          <thead>
+            <tr>
+              <th style="width: 140px;">申请人 / 原单位</th>
+              <th style="width: 120px;">申请时间</th>
+              <th>修改对比（旧值 / 新值）</th>
+              <th style="width: 100px;">新头像</th>
+              <th style="width: 150px;">操作</th>
+            </tr>
+          </thead>
+          <tbody id="record-updates-tbody"></tbody>
+        </table>
+        <div id="record-updates-no-data" class="no-data" style="display: none; padding: 20px; text-align: center; color: var(--text-muted);">暂无信息修改申请</div>
+      </div>
+    </div>
+
     <!-- TAB 5: 系统配置 -->
     <div class="tab-content" id="admin-content-config">
       <div class="config-split-container" style="display: flex; gap: 24px; width: 100%; align-items: flex-start; max-width: 1100px; margin: 20px auto 0 auto; box-sizing: border-box;">
@@ -1113,6 +1324,231 @@
     let deselectedRecordIds = new Set();
     let lastFilteredRecords = [];
 
+    // ================== 新增：消息小铃铛交互与数据加载 ==================
+    function toggleBellDropdown(event) {
+      if (event) event.stopPropagation();
+      const dropdown = document.getElementById('bell-dropdown');
+      if (!dropdown) return;
+      
+      // 判断是否是移动端
+      if (window.innerWidth <= 768) {
+        toggleBellModal(true);
+      } else {
+        const isShown = dropdown.style.display === 'block';
+        dropdown.style.display = isShown ? 'none' : 'block';
+      }
+    }
+
+    function toggleBellModal(show) {
+      const modal = document.getElementById('bell-modal-overlay');
+      if (modal) {
+        modal.style.display = show ? 'flex' : 'none';
+      }
+    }
+
+    // 全局点击关闭PC端下拉框
+    window.addEventListener('click', function() {
+      const dropdown = document.getElementById('bell-dropdown');
+      if (dropdown) dropdown.style.display = 'none';
+    });
+
+    async function loadBadgeCount() {
+      if (!token) return;
+      try {
+        const response = await fetch('/api/admin/badge-count', {
+          headers: { 'Authorization': token }
+        });
+        const result = await response.json();
+        if (response.ok && result.code === 200) {
+          const data = result.data;
+          const badge = document.getElementById('bell-badge');
+          
+          if (badge) {
+            badge.innerText = data.total;
+            badge.style.display = data.total > 0 ? 'block' : 'none';
+          }
+          
+          const countExam = document.getElementById('bell-count-exam');
+          const countRecord = document.getElementById('bell-count-record');
+          if (countExam) countExam.innerText = data.exam_pending + ' 条';
+          if (countRecord) countRecord.innerText = data.record_pending + ' 条';
+          
+          const modalCountExam = document.getElementById('bell-modal-count-exam');
+          const modalCountRecord = document.getElementById('bell-modal-count-record');
+          if (modalCountExam) modalCountExam.innerText = data.exam_pending + ' 条';
+          if (modalCountRecord) modalCountRecord.innerText = data.record_pending + ' 条';
+        }
+      } catch (err) {
+        console.error('获取消息角标失败', err);
+      }
+    }
+
+    // 定时轮询，每隔15秒刷新一次提醒数
+    setInterval(loadBadgeCount, 15000);
+
+    // ================== 新增：人员信息修改审批处理 JS ==================
+    async function loadRecordUpdates() {
+      try {
+        const response = await fetch('/api/admin/record-updates', {
+          headers: { 'Authorization': token }
+        });
+        const result = await response.json();
+        if (response.ok && result.code === 200) {
+          renderRecordUpdates(result.data || []);
+        } else {
+          showAlert('error', result.detail || '获取人员信息修改列表失败');
+        }
+      } catch (err) {
+        showAlert('error', '网络错误，获取人员修改列表失败');
+      }
+    }
+
+    function renderRecordUpdates(updates) {
+      const tbody = document.getElementById('record-updates-tbody');
+      const noData = document.getElementById('record-updates-no-data');
+      if (!tbody) return;
+      tbody.innerHTML = '';
+      
+      if (updates.length === 0) {
+        noData.style.display = 'block';
+        return;
+      }
+      noData.style.display = 'none';
+      
+      updates.forEach(u => {
+        const tr = document.createElement('tr');
+        
+        const applicantInfo = `
+          <strong>${escapeHtml(u.old_name || '')}</strong><br>
+          <span style="font-size:0.8rem; color:var(--text-muted);">${escapeHtml(u.old_company || '无单位')}</span>
+        `;
+        
+        const fields = [
+          { label: '姓名', key: 'name' },
+          { label: '民族', key: 'nation' },
+          { label: '身份证', key: 'id_card' },
+          { label: '电话', key: 'phone' },
+          { label: '地址', key: 'address' },
+          { label: '岗位', key: 'job' },
+          { label: '学历', key: 'education' },
+          { label: '区域', key: 'region_auth' }
+        ];
+        
+        let diffRowsHtml = '';
+        fields.forEach(f => {
+          const oldVal = (u['old_' + f.key] || '').trim();
+          const newVal = (u['new_' + f.key] || '').trim();
+          
+          if (oldVal !== newVal) {
+            diffRowsHtml += `
+              <tr>
+                <th>${f.label}</th>
+                <td class="diff-cell-old">${escapeHtml(oldVal || '空')}</td>
+                <td class="diff-cell-new">${escapeHtml(newVal || '空')}</td>
+              </tr>
+            `;
+          }
+        });
+        
+        if (!diffRowsHtml) {
+          diffRowsHtml = '<tr><td colspan="3" style="text-align:center; color:var(--text-muted); padding: 8px;">无基本信息项变动</td></tr>';
+        }
+        
+        const diffTable = `
+          <table class="diff-table">
+            <thead>
+              <tr>
+                <th style="width:20%; padding: 4px 8px;">项目</th>
+                <th style="width:40%; padding: 4px 8px;">原信息</th>
+                <th style="width:40%; padding: 4px 8px;">修改后</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${diffRowsHtml}
+            </tbody>
+          </table>
+        `;
+        
+        let photoHtml = '<span style="color:var(--text-muted); font-size:0.8rem;">未修改头像</span>';
+        if (u.new_photo_path && u.new_photo_path !== u.old_photo_path) {
+          const rand = Math.random();
+          photoHtml = `
+            <div style="text-align:center;">
+              <a href="/${u.new_photo_path}?r=${rand}" target="_blank">
+                <img src="/${u.new_photo_path}?r=${rand}" style="width:64px; height:64px; border-radius:4px; object-fit:cover; border:1px solid rgba(255,255,255,0.15);" />
+              </a>
+              <div style="font-size:0.75rem; color:#4ade80; margin-top:2px;">新头像(待审)</div>
+            </div>
+          `;
+        }
+        
+        let actionButtons = '';
+        if (u.status === 'pending') {
+          actionButtons = `
+            <button class="btn btn-success" style="padding: 6px 10px; font-size: 0.8rem; width: auto;" onclick="handleApproveUpdate(${u.update_id})">同意修改</button>
+            <button class="btn btn-danger" style="padding: 6px 10px; font-size: 0.8rem; width: auto; margin-left: 6px; background: var(--danger-color);" onclick="handleRejectUpdate(${u.update_id})">拒绝</button>
+          `;
+        } else if (u.status === 'approved') {
+          actionButtons = '<span class="badge badge-approved" style="padding:4px 8px; font-size:0.8rem;">已同意</span>';
+        } else {
+          actionButtons = '<span class="badge badge-rejected" style="padding:4px 8px; font-size:0.8rem;">已拒绝</span>';
+        }
+        
+        tr.innerHTML = `
+          <td>${applicantInfo}</td>
+          <td style="font-size:0.8rem; color:var(--text-muted);">${escapeHtml(u.apply_time || '')}</td>
+          <td>${diffTable}</td>
+          <td>${photoHtml}</td>
+          <td>
+            <div class="action-row" style="justify-content: flex-start; gap: 4px;">
+              ${actionButtons}
+            </div>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function handleApproveUpdate(updateId) {
+      if (!confirm('确定批准该修改申请吗？批准后将直接更新人员记录并覆盖旧数据。')) return;
+      try {
+        const response = await fetch(`/api/admin/record-updates/${updateId}/approve`, {
+          method: 'POST',
+          headers: { 'Authorization': token }
+        });
+        const result = await response.json();
+        if (response.ok && result.code === 200) {
+          showAlert('success', '已批准修改申请，人员信息更新成功');
+          loadRecordUpdates();
+          loadBadgeCount();
+        } else {
+          alert(result.detail || '审批批准失败');
+        }
+      } catch (err) {
+        showAlert('error', '审批网络错误');
+      }
+    }
+
+    async function handleRejectUpdate(updateId) {
+      if (!confirm('确定拒绝该修改申请吗？拒绝后临时上传的照片等将废弃。')) return;
+      try {
+        const response = await fetch(`/api/admin/record-updates/${updateId}/reject`, {
+          method: 'POST',
+          headers: { 'Authorization': token }
+        });
+        const result = await response.json();
+        if (response.ok && result.code === 200) {
+          showAlert('success', '已拒绝修改申请，已清理临时数据');
+          loadRecordUpdates();
+          loadBadgeCount();
+        } else {
+          alert(result.detail || '审批拒绝失败');
+        }
+      } catch (err) {
+        showAlert('error', '审批网络错误');
+      }
+    }
+
     function switchAdminTab(tab) {
       document.querySelectorAll('.admin-nav-item').forEach(function(item) { item.classList.remove('active'); });
       document.querySelectorAll('.sidebar-menu-item').forEach(function(item) { item.classList.remove('active'); });
@@ -1155,6 +1591,13 @@
         loadExamRecords();
         loadExamCompanyOptions();
         loadExamApprovals();
+      } else if (tab === 'record-updates') {
+        document.getElementById('nav-record-updates').classList.add('active');
+        document.getElementById('admin-content-record-updates').classList.add('active');
+        if (btnExcel) btnExcel.style.display = 'none';
+        if (btnGate) btnGate.style.display = 'none';
+        if (btnRestore) btnRestore.style.display = 'none';
+        loadRecordUpdates();
       } else if (tab === 'config') {
         document.getElementById('nav-config').classList.add('active');
         document.getElementById('admin-content-config').classList.add('active');
@@ -2783,6 +3226,7 @@
       await loadCompanies();
       await loadSystemConfig(); // 加载配置（初始化工种及区域选项）
       await loadRecords();
+      await loadBadgeCount();
     }
     initPage();
     checkRestoreRecordsNotification();
@@ -3795,5 +4239,24 @@
       }
     })();
   </script>
+  
+  <!-- 移动端消息提示弹窗遮罩 -->
+  <div class="bell-modal-overlay" id="bell-modal-overlay" onclick="toggleBellModal(false)">
+    <div class="bell-modal-card" onclick="event.stopPropagation()">
+      <div class="bell-title" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <span>待处理审批消息</span>
+        <span style="cursor:pointer; font-size:1.4rem; color:var(--text-muted);" onclick="toggleBellModal(false)">&times;</span>
+      </div>
+      <div class="bell-item" onclick="switchAdminTab('exam'); toggleBellModal(false);">
+        <span>待审批答题申请</span>
+        <span class="bell-item-count" id="bell-modal-count-exam">0</span>
+      </div>
+      <div style="height:8px;"></div>
+      <div class="bell-item" onclick="switchAdminTab('record-updates'); toggleBellModal(false);">
+        <span>待审批信息修改</span>
+        <span class="bell-item-count" id="bell-modal-count-record">0</span>
+      </div>
+    </div>
+  </div>
 </body>
 </html>
