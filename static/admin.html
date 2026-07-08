@@ -46,21 +46,34 @@
       display: none;
     }
     
-    /* PC端下拉列表 */
+    /* PC端/移动端统一消息下拉列表 */
     .bell-dropdown {
-      display: none;
       position: absolute;
       right: 0;
       top: 42px;
-      width: 240px;
+      width: 320px;
       background: #1e293b;
       border: 1px solid rgba(255, 255, 255, 0.15);
       border-radius: 8px;
-      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);
       z-index: 1001;
       padding: 12px;
       text-align: left;
+      box-sizing: border-box;
+      
+      /* 下拉框展开渐显动画 */
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(-10px) scale(0.95);
+      transform-origin: top right;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     }
+    .bell-dropdown.show {
+      opacity: 1;
+      visibility: visible;
+      transform: translateY(0) scale(1);
+    }
+    
     .bell-dropdown::before {
       content: '';
       position: absolute;
@@ -78,61 +91,49 @@
       font-weight: bold;
       color: var(--text-main);
       border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-      padding-bottom: 6px;
-      margin-bottom: 8px;
-    }
-    .bell-item {
-      padding: 8px;
-      border-radius: 6px;
-      color: var(--text-muted);
-      font-size: 0.8rem;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      transition: all 0.2s ease;
-      cursor: pointer;
-    }
-    .bell-item:hover {
-      background: rgba(255, 255, 255, 0.08);
-      color: var(--text-main);
-    }
-    .bell-item-count {
-      background: rgba(99, 102, 241, 0.2);
-      color: #818cf8;
-      font-weight: bold;
-      border-radius: 12px;
-      padding: 1px 6px;
-      font-size: 0.7rem;
+      padding-bottom: 8px;
+      margin-bottom: 10px;
     }
     
-    /* 移动端模态消息框 */
-    .bell-modal-overlay {
-      display: none;
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0, 0, 0, 0.6);
-      backdrop-filter: blur(4px);
-      z-index: 2000;
-      justify-content: center;
-      align-items: center;
+    /* 待处理审批卡片样式 */
+    .bell-msg-card {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 6px;
+      padding: 10px;
+      margin-bottom: 8px;
+      transition: all 0.2s ease;
+      box-sizing: border-box;
     }
-    .bell-modal-card {
-      width: 85%;
-      max-width: 300px;
-      background: #1e293b;
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      border-radius: 12px;
-      padding: 16px;
-      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.4);
+    .bell-msg-card:hover {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: rgba(255, 255, 255, 0.15);
+    }
+    .bell-msg-card:last-child {
+      margin-bottom: 0;
+    }
+    
+    /* 悬停摇晃小铃铛动画 */
+    @keyframes bellShake {
+      0%, 100% { transform: rotate(0); }
+      20%, 60% { transform: rotate(12deg); }
+      40%, 80% { transform: rotate(-12deg); }
+    }
+    .bell-container:hover .bell-svg {
+      animation: bellShake 0.5s ease;
     }
     
     /* 双端响应式媒体查询 */
     @media (max-width: 768px) {
+      .bell-container {
+        margin-left: auto;
+        margin-right: 8px;
+      }
       .bell-dropdown {
-        display: none !important; /* 手机端强制禁用悬浮下拉 */
+        /* 在手机端适当偏置定位，防止超出屏幕边缘 */
+        right: -30px;
+        width: 300px;
+        transform-origin: top right;
       }
       .user-info span {
         display: none; /* 手机端隐藏管理员名字前缀以腾出头部位置 */
@@ -618,20 +619,17 @@
     </div>
     <!-- 消息提醒小铃铛 -->
     <div class="bell-container" id="bell-container" onclick="toggleBellDropdown(event)">
-      <span class="bell-icon">🔔</span>
+      <svg class="bell-svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition: transform 0.2s; pointer-events: none; vertical-align: middle;">
+        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+        <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+      </svg>
       <span class="bell-badge" id="bell-badge">0</span>
       
-      <!-- PC端消息下拉菜单 -->
+      <!-- 消息下拉弹出框 -->
       <div class="bell-dropdown" id="bell-dropdown" onclick="event.stopPropagation()">
         <div class="bell-title">待处理审批消息</div>
-        <div class="bell-item" onclick="switchAdminTab('exam')">
-          <span>待审批答题申请</span>
-          <span class="bell-item-count" id="bell-count-exam">0</span>
-        </div>
-        <div class="bell-item" onclick="openRecordUpdatesModal()">
-          <span>待审批信息修改</span>
-          <span class="bell-item-count" id="bell-count-record">0</span>
-        </div>
+        <div id="bell-messages-list" style="display: flex; flex-direction: column; gap: 8px;"></div>
+        <div id="bell-no-data" style="display: none; padding: 15px 5px; text-align: center; color: var(--text-muted); font-size: 0.85rem;">暂无待处理消息</div>
       </div>
     </div>
 
@@ -1307,26 +1305,19 @@
       const dropdown = document.getElementById('bell-dropdown');
       if (!dropdown) return;
       
-      // 判断是否是移动端
-      if (window.innerWidth <= 768) {
-        toggleBellModal(true);
+      const isShown = dropdown.classList.contains('show');
+      if (isShown) {
+        dropdown.classList.remove('show');
       } else {
-        const isShown = dropdown.style.display === 'block';
-        dropdown.style.display = isShown ? 'none' : 'block';
+        dropdown.classList.add('show');
+        loadBadgeCount(); // 展开时拉取并渲染最新的数据
       }
     }
 
-    function toggleBellModal(show) {
-      const modal = document.getElementById('bell-modal-overlay');
-      if (modal) {
-        modal.style.display = show ? 'flex' : 'none';
-      }
-    }
-
-    // 全局点击关闭PC端下拉框
+    // 全局点击关闭PC端/移动端下拉框
     window.addEventListener('click', function() {
       const dropdown = document.getElementById('bell-dropdown');
-      if (dropdown) dropdown.style.display = 'none';
+      if (dropdown) dropdown.classList.remove('show');
     });
 
     async function loadBadgeCount() {
@@ -1345,18 +1336,216 @@
             badge.style.display = data.total > 0 ? 'block' : 'none';
           }
           
-          const countExam = document.getElementById('bell-count-exam');
-          const countRecord = document.getElementById('bell-count-record');
-          if (countExam) countExam.innerText = data.exam_pending + ' 条';
-          if (countRecord) countRecord.innerText = data.record_pending + ' 条';
-          
-          const modalCountExam = document.getElementById('bell-modal-count-exam');
-          const modalCountRecord = document.getElementById('bell-modal-count-record');
-          if (modalCountExam) modalCountExam.innerText = data.exam_pending + ' 条';
-          if (modalCountRecord) modalCountRecord.innerText = data.record_pending + ' 条';
+          if (data.total > 0) {
+            await loadAndRenderBellMessages();
+          } else {
+            renderBellMessages([], []);
+          }
         }
       } catch (err) {
         console.error('获取消息角标失败', err);
+      }
+    }
+
+    async function loadAndRenderBellMessages() {
+      try {
+        const [resExam, resRecord] = await Promise.all([
+          fetch('/api/admin/exam-approvals', { headers: { 'Authorization': token } }).then(r => r.json()),
+          fetch('/api/admin/record-updates', { headers: { 'Authorization': token } }).then(r => r.json())
+        ]);
+        
+        const examList = (resExam.code === 200 ? resExam.data : []) || [];
+        const recordList = (resRecord.code === 200 ? resRecord.data : []) || [];
+        
+        renderBellMessages(examList, recordList);
+      } catch (err) {
+        console.error('拉取消息详情失败', err);
+      }
+    }
+
+    function renderBellMessages(examList, recordList) {
+      const listContainer = document.getElementById('bell-messages-list');
+      const noData = document.getElementById('bell-no-data');
+      if (!listContainer) return;
+      listContainer.innerHTML = '';
+      
+      const pendingExams = examList.filter(x => x.status === 'pending').map(x => ({
+        ...x,
+        msg_type: 'exam',
+        time_str: x.created_at || ''
+      }));
+      
+      const pendingRecords = recordList.filter(x => x.status === 'pending').map(x => ({
+        ...x,
+        msg_type: 'record',
+        time_str: x.apply_time || ''
+      }));
+      
+      const allMsgs = [...pendingExams, ...pendingRecords].sort((a, b) => {
+        return b.time_str.localeCompare(a.time_str);
+      });
+      
+      if (allMsgs.length === 0) {
+        noData.style.display = 'block';
+        return;
+      }
+      noData.style.display = 'none';
+      
+      allMsgs.forEach(item => {
+        const card = document.createElement('div');
+        card.className = 'bell-msg-card';
+        
+        if (item.msg_type === 'exam') {
+          card.innerHTML = `
+            <div style="font-weight: bold; color: #818cf8; font-size: 0.82rem; margin-bottom: 4px; display:flex; justify-content:space-between;">
+              <span>📝 待审批答题</span>
+              <span style="font-size:0.7rem; color:var(--text-muted); font-weight:normal;">${item.time_str.substring(5, 16)}</span>
+            </div>
+            <div style="font-size: 0.78rem; color: var(--text-main); margin-bottom: 8px; line-height: 1.4;">
+              姓名: <strong>${escapeHtml(item.name)}</strong><br>
+              身份证后六位: <strong>${escapeHtml(item.id_last6)}</strong>
+              <div style="margin-top: 6px;">
+                <input type="text" placeholder="录入单位(选填)" id="bell-exam-company-${item.id}" value="${escapeHtml(item.company || '')}" style="width: 100%; padding: 4px 8px; font-size: 0.72rem; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; color: white; box-sizing: border-box;" />
+              </div>
+            </div>
+            <div style="display: flex; gap: 6px; justify-content: flex-end;">
+              <button class="btn btn-success" style="padding: 3px 8px; font-size: 0.7rem; width: auto;" onclick="handleApproveExamDirect(${item.id})">通过</button>
+              <button class="btn btn-danger" style="padding: 3px 8px; font-size: 0.7rem; width: auto; background: var(--danger-color);" onclick="handleRejectExamDirect(${item.id})">拒绝</button>
+            </div>
+          `;
+        } else {
+          const fields = [
+            { label: '姓名', key: 'name' },
+            { label: '民族', key: 'nation' },
+            { label: '身份证', key: 'id_card' },
+            { label: '电话', key: 'phone' },
+            { label: '地址', key: 'address' },
+            { label: '岗位', key: 'job' },
+            { label: '学历', key: 'education' },
+            { label: '区域', key: 'region_auth' }
+          ];
+          let diffTextList = [];
+          fields.forEach(f => {
+            const oldVal = (item['old_' + f.key] || '').trim();
+            const newVal = (item['new_' + f.key] || '').trim();
+            if (oldVal !== newVal) {
+              diffTextList.push(`${f.label}: <span style="text-decoration:line-through;color:#f87171;">${escapeHtml(oldVal || '空')}</span> &rarr; <span style="color:#4ade80;font-weight:bold;">${escapeHtml(newVal || '空')}</span>`);
+            }
+          });
+          if (item.new_photo_path && item.new_photo_path !== item.old_photo_path) {
+            diffTextList.push('<span style="color:#818cf8;font-weight:500;">更换了新头像</span>');
+          }
+          const diffSummary = diffTextList.length > 0 ? diffTextList.join('<br>') : '无信息项变动';
+          
+          card.innerHTML = `
+            <div style="font-weight: bold; color: #34d399; font-size: 0.82rem; margin-bottom: 4px; display:flex; justify-content:space-between;">
+              <span>👤 待审批修改</span>
+              <span style="font-size:0.7rem; color:var(--text-muted); font-weight:normal;">${item.time_str.substring(5, 16)}</span>
+            </div>
+            <div style="font-size: 0.78rem; color: var(--text-main); margin-bottom: 8px; line-height: 1.4;">
+              人员: <strong>${escapeHtml(item.old_name)}</strong> (${escapeHtml(item.old_company || '无单位')})
+              <div style="margin-top: 4px; font-size: 0.72rem; color: var(--text-muted); background: rgba(0,0,0,0.15); padding: 6px; border-radius: 4px; line-height: 1.3;">
+                ${diffSummary}
+              </div>
+            </div>
+            <div style="display: flex; gap: 6px; justify-content: flex-end;">
+              <button class="btn btn-success" style="padding: 3px 8px; font-size: 0.7rem; width: auto;" onclick="handleApproveRecordDirect(${item.update_id})">同意</button>
+              <button class="btn btn-danger" style="padding: 3px 8px; font-size: 0.7rem; width: auto; background: var(--danger-color);" onclick="handleRejectRecordDirect(${item.update_id})">拒绝</button>
+            </div>
+          `;
+        }
+        listContainer.appendChild(card);
+      });
+    }
+
+    async function handleApproveExamDirect(id) {
+      const companyInput = document.getElementById(`bell-exam-company-${id}`);
+      const company = companyInput ? companyInput.value.trim() : '';
+      
+      try {
+        const response = await fetch(`/api/admin/exam-approvals/${id}/approve`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': token,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ company: company })
+        });
+        const result = await response.json();
+        if (response.ok && result.code === 200) {
+          showAlert('success', '答题审批已批准');
+          loadBadgeCount();
+          const activeTab = document.querySelector('.tab-content.active');
+          if (activeTab && activeTab.id === 'admin-content-exam') {
+            loadExamApprovals();
+          }
+        } else {
+          alert(result.detail || '操作失败');
+        }
+      } catch (err) {
+        showAlert('error', '网络错误');
+      }
+    }
+
+    async function handleRejectExamDirect(id) {
+      try {
+        const response = await fetch(`/api/admin/exam-approvals/${id}/reject`, {
+          method: 'PUT',
+          headers: { 'Authorization': token }
+        });
+        const result = await response.json();
+        if (response.ok && result.code === 200) {
+          showAlert('success', '答题审批已拒绝');
+          loadBadgeCount();
+          const activeTab = document.querySelector('.tab-content.active');
+          if (activeTab && activeTab.id === 'admin-content-exam') {
+            loadExamApprovals();
+          }
+        } else {
+          alert(result.detail || '操作失败');
+        }
+      } catch (err) {
+        showAlert('error', '网络错误');
+      }
+    }
+
+    async function handleApproveRecordDirect(updateId) {
+      try {
+        const response = await fetch(`/api/admin/record-updates/${updateId}/approve`, {
+          method: 'POST',
+          headers: { 'Authorization': token }
+        });
+        const result = await response.json();
+        if (response.ok && result.code === 200) {
+          showAlert('success', '已批准修改，人员数据已更新');
+          loadBadgeCount();
+          const activeTab = document.querySelector('.tab-content.active');
+          if (activeTab && activeTab.id === 'admin-content-records') {
+            loadRecords();
+          }
+        } else {
+          alert(result.detail || '操作失败');
+        }
+      } catch (err) {
+        showAlert('error', '网络错误');
+      }
+    }
+
+    async function handleRejectRecordDirect(updateId) {
+      try {
+        const response = await fetch(`/api/admin/record-updates/${updateId}/reject`, {
+          method: 'POST',
+          headers: { 'Authorization': token }
+        });
+        const result = await response.json();
+        if (response.ok && result.code === 200) {
+          showAlert('success', '已拒绝修改，已清理临时数据');
+          loadBadgeCount();
+        } else {
+          alert(result.detail || '操作失败');
+        }
+      } catch (err) {
+        showAlert('error', '网络错误');
       }
     }
 
@@ -4224,49 +4413,6 @@
       }
     })();
   </script>
-  
-  <!-- 人员信息修改审批模态弹窗 (仅管理员) -->
-  <div class="bell-modal-overlay" id="record-updates-modal" onclick="closeRecordUpdatesModal()">
-    <div class="glass-container" onclick="event.stopPropagation()" style="width: 92%; max-width: 1000px; max-height: 85vh; overflow-y: auto; padding: 20px; box-sizing: border-box; background: #1e293b; border: 1px solid rgba(255,255,255,0.15); box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);">
-      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 12px; margin-bottom: 16px;">
-        <h3 style="margin: 0; font-size: 1.2rem; color: var(--text-main);">人员信息修改审批</h3>
-        <span style="cursor:pointer; font-size:1.6rem; color:var(--text-muted); line-height: 1;" onclick="closeRecordUpdatesModal()">&times;</span>
-      </div>
-      <div style="overflow-x: auto; width: 100%;">
-        <table class="admin-table" style="min-width: 800px; width: 100%;">
-          <thead>
-            <tr>
-              <th style="width: 150px;">申请人 / 原单位</th>
-              <th style="width: 120px;">申请时间</th>
-              <th>修改对比（旧值 / 新值）</th>
-              <th style="width: 100px;">新头像</th>
-              <th style="width: 150px;">操作</th>
-            </tr>
-          </thead>
-          <tbody id="record-updates-tbody"></tbody>
-        </table>
-        <div id="record-updates-no-data" class="no-data" style="display: none; padding: 30px; text-align: center; color: var(--text-muted); font-size: 0.95rem;">暂无信息修改申请</div>
-      </div>
-    </div>
-  </div>
 
-  <!-- 移动端消息提示弹窗遮罩 -->
-  <div class="bell-modal-overlay" id="bell-modal-overlay" onclick="toggleBellModal(false)">
-    <div class="bell-modal-card" onclick="event.stopPropagation()">
-      <div class="bell-title" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-        <span>待处理审批消息</span>
-        <span style="cursor:pointer; font-size:1.4rem; color:var(--text-muted);" onclick="toggleBellModal(false)">&times;</span>
-      </div>
-      <div class="bell-item" onclick="switchAdminTab('exam'); toggleBellModal(false);">
-        <span>待审批答题申请</span>
-        <span class="bell-item-count" id="bell-modal-count-exam">0</span>
-      </div>
-      <div style="height:8px;"></div>
-      <div class="bell-item" onclick="openRecordUpdatesModal(); toggleBellModal(false);">
-        <span>待审批信息修改</span>
-        <span class="bell-item-count" id="bell-modal-count-record">0</span>
-      </div>
-    </div>
-  </div>
 </body>
 </html>
