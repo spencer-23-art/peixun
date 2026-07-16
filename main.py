@@ -389,13 +389,29 @@ def fetch_records_by_ids(cursor, id_list: list, gate_only: bool):
     if gate_only:
         where += " AND r.gate_restore_status = 'pending'"
     cursor.execute(f'''
-    SELECT r.*, u.company as company
+    SELECT r.*
     FROM records r
-    LEFT JOIN users u ON r.user_id = u.id
     WHERE {where}
     ORDER BY r.is_gate_downloaded ASC, r.created_at DESC
     ''', id_list)
     return cursor.fetchall(), placeholders
+
+
+def get_latest_training_record(cursor, name: str, id_last6: str):
+    """Return the newest training record for a verified person.
+
+    ``records.company`` is captured at training time.  The fallback keeps
+    records created before this field was introduced usable after migration.
+    """
+    cursor.execute('''
+        SELECT r.*, COALESCE(NULLIF(r.company, ''), u.company, '') AS training_company
+        FROM records r
+        LEFT JOIN users u ON r.user_id = u.id
+        WHERE r.name = ? AND SUBSTR(r.id_card, -6) = ?
+        ORDER BY r.created_at DESC, r.id DESC
+        LIMIT 1
+    ''', (name, id_last6))
+    return cursor.fetchone()
 
 # 初始化数据库
 def init_db():
@@ -437,6 +453,8 @@ def init_db():
         region_auth TEXT,
         gender TEXT,
         age INTEGER,
+        company TEXT DEFAULT '',
+        remark TEXT DEFAULT '',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY(user_id) REFERENCES users(id)
     )
@@ -484,6 +502,28 @@ def init_db():
         conn.commit()
     except sqlite3.OperationalError:
         pass
+
+    # Preserve the company that applied to each training entry.  It must not
+    # change when the recorder later moves to another company.
+    try:
+        cursor.execute("ALTER TABLE records ADD COLUMN company TEXT DEFAULT ''")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+    try:
+        cursor.execute("ALTER TABLE records ADD COLUMN remark TEXT DEFAULT ''")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+    cursor.execute('''
+        UPDATE records
+        SET company = COALESCE(
+            NULLIF(company, ''),
+            (SELECT users.company FROM users WHERE users.id = records.user_id),
+            ''
+        )
+        WHERE company IS NULL OR TRIM(company) = ''
+    ''')
     
     # 答题记录表
     cursor.execute('''
@@ -539,6 +579,8 @@ def init_db():
     # 建立索引以优化检索和排序性能
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_records_name ON records (name)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_records_created_at ON records (created_at)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_records_company ON records (company)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_records_id_card_created_at ON records (id_card, created_at)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_exam_records_created_at ON exam_records (created_at)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_exam_records_name ON exam_records (name)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_exam_records_company ON exam_records (company)")
@@ -568,6 +610,7 @@ def init_db():
         job TEXT NOT NULL,
         education TEXT NOT NULL,
         region_auth TEXT,
+        remark TEXT DEFAULT '',
         photo_path TEXT,
         id_card_img_path TEXT,
         status TEXT NOT NULL DEFAULT 'pending',
@@ -577,6 +620,10 @@ def init_db():
     )
     ''')
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_record_updates_status ON record_updates (status)")
+    try:
+        cursor.execute("ALTER TABLE record_updates ADD COLUMN remark TEXT DEFAULT ''")
+    except sqlite3.OperationalError:
+        pass
     
     # 历史数据时区迁移自愈逻辑（将原本依赖 SQLite DEFAULT CURRENT_TIMESTAMP 存入的 UTC 时间迁移至北京时间 +8 小时，仅迁移一次）
     cursor.execute("SELECT value FROM configs WHERE key = 'timezone_fixed'")
@@ -1132,14 +1179,14 @@ def download_word(record_id: int, token: str = None, authorization: str = Header
     
     if user_info['role'] == 'admin':
         cursor.execute("""
-            SELECT r.*, u.company 
+            SELECT r.*, COALESCE(NULLIF(r.company, ''), u.company, '') AS training_company
             FROM records r 
             LEFT JOIN users u ON r.user_id = u.id 
             WHERE r.id = ?
         """, (record_id,))
     else:
         cursor.execute("""
-            SELECT r.*, u.company 
+            SELECT r.*, COALESCE(NULLIF(r.company, ''), u.company, '') AS training_company
             FROM records r 
             LEFT JOIN users u ON r.user_id = u.id 
             WHERE r.id = ? AND r.user_id = ?
@@ -1166,7 +1213,7 @@ def download_word(record_id: int, token: str = None, authorization: str = Header
                 "联系电话": row['phone'],
                 "岗位": row['job'],
                 "常住地址": row['address'],
-                "工作单位": row['company'] or '',
+                "工作单位": row['training_company'] or '',
                 "created_at": row['created_at']
             }
             temp_word_path = generate_record_card(record_data, perm_id_img_path)
@@ -1212,12 +1259,17 @@ async def create_record(
     job: str = Form(...),
     education: str = Form(...),
     region_auth: str = Form(""),
+    remark: str = Form(""),
     id_card_img_path: str = Form(None),
     photo: UploadFile = File(...),
     current_user = Depends(get_current_user)
 ):
     if not validate_id_card(id_card):
         raise HTTPException(status_code=400, detail="身份证号码格式不正确")
+
+    remark = (remark or '').strip()
+    if len(remark) > 1000:
+        raise HTTPException(status_code=400, detail="备注不能超过1000个字符")
 
     # 解析身份证
     gender, age = parse_id_card(id_card)
@@ -1244,9 +1296,9 @@ async def create_record(
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('''
-    INSERT INTO records (user_id, photo_path, name, nation, id_card, phone, address, job, education, region_auth, gender, age, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (current_user['id'], photo_path, name, nation, id_card, phone, address, job, education, region_auth, gender, age, beijing_now().strftime("%Y-%m-%d %H:%M:%S")))
+    INSERT INTO records (user_id, photo_path, name, nation, id_card, phone, address, job, education, region_auth, gender, age, company, remark, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (current_user['id'], photo_path, name, nation, id_card, phone, address, job, education, region_auth, gender, age, current_user['company'].strip(), remark, beijing_now().strftime("%Y-%m-%d %H:%M:%S")))
     record_id = cursor.lastrowid
     conn.commit()
     conn.close()
@@ -1329,12 +1381,17 @@ async def update_record(
     job: str = Form(...),
     education: str = Form(...),
     region_auth: str = Form(""),
+    remark: str = Form(""),
     id_card_img_path: str = Form(None),
     photo: UploadFile = File(None),
     current_user = Depends(get_current_user)
 ):
     if not validate_id_card(id_card):
         raise HTTPException(status_code=400, detail="身份证号码格式不正确")
+
+    remark = (remark or '').strip()
+    if len(remark) > 1000:
+        raise HTTPException(status_code=400, detail="备注不能超过1000个字符")
 
     # 解析身份证
     gender, age = parse_id_card(id_card)
@@ -1380,11 +1437,11 @@ async def update_record(
         # 4. 插入修改申请表
         cursor.execute('''
         INSERT INTO record_updates (
-            record_id, user_id, name, nation, id_card, phone, address, job, education, region_auth, photo_path, id_card_img_path, status, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+            record_id, user_id, name, nation, id_card, phone, address, job, education, region_auth, remark, photo_path, id_card_img_path, status, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
         ''', (
             record_id, current_user['id'], name.strip(), nation.strip(), id_card.strip(), phone.strip(),
-            address.strip(), job.strip(), education.strip(), region_auth.strip(), temp_photo_path, temp_id_card_img_path,
+            address.strip(), job.strip(), education.strip(), region_auth.strip(), remark, temp_photo_path, temp_id_card_img_path,
             beijing_now().strftime("%Y-%m-%d %H:%M:%S")
         ))
         conn.commit()
@@ -1440,7 +1497,7 @@ async def update_record(
                 "联系电话": phone,
                 "岗位": job,
                 "常住地址": address,
-                "工作单位": current_user['company'],
+                "工作单位": record['company'] or current_user['company'],
                 "created_at": record['created_at']
             }
             new_word_path = generate_record_card(record_data, perm_id_img_path)
@@ -1454,9 +1511,9 @@ async def update_record(
             
     cursor.execute('''
     UPDATE records 
-    SET name = ?, nation = ?, id_card = ?, phone = ?, address = ?, job = ?, education = ?, region_auth = ?, gender = ?, age = ?, photo_path = ?, word_path = ?
+    SET name = ?, nation = ?, id_card = ?, phone = ?, address = ?, job = ?, education = ?, region_auth = ?, remark = ?, gender = ?, age = ?, photo_path = ?, word_path = ?
     WHERE id = ? AND user_id = ?
-    ''', (name, nation, id_card, phone, address, job, education, region_auth, gender, age, photo_path, new_word_path, record_id, current_user['id']))
+    ''', (name, nation, id_card, phone, address, job, education, region_auth, remark, gender, age, photo_path, new_word_path, record_id, current_user['id']))
     
     conn.commit()
     conn.close()
@@ -1474,12 +1531,17 @@ async def admin_update_record(
     job: str = Form(...),
     education: str = Form(...),
     region_auth: str = Form(""),
+    remark: str = Form(""),
     id_card_img_path: str = Form(None),
     photo: UploadFile = File(None),
     admin = Depends(get_admin_user)
 ):
     if not validate_id_card(id_card):
         raise HTTPException(status_code=400, detail="身份证号码格式不正确")
+
+    remark = (remark or '').strip()
+    if len(remark) > 1000:
+        raise HTTPException(status_code=400, detail="备注不能超过1000个字符")
 
     # 解析身份证
     gender, age = parse_id_card(id_card)
@@ -1537,10 +1599,7 @@ async def admin_update_record(
     # 2. 如果永久照片存在，重新生成 Word 登记卡
     if os.path.exists(perm_id_img_path):
         try:
-            # 获取该用户的单位名称
-            cursor.execute("SELECT company FROM users WHERE id = ?", (record['user_id'],))
-            user_row = cursor.fetchone()
-            company_name = user_row['company'] if user_row else ''
+            company_name = record['company'] or ''
             
             record_data = {
                 "姓名": name,
@@ -1563,9 +1622,9 @@ async def admin_update_record(
             
     cursor.execute('''
     UPDATE records 
-    SET name = ?, nation = ?, id_card = ?, phone = ?, address = ?, job = ?, education = ?, region_auth = ?, gender = ?, age = ?, photo_path = ?, word_path = ?
+    SET name = ?, nation = ?, id_card = ?, phone = ?, address = ?, job = ?, education = ?, region_auth = ?, remark = ?, gender = ?, age = ?, photo_path = ?, word_path = ?
     WHERE id = ?
-    ''', (name, nation, id_card, phone, address, job, education, region_auth, gender, age, photo_path, new_word_path, record_id))
+    ''', (name, nation, id_card, phone, address, job, education, region_auth, remark, gender, age, photo_path, new_word_path, record_id))
     
     conn.commit()
     conn.close()
@@ -1578,15 +1637,21 @@ def get_approved_companies(admin = Depends(get_admin_user)):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     query = """
-        SELECT u.company, MAX(e.created_at) AS last_exam_time
-        FROM users u
-        LEFT JOIN exam_records e ON u.company = e.company
-        WHERE u.role != 'admin' AND u.status = 'approved' AND u.company IS NOT NULL AND u.company != ''
-        GROUP BY u.company
+        WITH companies AS (
+            SELECT company FROM users
+            WHERE role != 'admin' AND status = 'approved' AND company IS NOT NULL AND company != ''
+            UNION
+            SELECT company FROM records
+            WHERE company IS NOT NULL AND company != ''
+        )
+        SELECT c.company, MAX(e.created_at) AS last_exam_time
+        FROM companies c
+        LEFT JOIN exam_records e ON c.company = e.company
+        GROUP BY c.company
         ORDER BY
             CASE WHEN MAX(e.created_at) IS NULL THEN 1 ELSE 0 END ASC,
             MAX(e.created_at) DESC,
-            u.company ASC
+            c.company ASC
     """
     cursor.execute(query)
     sorted_companies = [row[0] for row in cursor.fetchall()]
@@ -1600,15 +1665,21 @@ def get_companies():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     query = """
-        SELECT u.company, MAX(e.created_at) AS last_exam_time
-        FROM users u
-        LEFT JOIN exam_records e ON u.company = e.company
-        WHERE u.role != 'admin' AND u.company IS NOT NULL AND u.company != ''
-        GROUP BY u.company
+        WITH companies AS (
+            SELECT company FROM users
+            WHERE role != 'admin' AND company IS NOT NULL AND company != ''
+            UNION
+            SELECT company FROM records
+            WHERE company IS NOT NULL AND company != ''
+        )
+        SELECT c.company, MAX(e.created_at) AS last_exam_time
+        FROM companies c
+        LEFT JOIN exam_records e ON c.company = e.company
+        GROUP BY c.company
         ORDER BY
             CASE WHEN MAX(e.created_at) IS NULL THEN 1 ELSE 0 END ASC,
             MAX(e.created_at) DESC,
-            u.company ASC
+            c.company ASC
     """
     cursor.execute(query)
     sorted_companies = [row[0] for row in cursor.fetchall()]
@@ -1626,7 +1697,7 @@ def get_all_records(start_date: str = None, end_date: str = None, company: str =
     params = []
     
     if company and company.strip():
-        conditions.append("u.company = ?")
+        conditions.append("r.company = ?")
         params.append(company.strip())
         
     if name and name.strip():
@@ -1667,7 +1738,7 @@ def get_all_records(start_date: str = None, end_date: str = None, company: str =
         total = cursor.fetchone()[0]
         
         query = f'''
-        SELECT r.*, u.company as company, u.real_name as recorder_name
+        SELECT r.*, u.real_name as recorder_name
         FROM records r 
         LEFT JOIN users u ON r.user_id = u.id 
         {where_clause}
@@ -1678,7 +1749,7 @@ def get_all_records(start_date: str = None, end_date: str = None, company: str =
         cursor.execute(query, params + [limit, offset])
     else:
         query = f'''
-        SELECT r.*, u.company as company, u.real_name as recorder_name
+        SELECT r.*, u.real_name as recorder_name
         FROM records r 
         LEFT JOIN users u ON r.user_id = u.id 
         {where_clause}
@@ -1765,7 +1836,7 @@ def export_excel(ids: str = None, start_date: str = None, end_date: str = None, 
     params = []
     
     if company and company.strip():
-        conditions.append("u.company = ?")
+        conditions.append("r.company = ?")
         params.append(company.strip())
         
     if name and name.strip():
@@ -1799,7 +1870,7 @@ def export_excel(ids: str = None, start_date: str = None, end_date: str = None, 
         where_clause = "WHERE " + " AND ".join(conditions)
         
     query = f'''
-    SELECT r.*, u.company as company 
+    SELECT r.*
     FROM records r 
     LEFT JOIN users u ON r.user_id = u.id 
     {where_clause}
@@ -1862,7 +1933,7 @@ def export_excel(ids: str = None, start_date: str = None, end_date: str = None, 
             "", # 流动情况
             "", # 最近一次培训日期
             "", # 特殊工种证有效期
-            ""  # 备注
+            r['remark'] or ""  # 备注
         ]
         ws.append(row_data)
         
@@ -1884,7 +1955,7 @@ def export_csv(admin = Depends(get_admin_user)):
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute('''
-        SELECT r.*, u.company as company
+        SELECT r.*
         FROM records r
         LEFT JOIN users u ON r.user_id = u.id
         ORDER BY r.created_at DESC
@@ -1909,10 +1980,10 @@ def get_company_records(name: str = None, current_user = Depends(get_current_use
     cursor = conn.cursor()
     
     query = '''
-    SELECT r.*, u.company as company, u.real_name as recorder_name
+    SELECT r.*, u.real_name as recorder_name
     FROM records r
     LEFT JOIN users u ON r.user_id = u.id
-    WHERE u.company = ? AND (r.gate_restore_status IS NULL OR r.gate_restore_status != 'pending')
+    WHERE r.company = ? AND (r.gate_restore_status IS NULL OR r.gate_restore_status != 'pending')
     '''
     params = [current_user['company']]
     
@@ -1945,7 +2016,7 @@ def restore_gate(ids: str = Form(...), current_user = Depends(get_current_user))
     check_query = f'''
     SELECT r.id FROM records r
     LEFT JOIN users u ON r.user_id = u.id
-    WHERE r.id IN ({placeholders}) AND u.company = ?
+    WHERE r.id IN ({placeholders}) AND r.company = ?
     '''
     cursor.execute(check_query, id_list + [current_user['company']])
     allowed_ids = [row[0] for row in cursor.fetchall()]
@@ -1973,7 +2044,7 @@ def get_restore_records(admin = Depends(get_admin_user)):
     cursor = conn.cursor()
     
     cursor.execute('''
-    SELECT r.*, u.company as company, u.real_name as recorder_name
+    SELECT r.*, u.real_name as recorder_name
     FROM records r
     LEFT JOIN users u ON r.user_id = u.id
     WHERE r.gate_restore_status = 'pending'
@@ -2096,20 +2167,19 @@ def exam_verify(data: dict):
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     
-    # 查找身份证后六位匹配的记录
-    cursor.execute("""
-        SELECT r.*, u.company FROM records r
-        LEFT JOIN users u ON r.user_id = u.id
-        WHERE SUBSTR(r.id_card, -6) = ?
-    """, (id_last6,))
-    id_matches = cursor.fetchall()
-    
-    if id_matches:
-        # 身份证后六位匹配到了，检查姓名
-        for r in id_matches:
-            if r['name'] == name:
-                conn.close()
-                return {"code": 200, "matched": True, "company": r['company'] or ''}
+    # Match by both name and ID suffix, then take the most recently uploaded
+    # training entry.  Older training entries stay available in search results.
+    latest_training = get_latest_training_record(cursor, name, id_last6)
+    if latest_training:
+        conn.close()
+        return {
+            "code": 200,
+            "matched": True,
+            "company": latest_training['training_company'] or ''
+        }
+
+    cursor.execute("SELECT 1 FROM records WHERE SUBSTR(id_card, -6) = ? LIMIT 1", (id_last6,))
+    if cursor.fetchone():
         # 身份证后六位匹配但姓名不匹配
         conn.close()
         return {"code": 200, "matched": False, "error": "name_mismatch"}
@@ -2209,12 +2279,12 @@ def get_record_updates(admin = Depends(get_admin_user)):
         SELECT 
             ru.id as update_id, ru.record_id, ru.user_id, ru.status, ru.created_at as apply_time,
             ru.name as new_name, ru.nation as new_nation, ru.id_card as new_id_card, ru.phone as new_phone,
-            ru.address as new_address, ru.job as new_job, ru.education as new_education, ru.region_auth as new_region_auth,
+            ru.address as new_address, ru.job as new_job, ru.education as new_education, ru.region_auth as new_region_auth, ru.remark as new_remark,
             ru.photo_path as new_photo_path, ru.id_card_img_path as new_id_card_img_path,
             r.name as old_name, r.nation as old_nation, r.id_card as old_id_card, r.phone as old_phone,
-            r.address as old_address, r.job as old_job, r.education as old_education, r.region_auth as old_region_auth,
+            r.address as old_address, r.job as old_job, r.education as old_education, r.region_auth as old_region_auth, r.remark as old_remark,
             r.photo_path as old_photo_path, r.word_path as old_word_path,
-            u.company as old_company
+            COALESCE(NULLIF(r.company, ''), u.company, '') as old_company
         FROM record_updates ru
         LEFT JOIN records r ON ru.record_id = r.id
         LEFT JOIN users u ON ru.user_id = u.id
@@ -2246,13 +2316,12 @@ def approve_record_update(update_id: int, admin = Depends(get_admin_user)):
     
     cursor.execute("SELECT * FROM records WHERE id = ?", (record_id,))
     record = cursor.fetchone()
-    cursor.execute("SELECT company FROM users WHERE id = ?", (user_id,))
-    user = cursor.fetchone()
-    company = user['company'] if user else ''
     
     if not record:
         conn.close()
         raise HTTPException(status_code=404, detail="对应的培训人员记录不存在")
+
+    company = record['company'] or ''
         
     # 处理头像照片的转正和旧照物理删除
     final_photo_path = record['photo_path']
@@ -2312,11 +2381,11 @@ def approve_record_update(update_id: int, admin = Depends(get_admin_user)):
     # 更新 records 记录
     cursor.execute('''
         UPDATE records 
-        SET name = ?, nation = ?, id_card = ?, phone = ?, address = ?, job = ?, education = ?, region_auth = ?, gender = ?, age = ?, photo_path = ?, word_path = ?
+        SET name = ?, nation = ?, id_card = ?, phone = ?, address = ?, job = ?, education = ?, region_auth = ?, remark = ?, gender = ?, age = ?, photo_path = ?, word_path = ?
         WHERE id = ?
     ''', (
         update_req['name'], update_req['nation'], new_id_card, update_req['phone'], update_req['address'],
-        update_req['job'], update_req['education'], update_req['region_auth'], gender, age, final_photo_path, new_word_path,
+        update_req['job'], update_req['education'], update_req['region_auth'], update_req['remark'], gender, age, final_photo_path, new_word_path,
         record_id
     ))
     
@@ -2448,13 +2517,14 @@ def save_exam_record(data: dict):
         raise HTTPException(status_code=403, detail="当前非考试开放时间，禁止提交答卷")
     conn = None
     try:
-        name = data.get('name')
-        company = data.get('company')
+        name = (data.get('name') or '').strip()
+        company = (data.get('company') or '').strip()
+        id_last6 = (data.get('id_last6') or '').strip()
         exam_type = data.get('exam_type')
         duration = data.get('duration')
         user_answers = data.get('answers', [])  # 格式: [{"question": "xxx", "user_answer": "对/错"}]
 
-        if not name or not company or not exam_type:
+        if not name or not exam_type or len(id_last6) != 6:
             raise HTTPException(status_code=400, detail="缺少必要信息")
 
         # 1. 在后端重新加载正确答案，确保防作弊安全性（使用缓存优化）
@@ -2484,7 +2554,25 @@ def save_exam_record(data: dict):
         answered_count = len([a for a in user_answers if a.get('user_answer')])
 
         conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
+
+        # Never trust the company sent by the browser for an existing trainee.
+        # The newest training record is the source of truth for the exam unit.
+        latest_training = get_latest_training_record(cursor, name, id_last6)
+        if latest_training:
+            company = latest_training['training_company'] or ''
+        else:
+            cursor.execute('''
+                SELECT 1 FROM exam_approvals
+                WHERE name = ? AND id_last6 = ? AND status = 'approved'
+                ORDER BY created_at DESC LIMIT 1
+            ''', (name, id_last6))
+            if not cursor.fetchone():
+                raise HTTPException(status_code=403, detail="请先完成身份验证")
+
+        if not company:
+            raise HTTPException(status_code=400, detail="缺少工作单位")
 
         # 频率限制：同一姓名+单位+科目 5 分钟内只能提交一次，防恶意刷分，不影响正常重考
         cursor.execute('''
@@ -2535,6 +2623,12 @@ def save_exam_record(data: dict):
             }
         }
     except HTTPException:
+        if conn:
+            try:
+                conn.rollback()
+                conn.close()
+            except Exception:
+                pass
         raise  # L2: 保留 400/403/429 等具体错误，不被通用异常吞掉
     except Exception as e:
         print(f"保存答题记录失败: {e}")

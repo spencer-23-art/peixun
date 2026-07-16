@@ -1174,6 +1174,11 @@
           </div>
         </div>
 
+        <div class="form-group" style="margin-bottom: 20px;">
+          <label for="detail-remark" style="font-size: 0.85rem; color: var(--text-muted); display: block; margin-bottom: 4px;">备注</label>
+          <textarea id="detail-remark" class="form-control" rows="3" maxlength="1000" placeholder="填写本次培训备注"></textarea>
+        </div>
+
         <div style="display: flex; gap: 10px;">
           <button type="submit" class="btn btn-primary" style="width: auto; padding: 8px 16px;">保存修改</button>
           <button type="button" class="btn btn-secondary" onclick="closeRecordDetailModal()" style="width: auto; padding: 8px 16px;">取消</button>
@@ -2168,6 +2173,7 @@
               </span>
             </div>
             <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 6px; white-space: normal; word-break: break-all; max-width: 320px;" title="${escapeHtml(r.address)}">地址: <span style="color: var(--text-main);">${escapeHtml(r.address)}</span></div>
+            ${r.remark ? `<div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 6px; white-space: normal; word-break: break-all; max-width: 320px;">备注: <span style="color: var(--text-main);">${escapeHtml(r.remark)}</span></div>` : ''}
           </td>
           <td>
             <div style="font-size: 0.85rem; color: var(--text-main);">${formatTime(r.created_at)}</div>
@@ -2603,6 +2609,7 @@
       document.getElementById('detail-phone').value = record.phone || '';
       document.getElementById('detail-address').value = record.address || '';
       document.getElementById('detail-education').value = record.education || '大专';
+      document.getElementById('detail-remark').value = record.remark || '';
 
       // 填充民族
       const nationSelect = document.getElementById('detail-nation');
@@ -2786,6 +2793,7 @@
       const job = document.getElementById('detail-job').value;
       const education = document.getElementById('detail-education').value;
       const regionAuth = document.getElementById('detail-region').value;
+      const remark = document.getElementById('detail-remark').value.trim();
       const idCardImgPath = document.getElementById('detail-id-card-img-path').value;
       
       if (!name || !nation || !idCard || !phone || !address || !job || !education || !regionAuth) {
@@ -2808,6 +2816,7 @@
       formData.append('job', job);
       formData.append('education', education);
       formData.append('region_auth', regionAuth);
+      formData.append('remark', remark);
       formData.append('id_card_img_path', idCardImgPath || '');
       
       if (window._detailPhotoBlob) {

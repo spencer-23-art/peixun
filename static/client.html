@@ -481,6 +481,11 @@
           </div>
         </div>
 
+        <div class="form-group" style="margin-top: 4px;">
+          <label for="remark">备注</label>
+          <textarea id="remark" class="form-control" rows="3" maxlength="1000" placeholder="可填写本次培训的备注信息"></textarea>
+        </div>
+
         <button type="submit" id="btn-submit" class="btn btn-primary" style="margin-top: 15px;">确 认 提 交 信 息</button>
         <button type="button" id="btn-cancel-edit" class="btn btn-secondary" style="margin-top: 10px; display: none;" onclick="cancelEdit()">取 消 修 改</button>
       </form>
@@ -1145,11 +1150,13 @@
                 <div style="font-size:0.8rem;color:var(--text-muted);margin-top:4px;">${escapeHtml(row.gender)} · ${row.age || 0}岁</div>
                 <div style="font-family:monospace;font-size:0.85rem;color:var(--text-main);font-weight:600;margin-top:4px;">身份证: ${escapeHtml(row.id_card)}</div>
                 <div style="font-size:0.8rem;color:var(--text-muted);margin-top:2px;">手机: ${escapeHtml(row.phone)}</div>
+                <div style="font-size:0.8rem;color:var(--text-muted);margin-top:2px;">培训单位: ${escapeHtml(row.company || '')}</div>
               </td>
               <td>
                 <div style="font-weight:600;color:var(--text-main);font-size:0.9rem;">岗位: ${escapeHtml(row.job)}</div>
                 <div style="font-size:0.8rem;color:var(--text-muted);margin-top:4px;">权限: ${escapeHtml(row.region_auth)}</div>
                 <div style="font-size:0.8rem;color:var(--text-muted);margin-top:6px;white-space:normal;word-break:break-all;max-width:280px;" title="${escapeHtml(row.address)}">地址: <span style="color:var(--text-main);">${escapeHtml(row.address)}</span></div>
+                ${row.remark ? `<div style="font-size:0.8rem;color:var(--text-muted);margin-top:6px;white-space:normal;word-break:break-all;max-width:280px;">备注: <span style="color:var(--text-main);">${escapeHtml(row.remark)}</span></div>` : ''}
               </td>
               <td>
                 <div style="font-size:0.85rem;color:var(--text-main);">${timeStr}</div>
@@ -1294,6 +1301,7 @@
       idCardField.value = record.id_card;
       document.getElementById('phone').value = record.phone;
       document.getElementById('address').value = record.address;
+      document.getElementById('remark').value = record.remark || '';
       // 动态处理 job 选项以支持历史脏数据的兼容回填
       const jobSelect = document.getElementById('job');
       const jobVal = record.job;
@@ -1517,6 +1525,7 @@
       formData.append('job', document.getElementById('job').value);
       formData.append('education', document.getElementById('education').value);
       formData.append('region_auth', document.getElementById('region_auth').value);
+      formData.append('remark', document.getElementById('remark').value);
       formData.append('id_card_img_path', document.getElementById('id_card_img_path').value);
       
       if (compressedPhotoBlob) {

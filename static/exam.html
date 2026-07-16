@@ -596,6 +596,7 @@
     let examData = {
       name: '',
       company: '',
+      idLast6: '',
       examType: '',
       questions: [],
       answers: {},
@@ -618,11 +619,16 @@
 
     // 身份验证与开始考试逻辑
     let verifiedCompany = '';
+    let verifiedIdLast6 = '';
     let isApprovedUser = false;
 
     async function verifyIdentity() {
       const name = document.getElementById('exam-name').value.trim();
       const idLast6 = document.getElementById('exam-id-last6').value.trim();
+
+      verifiedCompany = '';
+      verifiedIdLast6 = '';
+      isApprovedUser = false;
 
       if (!name || !idLast6 || idLast6.length !== 6) {
         document.getElementById('start-error').textContent = '请输入姓名和身份证号后六位';
@@ -642,6 +648,7 @@
 
         if (result.matched) {
           verifiedCompany = result.company || '';
+          verifiedIdLast6 = idLast6;
           isApprovedUser = !!result.approved;
 
           if (isApprovedUser) {
@@ -687,7 +694,7 @@
         company = document.getElementById('exam-company-manual').value.trim();
       }
 
-      if (!name || !company || !examType) {
+      if (!name || !company || !examType || !verifiedIdLast6) {
         document.getElementById('start-error').textContent = '请填写完整信息（姓名、工作单位、考试科目）';
         document.getElementById('start-error').style.display = 'block';
         return;
@@ -697,6 +704,7 @@
 
       examData.name = name;
       examData.company = company;
+      examData.idLast6 = verifiedIdLast6;
       examData.examType = examType;
       examData.answers = {};
       examData.currentIndex = 0;
@@ -906,6 +914,7 @@
           body: JSON.stringify({
             name: examData.name,
             company: examData.company,
+            id_last6: examData.idLast6,
             exam_type: examData.examType,
             duration: duration,
             answers: answersToSend
@@ -988,6 +997,7 @@
       }
       // 重置验证状态和界面
       verifiedCompany = '';
+      verifiedIdLast6 = '';
       isApprovedUser = false;
       document.getElementById('exam-company-group').style.display = 'none';
       document.getElementById('exam-company-manual-group').style.display = 'none';
