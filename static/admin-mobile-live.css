@@ -191,6 +191,10 @@
   #mobile-admin-live .list-line { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:10px 0; border-top:1px solid var(--app-line); }
   #mobile-admin-live .list-line:first-of-type { border-top:0; }
   #mobile-admin-live .list-line small { display:block; margin-top:3px; color:var(--app-muted); font-size:.78rem; }
+  #mobile-admin-live .settings-summary { margin-bottom:11px; }
+  #mobile-admin-live .settings-summary-line { width:100%; border-right:0; border-bottom:0; border-left:0; color:var(--app-text); background:transparent; text-align:left; }
+  #mobile-admin-live .settings-summary-line:first-of-type { border-top:0; }
+  #mobile-admin-live .value-tag { padding:4px 8px; border:1px solid rgba(199,210,254,.24); border-radius:8px; color:#c7d2fe; background:rgba(79,70,229,.16); font-size:.72rem; }
 
   #mobile-admin-live .exam-summary { display:grid; grid-template-columns:66px 1fr; gap:12px; align-items:center; }
   #mobile-admin-live .score-ring { width:66px; height:66px; display:grid; place-items:center; border:7px solid var(--app-accent); border-left-color:var(--app-line); border-radius:50%; color:#c7d2fe; font-size:1rem; font-weight:650; }
@@ -215,6 +219,8 @@
 
   #mobile-admin-live .settings-row { display:flex; align-items:center; gap:12px; width:100%; margin-bottom:9px; padding:13px; color:var(--app-text); text-align:left; }
   #mobile-admin-live .settings-icon { width:36px; height:36px; display:grid; place-items:center; flex:0 0 auto; border-radius:12px; color:#c7d2fe; background:rgba(79,70,229,.22); }
+  #mobile-admin-live .settings-icon svg { width:19px; height:19px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+  #mobile-admin-live .settings-row > svg { width:18px; height:18px; flex:0 0 auto; color:var(--app-muted); fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
   #mobile-admin-live .settings-copy { flex:1; min-width:0; }
   #mobile-admin-live .settings-copy strong { display:block; font-weight:650; }
   #mobile-admin-live .settings-copy span { display:block; overflow:hidden; margin-top:3px; color:var(--app-muted); font-size:.78rem; text-overflow:ellipsis; white-space:nowrap; }

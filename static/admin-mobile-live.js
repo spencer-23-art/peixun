@@ -150,7 +150,7 @@
     try { page = recordsPage; total = recordsTotal; limit = recordsLimit; } catch (e) { return ''; }
     var pages = Math.ceil(total / limit) || 1;
     if (pages <= 1) return '';
-    return '<div class="pager"><button type="button" ' + (page <= 1 ? 'disabled' : '') + ' onclick="changeRecordsPage(' + (page - 1) + ')">上一页</button><span>第 ' + page + ' / ' + pages + ' 页</span><button type="button" ' + (page >= pages ? 'disabled' : '') + ' onclick="changeRecordsPage(' + (page + 1) + ')">下一页</button></div>';
+    return '<div class="pager"><button type="button" ' + (page <= 1 ? 'disabled' : '') + ' onclick="changeRecordsPage(' + (page - 1) + ')">上一页</button><span>第 ' + page + ' / ' + pages + ' 页 · 共 ' + total + ' 条</span><button type="button" ' + (page >= pages ? 'disabled' : '') + ' onclick="changeRecordsPage(' + (page + 1) + ')">下一页</button></div>';
   }
   function pendingPanel() {
     var query = String(state.pendingQuery || '').trim().toLowerCase();
@@ -165,7 +165,7 @@
   function userCard(u) {
     var status = u.status === 'approved' ? '已通过' : (u.status === 'rejected' ? '已拒绝' : '待审批');
     return '<article class="record-card"><div class="record-head"><div class="person-line"><div class="person"><div class="avatar">' + esc(initials(u.real_name || u.username)) + '</div><div><div class="person-name">' + esc(u.real_name || u.username) + '</div><div class="person-meta">账号：' + esc(u.username || '--') + '</div></div></div><span class="state-pill ' + (u.status === 'pending' ? 'warning' : '') + '">' + status + '</span></div></div>' +
-      '<div class="record-details"><div class="wide"><span>工作单位</span><strong>' + esc(u.company || '--') + '</strong></div><div><span>联系电话</span><strong>' + esc(u.phone || '--') + '</strong></div><div><span>注册时间</span><strong>' + esc(displayTime(u.created_at)) + '</strong></div></div>' +
+      '<div class="record-details"><div class="wide"><span>工作单位</span><strong>' + esc(u.company || '--') + '</strong></div><div><span>联系电话</span><strong>' + esc(u.phone || u.username || '--') + '</strong></div><div><span>注册时间</span><strong>' + esc(displayTime(u.created_at)) + '</strong></div></div>' +
       '<div class="card-footer"><span class="record-time">审批请点右上角铃铛</span><button class="small-action" type="button" onclick="openEditUserModal(' + Number(u.id) + ',' + jsArg(u.username) + ',' + jsArg(u.real_name) + ',' + jsArg(u.company) + ')">编辑</button></div></article>';
   }
   function restorePanel() {
@@ -225,14 +225,21 @@
     try { page = examRecordsPage; total = examRecordsTotal; limit = examRecordsLimit; } catch (e) { return ''; }
     var pages = Math.ceil(total / limit) || 1;
     if (pages <= 1) return '';
-    return '<div class="pager"><button type="button" ' + (page <= 1 ? 'disabled' : '') + ' onclick="changeExamPage(' + (page - 1) + ')">上一页</button><span>第 ' + page + ' / ' + pages + ' 页</span><button type="button" ' + (page >= pages ? 'disabled' : '') + ' onclick="changeExamPage(' + (page + 1) + ')">下一页</button></div>';
+    return '<div class="pager"><button type="button" ' + (page <= 1 ? 'disabled' : '') + ' onclick="changeExamPage(' + (page - 1) + ')">上一页</button><span>第 ' + page + ' / ' + pages + ' 页 · 共 ' + total + ' 条</span><button type="button" ' + (page >= pages ? 'disabled' : '') + ' onclick="changeExamPage(' + (page + 1) + ')">下一页</button></div>';
   }
   function settingsPanel() {
-    return '<section class="tab-panel ' + (state.tab === 'settings' ? 'is-active' : '') + '" data-panel="settings"><div class="sheet"><h3 class="sheet-title">系统配置</h3><div class="summary-note">配置功能保留。点击某项后将打开原有配置表单，右下角可返回手机管理页。</div></div>' +
-      settingsRow('系统核心参数', '每日考试时间、培训单位等', 'core') + settingsRow('安全考试题库', '维护题目与考试科目', 'bank') + settingsRow('管理员密码', '修改管理端登录密码', 'password') + '</section>';
+    var start = '--', end = '--', regions = '未配置';
+    try { start = document.getElementById('cfg-start-time').value || '--'; end = document.getElementById('cfg-end-time').value || '--'; } catch (e) { /* configuration is still loading */ }
+    try { regions = typeof configuredRegions !== 'undefined' && configuredRegions.length ? configuredRegions.join('、') : regions; } catch (e) { /* configuration is still loading */ }
+    return '<section class="tab-panel ' + (state.tab === 'settings' ? 'is-active' : '') + '" data-panel="settings">' +
+      '<div class="sheet settings-summary"><h3 class="sheet-title">系统配置</h3>' +
+      '<button class="list-line settings-summary-line" type="button" onclick="mobileAdminOpenLegacyConfig(\'core\')"><div>考试时间<small>' + esc(start) + ' – ' + esc(end) + '</small></div><span class="value-tag">编辑</span></button>' +
+      '<button class="list-line settings-summary-line" type="button" onclick="mobileAdminOpenLegacyConfig(\'core\')"><div>开放区域<small>' + esc(regions) + '</small></div><span class="value-tag">编辑</span></button></div>' +
+      settingsRow('培训单位', '维护可选单位和归属信息', 'core') + settingsRow('考试题库', '科目、题目、导入与更新', 'bank') + settingsRow('二级管理员', '账号、权限与状态', 'password', 'sub-admins-section') + settingsRow('修改密码', '更新当前管理员密码', 'password') + '</section>';
   }
-  function settingsRow(title, detail, section) {
-    return '<button class="settings-row" type="button" onclick="mobileAdminOpenLegacyConfig(\'' + section + '\')"><span class="settings-icon">' + icon('settings') + '</span><span class="settings-copy"><strong>' + title + '</strong><span>' + detail + '</span></span>' + icon('arrow') + '</button>';
+  function settingsRow(title, detail, section, anchor) {
+    var args = '\'' + section + '\'' + (anchor ? ',\'' + anchor + '\'' : '');
+    return '<button class="settings-row" type="button" onclick="mobileAdminOpenLegacyConfig(' + args + ')"><span class="settings-icon">' + icon('settings') + '</span><span class="settings-copy"><strong>' + title + '</strong><span>' + detail + '</span></span>' + icon('arrow') + '</button>';
   }
   function nav() {
     var tabs = [['records', '记录', 'records'], ['pending', '注册', 'users'], ['restore', '恢复', 'restore'], ['exam', '考试', 'exam'], ['settings', '设置', 'settings']];
@@ -350,10 +357,11 @@
     if (typeof window.loadExamRecords === 'function') window.loadExamRecords(); else render();
   };
   window.mobileAdminToggleExamHistory = function (id) { state.examHistoryId = state.examHistoryId === id ? null : id; render(); };
-  window.mobileAdminOpenLegacyConfig = function (section) {
+  window.mobileAdminOpenLegacyConfig = function (section, anchor) {
     deactivate();
     if (typeof window.switchAdminTab === 'function') window.switchAdminTab('config');
     if (typeof window.switchConfigSubTab === 'function') window.switchConfigSubTab(section);
+    if (anchor) setTimeout(function () { var target = document.getElementById(anchor); if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 80);
     var button = document.getElementById('mobile-admin-return');
     if (!button) {
       button = document.createElement('button');
