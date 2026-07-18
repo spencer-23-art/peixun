@@ -1707,13 +1707,6 @@ def get_all_records(start_date: str = None, end_date: str = None, company: str =
     start = start_date.strip() if start_date and start_date.strip() else None
     end = end_date.strip() if end_date and end_date.strip() else None
     
-    # 默认展示最近10天的数据，如果通过日历查询、输入名字搜索或按单位筛选，则不受此默认限制
-    if not start and not end and not (name and name.strip()) and not (company and company.strip()):
-        today = beijing_now()
-        ten_days_ago = today - timedelta(days=9)
-        start = ten_days_ago.strftime("%Y-%m-%d")
-        end = today.strftime("%Y-%m-%d")
-        
     if start:
         conditions.append("substr(r.created_at, 1, 10) >= ?")
         params.append(start)
