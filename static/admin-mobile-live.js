@@ -167,10 +167,11 @@
   function pendingPanel() {
     var query = String(state.pendingQuery || '').trim().toLowerCase();
     var users = getGlobalArray('users').filter(function (u) {
-      return !query || [u.username, u.real_name, u.company, u.phone].some(function (x) { return String(x || '').toLowerCase().indexOf(query) !== -1; });
+      var isVisible = u && (u.status === 'approved' || u.status === 'disabled');
+      return isVisible && (!query || [u.username, u.real_name, u.company, u.phone].some(function (x) { return String(x || '').toLowerCase().indexOf(query) !== -1; }));
     });
     return '<section class="tab-panel ' + (state.tab === 'pending' ? 'is-active' : '') + '" data-panel="pending">' +
-      '<div class="sheet"><h3 class="sheet-title">注册用户管理</h3><div class="list-line"><div>这里仅展示已注册用户<small>允许、拒绝及其他审批统一在右上角铃铛处理。</small></div><span class="state-pill">' + users.length + ' 人</span></div></div>' +
+      '<div class="sheet"><h3 class="sheet-title">注册用户管理</h3><div class="list-line"><div>这里仅展示已通过或已停用的注册用户<small>待审核和已拒绝申请统一在右上角铃铛处理。</small></div><span class="state-pill">' + users.length + ' 人</span></div></div>' +
       '<div class="page-toolbar"><div class="company-combobox"><span class="search-glyph">' + icon('search') + '</span><input type="search" value="' + esc(state.pendingQuery) + '" placeholder="搜索用户名、姓名、单位" oncompositionstart="mobileAdminCompositionStart(\'pending\')" oncompositionend="mobileAdminCompositionEnd(\'pending\',this.value)" oninput="mobileAdminPendingSearch(this.value,event)"></div></div>' +
       '<div class="record-stack">' + (users.length ? users.map(userCard).join('') : '<div class="empty-state">没有符合条件的注册用户</div>') + '</div></section>';
   }

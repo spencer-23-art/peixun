@@ -793,7 +793,7 @@
             <!-- 动态生成审批数据 -->
           </tbody>
         </table>
-        <div id="pending-no-data" class="no-data" style="display: none;">暂无普通注册用户数据</div>
+        <div id="pending-no-data" class="no-data" style="display: none;">暂无已通过的注册用户数据</div>
         <!-- 分页控制 -->
         <div id="pending-pagination" class="pagination-bar" style="display: none; margin-top: 15px;"></div>
       </div>
@@ -2383,6 +2383,10 @@
     let usersPage = 1;
     const usersLimit = 20;
 
+    function isVisibleRegisteredUser(user) {
+      return user && (user.status === 'approved' || user.status === 'disabled');
+    }
+
     async function loadPendingUsers() {
       try {
         const response = await fetch('/api/admin/pending', {
@@ -2391,7 +2395,8 @@
         const result = await response.json();
         
         if (response.ok && result.code === 200) {
-          allPendingUsersList = result.data || [];
+          // 待审核、已拒绝的新注册只在右上角铃铛处理；注册用户管理只展示已通过的账号及其停用状态。
+          allPendingUsersList = (result.data || []).filter(isVisibleRegisteredUser);
           applyUsersFilter();
         } else {
           showAlert('error', result.detail || '加载用户管理列表失败');
@@ -4517,7 +4522,7 @@
     <button class="app-tab" type="button" data-tab="config" aria-selected="false" onclick="switchAdminTab('config'); setMobileTab('config')"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.1 2.1-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56v.1h-3v-.1A1.7 1.7 0 0 0 10.7 18.6a1.7 1.7 0 0 0-1.88.34l-.06.06-2.1-2.1.06-.06A1.7 1.7 0 0 0 7.06 15 1.7 1.7 0 0 0 5.5 14H5.4v-3h.1A1.7 1.7 0 0 0 7.06 10a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.1-2.1.06.06A1.7 1.7 0 0 0 10.7 6.36a1.7 1.7 0 0 0 1.03-1.56V4.7h3v.1a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.88-.34l.06-.06 2.1 2.1-.06.06A1.7 1.7 0 0 0 19.4 10a1.7 1.7 0 0 0 1.56 1h.1v3h-.1A1.7 1.7 0 0 0 19.4 15Z"></path></svg><span class="app-tab-label">设置</span></button>
   </nav>
   <section id="mobile-admin-live" aria-label="培训管理移动端"></section>
-  <script src="/static/admin-mobile-live.js?v=1.0.5"></script>
+  <script src="/static/admin-mobile-live.js?v=1.0.6"></script>
 
 </body>
 </html>
