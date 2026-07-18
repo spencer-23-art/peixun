@@ -508,7 +508,7 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="var(--primary-color, #6366f1)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
             <div>
               <p class="info-title">考试说明</p>
-              <p class="info-text">共25题 · 限时30分钟 · 90分及格</p>
+              <p class="info-text">共25题 · 限时2分钟 · 90分及格</p>
             </div>
           </div>
 
@@ -606,7 +606,7 @@
       answers: {},
       currentIndex: 0,
       startTime: 0,
-      timeLimit: 30 * 60,
+      timeLimit: 2 * 60,
       remainingTime: 0,
       timerInterval: null
     };
@@ -743,7 +743,8 @@
         renderQuestionNav();
       } catch (error) {
         console.error('加载试题失败:', error);
-        alert(error.message || '加载试题失败，请稍后重试');
+        document.getElementById('start-error').textContent = error.message || '加载试题失败，请稍后重试';
+        document.getElementById('start-error').style.display = 'block';
       }
     }
 

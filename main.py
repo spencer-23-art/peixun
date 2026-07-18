@@ -418,17 +418,19 @@ def get_latest_training_record(cursor, name: str, id_last6: str):
 
 
 def get_passing_exam_record(cursor, name: str, id_last6: str, exam_type: str):
-    """返回该考生该科目已合格的最近一次考试记录。
+    """返回该考生当天该科目已合格的最近一次考试记录。
 
     新记录保存身份证后六位；历史记录没有该字段时，回查保留的培训记录，
-    这样人员换公司后也不会绕过“合格后不可重考”的规则。
+    这样人员换公司后也不会绕过“当天合格后不可重考”的规则。
     """
+    today = beijing_now().strftime("%Y-%m-%d")
     cursor.execute('''
         SELECT e.*
         FROM exam_records e
         WHERE e.name = ?
           AND e.exam_type = ?
           AND e.score >= ?
+          AND DATE(e.created_at) = ?
           AND (
               e.id_last6 = ?
               OR (
@@ -445,7 +447,7 @@ def get_passing_exam_record(cursor, name: str, id_last6: str, exam_type: str):
           )
         ORDER BY e.created_at DESC, e.id DESC
         LIMIT 1
-    ''', (name, exam_type, EXAM_PASSING_SCORE, id_last6, id_last6))
+    ''', (name, exam_type, EXAM_PASSING_SCORE, today, id_last6, id_last6))
     return cursor.fetchone()
 
 # 初始化数据库
@@ -2373,7 +2375,7 @@ def check_exam_eligibility(data: dict):
             return {
                 "code": 200,
                 "allowed": False,
-                "detail": f"您已在{exam_type}考试中取得{passed['score']}分，已合格，无需重复答题"
+                "detail": f"您今天已在{exam_type}考试中取得{passed['score']}分，已合格，无需重复答题"
             }
         return {"code": 200, "allowed": True}
     finally:
@@ -2731,7 +2733,7 @@ def save_exam_record(data: dict):
         if passed:
             raise HTTPException(
                 status_code=409,
-                detail=f"您已在{exam_type}考试中取得{passed['score']}分，已合格，不能重新答题"
+                detail=f"您今天已在{exam_type}考试中取得{passed['score']}分，已合格，不能重新答题"
             )
 
         # 频率限制：同一姓名+单位+科目 5 分钟内只能提交一次，防恶意刷分，不影响正常重考
