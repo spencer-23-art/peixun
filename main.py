@@ -2736,7 +2736,7 @@ def save_exam_record(data: dict):
                 detail=f"您今天已在{exam_type}考试中取得{passed['score']}分，已合格，不能重新答题"
             )
 
-        # 频率限制：同一姓名+单位+科目 5 分钟内只能提交一次，防恶意刷分，不影响正常重考
+        # 防刷题限制：同一姓名+单位+科目交卷后 2 分钟内不能再次提交。
         cursor.execute('''
             SELECT created_at FROM exam_records
             WHERE name = ? AND company = ? AND exam_type = ?
@@ -2746,8 +2746,8 @@ def save_exam_record(data: dict):
         if recent and recent[0]:
             try:
                 last_time = datetime.strptime(str(recent[0])[:19], "%Y-%m-%d %H:%M:%S")
-                if (beijing_now() - last_time).total_seconds() < 300:
-                    raise HTTPException(status_code=429, detail="提交过于频繁，请 5 分钟后再试")
+                if (beijing_now() - last_time).total_seconds() < 120:
+                    raise HTTPException(status_code=429, detail="刚交卷后需等待 2 分钟才能再次提交")
             except HTTPException:
                 raise
             except Exception:
