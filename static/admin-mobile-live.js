@@ -273,7 +273,7 @@
     var config = state.settings.config;
     if (!config) return settingsDetailHeader('系统配置', '考试时间、区域和岗位') + '<div class="empty-state">正在读取系统配置…</div>';
     return settingsDetailHeader('系统配置', '考试时间、开放区域与岗位') + '<div class="sheet settings-form">' +
-      '<div class="settings-field"><span>每日考试时间</span><div class="settings-time-grid"><label>开始<input id="mobile-config-start" type="time" value="' + esc(config.start_time) + '"></label><span>至</span><label>截止<input id="mobile-config-end" type="time" value="' + esc(config.end_time) + '"></label></div></div>' +
+      '<div class="settings-field"><span>每日考试时间</span><div class="settings-time-row"><label class="settings-time-control"><span>开始</span><input id="mobile-config-start" type="time" value="' + esc(config.start_time) + '"></label><span class="settings-time-divider" aria-hidden="true">至</span><label class="settings-time-control"><span>截止</span><input id="mobile-config-end" type="time" value="' + esc(config.end_time) + '"></label></div></div>' +
       settingsTagEditor('开放区域', 'regions', config.regions, '如：尿素塔') + settingsTagEditor('岗位 / 工种', 'jobs', config.jobs, '如：电工') +
       '<button class="settings-primary" type="button" ' + (state.settings.busy ? 'disabled' : '') + ' onclick="mobileAdminSaveSettingsCore()">' + (state.settings.busy ? '保存中…' : '保存系统配置') + '</button></div>';
   }
