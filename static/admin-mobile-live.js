@@ -248,10 +248,7 @@
     var end = config ? config.end_time : '--';
     var regions = config && config.regions.length ? config.regions.join('、') : '未配置';
     return '<section class="tab-panel ' + (state.tab === 'settings' ? 'is-active' : '') + '" data-panel="settings">' +
-      '<div class="sheet settings-summary"><h3 class="sheet-title">系统配置</h3>' +
-      '<button class="list-line settings-summary-line" type="button" onclick="mobileAdminOpenSettings(\'core\')"><div>考试时间<small>' + esc(start) + ' – ' + esc(end) + '</small></div><span class="value-tag">编辑</span></button>' +
-      '<button class="list-line settings-summary-line" type="button" onclick="mobileAdminOpenSettings(\'core\')"><div>开放区域<small>' + esc(regions) + '</small></div><span class="value-tag">编辑</span></button></div>' +
-      settingsRow('培训单位', '查看当前单位与归属来源', 'units') + settingsRow('考试题库', '科目、题目、导入与更新', 'bank') + settingsRow('二级管理员', '账号、权限与状态', 'admins') + settingsRow('修改密码', '更新当前管理员密码', 'password') + settingsNotice() + '</section>';
+      settingsRow('系统配置', '考试 ' + start + ' – ' + end + ' · 区域 ' + regions, 'core') + settingsRow('培训单位', '查看当前单位与归属来源', 'units') + settingsRow('考试题库', '科目、题目、导入与更新', 'bank') + settingsRow('二级管理员', '账号、权限与状态', 'admins') + settingsRow('修改密码', '更新当前管理员密码', 'password') + settingsNotice() + '</section>';
   }
   function settingsRow(title, detail, view) {
     return '<button class="settings-row" type="button" onclick="mobileAdminOpenSettings(\'' + view + '\')"><span class="settings-icon">' + icon('settings') + '</span><span class="settings-copy"><strong>' + title + '</strong><span>' + detail + '</span></span>' + icon('arrow') + '</button>';
@@ -276,7 +273,7 @@
     var config = state.settings.config;
     if (!config) return settingsDetailHeader('系统配置', '考试时间、区域和岗位') + '<div class="empty-state">正在读取系统配置…</div>';
     return settingsDetailHeader('系统配置', '考试时间、开放区域与岗位') + '<div class="sheet settings-form">' +
-      '<label>每日考试开始时间<input id="mobile-config-start" type="time" value="' + esc(config.start_time) + '"></label><label>每日考试截止时间<input id="mobile-config-end" type="time" value="' + esc(config.end_time) + '"></label>' +
+      '<div class="settings-field"><span>每日考试时间</span><div class="settings-time-grid"><label>开始<input id="mobile-config-start" type="time" value="' + esc(config.start_time) + '"></label><span>至</span><label>截止<input id="mobile-config-end" type="time" value="' + esc(config.end_time) + '"></label></div></div>' +
       settingsTagEditor('开放区域', 'regions', config.regions, '如：尿素塔') + settingsTagEditor('岗位 / 工种', 'jobs', config.jobs, '如：电工') +
       '<button class="settings-primary" type="button" ' + (state.settings.busy ? 'disabled' : '') + ' onclick="mobileAdminSaveSettingsCore()">' + (state.settings.busy ? '保存中…' : '保存系统配置') + '</button></div>';
   }
