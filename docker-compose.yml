@@ -15,6 +15,7 @@ services:
     volumes:
       - /data/peixun/uploads:/app/uploads
       - ./app:/app/app
+      - ./ocr_handler.py:/app/ocr_handler.py
     depends_on:
       - redis
     restart: always
