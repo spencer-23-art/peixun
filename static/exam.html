@@ -590,8 +590,12 @@
   </div>
 
   <script>
-    // 状态栏时钟（已移除状态栏，此函数保留为空避免报错）
-    function updateStatusBarTime() {}
+    // S8: HTML 转义函数，防止题目文本中的 HTML 标签被当作 HTML 执行（XSS 防护）
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
     // 考试状态
     let examData = {
       name: '',
@@ -798,7 +802,7 @@
         <div class="question-card">
           <div class="question-header">
             <span class="question-number">${examData.currentIndex + 1}</span>
-            <p class="question-text">${question.question}</p>
+            <p class="question-text">${escapeHtml(question.question)}</p>
           </div>
           <div class="option-list">
             <div class="option-item ${correctClass}" onclick="selectAnswer('对')">

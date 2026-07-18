@@ -110,7 +110,7 @@ def ocr_idcard_task(self, image_path: str):
         warped_a = preprocess_image(warped_bgr)
         # version_b: 基础预处理 + 锐化
         warped_b = get_strategy_b(warped_a)
-        # version_c: 基础预处理 + 自适应二值化
+        # version_c: 基础预处理 + 对比度拉伸
         warped_c = get_strategy_c(warped_a)
         
         # 7. 运行三图 OCR 并进行多策略融合评分与字段融合决策

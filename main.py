@@ -35,7 +35,8 @@ import time
 import zipfile
 import urllib.parse
 from contextlib import contextmanager
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from collections import defaultdict
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Header, Depends, Response, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -53,18 +54,17 @@ except Exception as e:
     print(f"[Warning] Failed to import ocr_handler, OCR features will be disabled: {e}")
     
     def ocr_idcard_process(*args, **kwargs):
-        raise HTTPException(status_code=500, detail=f"OCR 引擎依赖缺失，请在服务器安装所需依赖（如 rapidocr_onnxruntime, modelscope, opencv-python-headless 等）。错误原因: {OCR_ERROR_MSG}")
-        
+        raise HTTPException(status_code=500, detail="OCR 引擎不可用，请联系管理员检查服务器依赖")
+
     def generate_record_card(*args, **kwargs):
-        raise HTTPException(status_code=500, detail=f"登记卡生成功能依赖缺失，请在服务器安装 python-docx。错误原因: {OCR_ERROR_MSG}")
+        raise HTTPException(status_code=500, detail="登记卡生成功能不可用，请联系管理员")
         
     def start_cleanup_thread(*args, **kwargs):
         pass
 
 
-DB_PATH = 'peixun.db'
-UPLOAD_DIR = 'uploads'
-TEMP_IDS_DIR = os.path.join(UPLOAD_DIR, 'temp_ids')
+# D6: 统一从 app.config 引用路径常量，避免多处重复定义
+from app.config import DB_PATH, UPLOAD_DIR, TEMP_IDS_DIR
 
 # 默认考试科目（供首次初始化及回退使用）。R3：原本在 5 处重复，现统一为常量。
 DEFAULT_EXAM_SUBJECTS = [
@@ -215,7 +215,7 @@ def get_config(key: str, default: str) -> str:
 
 def beijing_now() -> datetime:
     """统一返回北京时间 (UTC+8) 当前时间，不受服务器本地时区影响（L4）。"""
-    return datetime.utcnow() + timedelta(hours=8)
+    return datetime.now(timezone(timedelta(hours=8))).replace(tzinfo=None)
 
 def is_exam_open() -> bool:
     # 强制以北京时间 (UTC+8) 校验，不受服务器本地时区设置影响
@@ -657,11 +657,13 @@ if OCR_AVAILABLE:
 
 app = FastAPI(title="培训信息录入系统")
 
+# S2: CORS 来源限制，默认通配符兼容现有部署，生产环境通过环境变量 PEIXUN_CORS_ORIGINS 配置白名单
+_allowed_origins = os.environ.get("PEIXUN_CORS_ORIGINS", "*").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,  # S5: 系统通过 Header 传 Token，无需 cookie 凭证；与 * 同用更安全
-    allow_methods=["*"],
+    allow_origins=[o.strip() for o in _allowed_origins],
+    allow_credentials=False,  # 系统通过 Header 传 Token，无需 cookie 凭证
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
 )
 
@@ -804,8 +806,8 @@ def login(request: Request, username: str = Form(...), password: str = Form(...)
     username_clean = username.strip()
     password_clean = password.strip()
     
-    # 打印原始输入，以便排查不同手机输入法自动加空格或大小写的问题
-    print(f"[Login-Debug] 尝试登录 | 原始输入: username={repr(username)}, pwd_len={len(password)} | 清理后: username={repr(username_clean)}, pwd_len={len(password_clean)}")
+    # S7: 日志不再记录用户名明文，仅记录 IP 便于排查
+    print(f"[Login] 尝试登录 (IP={client_ip})")
     sys.stdout.flush()
 
     conn = sqlite3.connect(DB_PATH)
@@ -815,13 +817,13 @@ def login(request: Request, username: str = Form(...), password: str = Form(...)
     user = cursor.fetchone()
 
     if not user:
-        print(f"[Login-Debug] 登录失败: 用户不存在. 输入的用户名={repr(username_clean)} (IP={client_ip})")
+        print(f"[Login] 登录失败: 用户不存在 (IP={client_ip})")
         sys.stdout.flush()
         conn.close()
         raise HTTPException(status_code=400, detail="用户名或密码错误")
 
     if not verify_pwd(password_clean, user['password']):
-        print(f"[Login-Debug] 登录失败: 密码不匹配. 用户名={repr(username_clean)} (IP={client_ip})")
+        print(f"[Login] 登录失败: 密码不匹配 (IP={client_ip})")
         sys.stdout.flush()
         conn.close()
         raise HTTPException(status_code=400, detail="用户名或密码错误")
@@ -1083,13 +1085,20 @@ async def api_ocr_idcard(file: UploadFile = File(...)):
     temp_ids_dir = "uploads/temp_ids"
     os.makedirs(temp_ids_dir, exist_ok=True)
     
+    # S6: 扩展名白名单校验
     ext = os.path.splitext(file.filename)[1].lower()
-    if not ext:
+    if ext not in ['.jpg', '.jpeg', '.png', '.bmp']:
         ext = '.jpg'
     temp_path = os.path.join(temp_ids_dir, f"ocr_raw_{uuid.uuid4().hex}{ext}").replace('\\', '/')
     try:
+        # S3: 限制上传文件大小为 10MB，防止 DoS
+        MAX_OCR_FILE_SIZE = 10 * 1024 * 1024
+        content = await file.read(MAX_OCR_FILE_SIZE + 1)
+        if len(content) > MAX_OCR_FILE_SIZE:
+            raise HTTPException(status_code=400, detail="图片文件大小不能超过10MB")
+
         with open(temp_path, "wb") as f:
-            shutil.copyfileobj(file.file, f)
+            f.write(content)
             
         try:
             # 优先使用 Celery 异步队列 (保障并发与稳定性)
@@ -1129,8 +1138,14 @@ async def submit_ocr_task(file: UploadFile = File(...)):
     temp_path = os.path.join(temp_ids_dir, temp_filename).replace('\\', '/')
     
     try:
+        # S3: 限制上传文件大小为 10MB，防止 DoS
+        MAX_OCR_FILE_SIZE = 10 * 1024 * 1024
+        content = await file.read(MAX_OCR_FILE_SIZE + 1)
+        if len(content) > MAX_OCR_FILE_SIZE:
+            raise HTTPException(status_code=400, detail="图片文件大小不能超过10MB")
+
         with open(temp_path, "wb") as f:
-            shutil.copyfileobj(file.file, f)
+            f.write(content)
             
         from app.tasks import ocr_idcard_task
         task = ocr_idcard_task.delay(temp_path)
@@ -1139,7 +1154,8 @@ async def submit_ocr_task(file: UploadFile = File(...)):
         if os.path.exists(temp_path):
             try: os.remove(temp_path)
             except: pass
-        raise HTTPException(status_code=500, detail=f"Failed to submit task: {str(e)}")
+        print(f"[Error] OCR task submit failed: {e}")
+        raise HTTPException(status_code=500, detail="图片处理失败，请重试")
 
 # 新接口二：查询异步 OCR 任务结果
 @app.get("/idcard/result/{task_id}")
@@ -2147,9 +2163,25 @@ async def upload_exam_bank(
 
 # ---------------- 考试相关接口 ----------------
 
+# S5: 考试验证接口频率限制 — 同一 IP 5 分钟内最多 10 次，防止暴力穷举身份证后6位
+_verify_attempts = defaultdict(list)
+_VERIFY_WINDOW = 300  # 5分钟
+_VERIFY_MAX = 10      # 最多10次
+
+def _check_verify_rate(client_ip: str):
+    now = time.time()
+    attempts = _verify_attempts[client_ip]
+    _verify_attempts[client_ip] = [t for t in attempts if now - t < _VERIFY_WINDOW]
+    if len(_verify_attempts[client_ip]) >= _VERIFY_MAX:
+        raise HTTPException(status_code=429, detail="验证尝试过于频繁，请5分钟后再试")
+    _verify_attempts[client_ip].append(now)
+
 # 考试身份验证（无需登录）
 @app.post("/api/exam/verify")
-def exam_verify(data: dict):
+def exam_verify(data: dict, request: Request):
+    client_ip = request.client.host if request.client else "unknown"
+    _check_verify_rate(client_ip)
+
     name = (data.get('name') or '').strip()
     id_last6 = (data.get('id_last6') or '').strip()
     

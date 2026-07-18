@@ -4,7 +4,8 @@ import numpy as np
 def detect_idcard_corners(img_gray: np.ndarray) -> np.ndarray:
     """
     Step 2: 文档检测，寻找身份证的四个角点。
-    优先尝试引入并集成 document-preprocessor，失败时自动平滑回退到 OpenCV 寻找最大外接四边形算法。
+    使用 OpenCV 双边滤波 + Canny 边缘检测 + 轮廓提取，寻找最大外接四边形。
+    document-preprocessor 的调用在 app/tasks.py 中完成，本函数仅负责 Contour 回退路径。
     """
     h, w = img_gray.shape[:2]
     

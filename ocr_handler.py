@@ -8,37 +8,16 @@ import sqlite3
 import cv2
 import numpy as np
 from PIL import Image, ImageOps
-from pathlib import Path
 from docx import Document
 from docx.shared import Inches
 from modelscope import snapshot_download
 from rapidocr_onnxruntime import RapidOCR
-from rapidocr_onnxruntime.utils import read_yaml
-
-
-def _concat_model_path(config):
-    import rapidocr_onnxruntime
-    root_dir = Path(rapidocr_onnxruntime.__file__).resolve().parent
-    key = 'model_path'
-    for k in ['Det', 'Rec', 'Cls']:
-        if k in config and key in config[k]:
-            config[k][key] = str(root_dir / config[k][key])
-    return config
+from app.postprocess import NATIONS
+from app.config import DB_PATH, UPLOAD_DIR, TEMP_IDS_DIR, CARDS_DIR, IDCARD_SAVE_DIR
 
 
 # ================= 1. PP-OCRv6 Tiny 模型加载与 OCR 引擎 =================
 OCR_ENGINE = None
-OCR_ENGINE_NO_CLS = None
-DB_PATH = 'peixun.db'
-UPLOAD_DIR = 'uploads'
-TEMP_IDS_DIR = os.path.join(UPLOAD_DIR, 'temp_ids')
-CARDS_DIR = os.path.join(UPLOAD_DIR, 'cards')
-IDCARD_SAVE_DIR = os.path.join(UPLOAD_DIR, 'idcards')
-
-# 创建必要目录
-os.makedirs(TEMP_IDS_DIR, exist_ok=True)
-os.makedirs(CARDS_DIR, exist_ok=True)
-os.makedirs(IDCARD_SAVE_DIR, exist_ok=True)
 
 def init_ppocrv6():
     global OCR_ENGINE
@@ -440,8 +419,8 @@ def clean_name_string(name_str):
 
 
 def extract_nation(full_text):
-    nations = ["汉", "壮", "满", "回", "苗", "维吾尔", "土家", "彝", "蒙古", "藏", "布依", "侗", "瑶", "朝鲜", "白", "哈尼", "哈萨克", "黎", "傣", "畲", "傈僳", "东乡", "拉祜", "水", "佤", "纳西", "羌", "土", "仫佬", "锡伯", "柯尔克孜", "达斡尔", "景颇", "毛南", "撒拉", "布朗", "塔吉克", "阿昌", "普米", "鄂温克", "怒", "京", "基诺", "德昂", "保安", "俄罗斯", "裕固", "乌孜别克", "门巴", "鄂伦春", "独龙", "塔塔尔", "赫哲", "高山", "珞巴", "仡佬"]
-    for n in nations:
+    # D5: 统一引用 app.postprocess.NATIONS，避免56个民族列表重复维护
+    for n in NATIONS:
         if n in full_text:
             return n + "族"
     return "汉族"
@@ -719,47 +698,6 @@ def _crop_by_ocr_boxes(img, ocr_results):
         return img
     print(f"[OCR-Debug] IQR回退裁切: 文字区{text_w}x{text_h} 边缘({min_x},{min_y})-({max_x},{max_y}) → 裁切{x2-x1}x{y2-y1}")
     return cropped
-
-def _anchor_orientation_score(ocr_results):
-    """
-    双锚点方向评分：
-    锚点1: "姓名" 两个字（每张身份证正面都印有）
-    锚点2: 18位身份证号
-    
-    正确方向: "姓名"在图片上方(y小), 身份证号在图片下方(y大)
-    
-    返回: 正数=方向正确且可信, 负数=方向颠倒, 0=无法判断
-    数值越大越可信
-    """
-    if not ocr_results:
-        return 0
-    
-    xingming_y = None
-    id_number_y = None
-    
-    for line in ocr_results:
-        text = str(line[1]).replace(" ", "").replace("　", "")
-        box = np.array(line[0])
-        cy = float(np.mean(box[:, 1]))
-        
-        # 锚点1: "姓名" 标签
-        if "姓名" in text:
-            xingming_y = cy
-        
-        # 锚点2: 18位身份证号
-        cleaned = text.upper().replace('O', '0').replace('Z', '2').replace('I', '1').replace('S', '5')
-        if re.search(r'[1-9]\d{5}[12]\d{3}[01]\d[0123]\d{4}[\dXx]', cleaned):
-            id_number_y = cy
-    
-    if xingming_y is not None and id_number_y is not None:
-        # 姓名y < 身份证号y → 正确方向 → 正值
-        # 姓名y > 身份证号y → 颠倒 → 负值
-        return id_number_y - xingming_y
-    
-    # 只找到一个锚点，给个微弱信号
-    if xingming_y is not None:
-        return 0.1  # 至少能找到姓名标签
-    return 0
 
 def ocr_idcard_process(image_path):
     engine = init_ppocrv6()
