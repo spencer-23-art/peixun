@@ -2429,7 +2429,7 @@
 
     // 3.5. 删除用户逻辑
     async function handleDeleteUser(userId) {
-      if (!confirm('确定要删除该用户吗？删除后该用户将彻底无法再登录系统。')) {
+      if (!confirm('确定要删除该用户吗？删除后该账号无法再登录，但其过去录入的人员和培训记录会完整保留。')) {
         return;
       }
       const formData = new FormData();
@@ -2444,7 +2444,7 @@
 
         const result = await response.json();
         if (response.ok && result.code === 200) {
-          showAlert('success', '该注册用户已成功删除！');
+          showAlert('success', '该注册用户已删除，历史培训记录已保留。');
           loadPendingUsers();
         } else {
           showAlert('error', result.detail || '删除用户失败');

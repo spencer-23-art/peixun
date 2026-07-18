@@ -586,13 +586,15 @@ def init_db():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_exam_records_company ON exam_records (company)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_users_company ON users (company)")
     
-    # 自愈逻辑：给 users 增加 is_deleted 和 created_at 字段
+    # 自愈逻辑：给 users 增加 is_deleted 和 created_at 字段。
+    # SQLite 不支持通过 ALTER TABLE 为已有表新增 CURRENT_TIMESTAMP 默认值，
+    # 因而 created_at 必须作为普通字段补充；新注册接口会显式写入北京时间。
     try:
         cursor.execute("ALTER TABLE users ADD COLUMN is_deleted INTEGER DEFAULT 0")
     except sqlite3.OperationalError:
         pass
     try:
-        cursor.execute("ALTER TABLE users ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP")
+        cursor.execute("ALTER TABLE users ADD COLUMN created_at DATETIME")
     except sqlite3.OperationalError:
         pass
 
@@ -844,6 +846,9 @@ def login(request: Request, username: str = Form(...), password: str = Form(...)
     if user['status'] == 'rejected':
         return {"code": 301, "message": "您的注册申请已被拒绝，请重新注册或联系管理员。"}
 
+    if user['status'] == 'disabled':
+        return {"code": 302, "message": "该账号已被管理员停用，请联系管理员处理。"}
+
     # 勾选"保持登录"签发 30 天 token；不勾选签发 1 天 token
     # （前端在不勾选时使用 sessionStorage，关闭浏览器即清除，实现"关闭浏览器失效"）
     remember_flag = str(remember).strip().lower() in ("true", "1", "yes", "on")
@@ -917,7 +922,13 @@ def get_pending_users(admin = Depends(get_admin_user)):
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     try:
-        cursor.execute("SELECT id, username, real_name, company, status, created_at FROM users WHERE role != 'admin' AND is_deleted = 0 ORDER BY id DESC")
+        cursor.execute('''
+            SELECT u.id, u.username, u.real_name, u.company, u.status, u.created_at,
+                   (SELECT MIN(r.created_at) FROM records r WHERE r.user_id = u.id) AS first_record_at
+            FROM users u
+            WHERE u.role != 'admin' AND u.is_deleted = 0
+            ORDER BY u.id DESC
+        ''')
         users = [dict(row) for row in cursor.fetchall()]
     except sqlite3.OperationalError:
         try:
@@ -964,6 +975,44 @@ def delete_user(user_id: int = Form(...), admin = Depends(get_admin_user)):
     conn.commit()
     conn.close()
     return {"code": 200, "message": "用户删除成功（已标记为已删除）"}
+
+# 停用/启用注册用户（仅管理员）。停用只改变登录状态，不会删除或改写该用户过去录入的培训记录。
+@app.post("/api/admin/user/status")
+def set_user_status(
+    user_id: int = Form(...),
+    status: str = Form(...),
+    admin = Depends(get_admin_user)
+):
+    if admin['username'] == 'admin2':
+        raise HTTPException(status_code=403, detail="该账户无停用权限")
+    if status not in ('approved', 'disabled'):
+        raise HTTPException(status_code=400, detail="不支持的账号状态")
+
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT role, is_deleted FROM users WHERE id = ?", (user_id,))
+        user = cursor.fetchone()
+        if not user:
+            raise HTTPException(status_code=404, detail="用户不存在")
+        if user[0] == 'admin':
+            raise HTTPException(status_code=400, detail="不能停用管理员账户")
+        if user[1] == 1:
+            raise HTTPException(status_code=400, detail="已删除的用户不能修改状态")
+
+        cursor.execute("UPDATE users SET status = ? WHERE id = ?", (status, user_id))
+        conn.commit()
+        return {
+            "code": 200,
+            "message": "账号已停用，历史培训记录保持不变" if status == 'disabled' else "账号已启用"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[Error] 更新注册用户状态失败: {e}")
+        raise HTTPException(status_code=500, detail="更新账号状态失败")
+    finally:
+        conn.close()
 
 # 删除培训人员记录（仅管理员，物理删除关联照片）
 @app.post("/api/admin/record/delete")

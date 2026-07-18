@@ -25,7 +25,17 @@
     restoreQuery: '',
     examCompanyOpen: false,
     examFiltersOpen: false,
-    examHistoryId: null
+    examHistoryId: null,
+    settingsView: 'home',
+    settings: {
+      config: null,
+      subjects: null,
+      admins: null,
+      notice: '',
+      error: '',
+      busy: false,
+      adminEditor: null
+    }
   };
 
   function isMobile() { return media.matches; }
@@ -164,9 +174,13 @@
   }
   function userCard(u) {
     var status = u.status === 'approved' ? '已通过' : (u.status === 'rejected' ? '已拒绝' : '待审批');
+    if (u.status === 'disabled') status = '已停用';
+    var registrationTime = u.created_at ? displayTime(u.created_at) : (u.first_record_at ? '历史账号 · 首次录入 ' + displayTime(u.first_record_at) : '历史账号（未留存时间）');
+    var toggleLabel = u.status === 'disabled' ? '启用' : '停用';
+    var toggleStatus = u.status === 'disabled' ? 'approved' : 'disabled';
     return '<article class="record-card"><div class="record-head"><div class="person-line"><div class="person"><div class="avatar">' + esc(initials(u.real_name || u.username)) + '</div><div><div class="person-name">' + esc(u.real_name || u.username) + '</div><div class="person-meta">账号：' + esc(u.username || '--') + '</div></div></div><span class="state-pill ' + (u.status === 'pending' ? 'warning' : '') + '">' + status + '</span></div></div>' +
-      '<div class="record-details"><div class="wide"><span>工作单位</span><strong>' + esc(u.company || '--') + '</strong></div><div><span>联系电话</span><strong>' + esc(u.phone || u.username || '--') + '</strong></div><div><span>注册时间</span><strong>' + esc(displayTime(u.created_at)) + '</strong></div></div>' +
-      '<div class="card-footer"><span class="record-time">审批请点右上角铃铛</span><button class="small-action" type="button" onclick="openEditUserModal(' + Number(u.id) + ',' + jsArg(u.username) + ',' + jsArg(u.real_name) + ',' + jsArg(u.company) + ')">编辑</button></div></article>';
+      '<div class="record-details"><div class="wide"><span>工作单位</span><strong>' + esc(u.company || '--') + '</strong></div><div><span>联系电话</span><strong>' + esc(u.phone || u.username || '--') + '</strong></div><div><span>注册时间</span><strong>' + esc(registrationTime) + '</strong></div></div>' +
+      '<div class="card-footer"><span class="record-time">审批请点右上角铃铛</span><span class="mobile-actions"><button class="small-action" type="button" onclick="openEditUserModal(' + Number(u.id) + ',' + jsArg(u.username) + ',' + jsArg(u.real_name) + ',' + jsArg(u.company) + ')">编辑</button><button class="small-action warning-action" type="button" onclick="mobileAdminSetUserStatus(' + Number(u.id) + ',' + jsArg(toggleStatus) + ')">' + toggleLabel + '</button><button class="small-action danger-action" type="button" onclick="handleDeleteUser(' + Number(u.id) + ')">删除</button></span></div></article>';
   }
   function restorePanel() {
     var query = String(state.restoreQuery || '').trim().toLowerCase();
@@ -228,18 +242,71 @@
     return '<div class="pager"><button type="button" ' + (page <= 1 ? 'disabled' : '') + ' onclick="changeExamPage(' + (page - 1) + ')">上一页</button><span>第 ' + page + ' / ' + pages + ' 页 · 共 ' + total + ' 条</span><button type="button" ' + (page >= pages ? 'disabled' : '') + ' onclick="changeExamPage(' + (page + 1) + ')">下一页</button></div>';
   }
   function settingsPanel() {
-    var start = '--', end = '--', regions = '未配置';
-    try { start = document.getElementById('cfg-start-time').value || '--'; end = document.getElementById('cfg-end-time').value || '--'; } catch (e) { /* configuration is still loading */ }
-    try { regions = typeof configuredRegions !== 'undefined' && configuredRegions.length ? configuredRegions.join('、') : regions; } catch (e) { /* configuration is still loading */ }
+    if (state.settingsView !== 'home') return settingsDetailPanel();
+    var config = state.settings.config;
+    var start = config ? config.start_time : '--';
+    var end = config ? config.end_time : '--';
+    var regions = config && config.regions.length ? config.regions.join('、') : '未配置';
     return '<section class="tab-panel ' + (state.tab === 'settings' ? 'is-active' : '') + '" data-panel="settings">' +
       '<div class="sheet settings-summary"><h3 class="sheet-title">系统配置</h3>' +
-      '<button class="list-line settings-summary-line" type="button" onclick="mobileAdminOpenLegacyConfig(\'core\')"><div>考试时间<small>' + esc(start) + ' – ' + esc(end) + '</small></div><span class="value-tag">编辑</span></button>' +
-      '<button class="list-line settings-summary-line" type="button" onclick="mobileAdminOpenLegacyConfig(\'core\')"><div>开放区域<small>' + esc(regions) + '</small></div><span class="value-tag">编辑</span></button></div>' +
-      settingsRow('培训单位', '维护可选单位和归属信息', 'core') + settingsRow('考试题库', '科目、题目、导入与更新', 'bank') + settingsRow('二级管理员', '账号、权限与状态', 'password', 'sub-admins-section') + settingsRow('修改密码', '更新当前管理员密码', 'password') + '</section>';
+      '<button class="list-line settings-summary-line" type="button" onclick="mobileAdminOpenSettings(\'core\')"><div>考试时间<small>' + esc(start) + ' – ' + esc(end) + '</small></div><span class="value-tag">编辑</span></button>' +
+      '<button class="list-line settings-summary-line" type="button" onclick="mobileAdminOpenSettings(\'core\')"><div>开放区域<small>' + esc(regions) + '</small></div><span class="value-tag">编辑</span></button></div>' +
+      settingsRow('培训单位', '查看当前单位与归属来源', 'units') + settingsRow('考试题库', '科目、题目、导入与更新', 'bank') + settingsRow('二级管理员', '账号、权限与状态', 'admins') + settingsRow('修改密码', '更新当前管理员密码', 'password') + settingsNotice() + '</section>';
   }
-  function settingsRow(title, detail, section, anchor) {
-    var args = '\'' + section + '\'' + (anchor ? ',\'' + anchor + '\'' : '');
-    return '<button class="settings-row" type="button" onclick="mobileAdminOpenLegacyConfig(' + args + ')"><span class="settings-icon">' + icon('settings') + '</span><span class="settings-copy"><strong>' + title + '</strong><span>' + detail + '</span></span>' + icon('arrow') + '</button>';
+  function settingsRow(title, detail, view) {
+    return '<button class="settings-row" type="button" onclick="mobileAdminOpenSettings(\'' + view + '\')"><span class="settings-icon">' + icon('settings') + '</span><span class="settings-copy"><strong>' + title + '</strong><span>' + detail + '</span></span>' + icon('arrow') + '</button>';
+  }
+  function settingsNotice() {
+    if (!state.settings.notice && !state.settings.error) return '';
+    return '<div class="settings-notice ' + (state.settings.error ? 'is-error' : '') + '">' + esc(state.settings.error || state.settings.notice) + '</div>';
+  }
+  function settingsDetailHeader(title, detail) {
+    return '<div class="settings-detail-header"><button type="button" class="settings-back" onclick="mobileAdminOpenSettings(\'home\')">‹</button><div><h3>' + esc(title) + '</h3><p>' + esc(detail) + '</p></div></div>';
+  }
+  function settingsDetailPanel() {
+    var body = '';
+    if (state.settingsView === 'core') body = settingsCorePanel();
+    if (state.settingsView === 'units') body = settingsUnitsPanel();
+    if (state.settingsView === 'bank') body = settingsBankPanel();
+    if (state.settingsView === 'admins') body = settingsAdminsPanel();
+    if (state.settingsView === 'password') body = settingsPasswordPanel();
+    return '<section class="tab-panel is-active settings-detail" data-panel="settings">' + body + settingsNotice() + '</section>';
+  }
+  function settingsCorePanel() {
+    var config = state.settings.config;
+    if (!config) return settingsDetailHeader('系统配置', '考试时间、区域和岗位') + '<div class="empty-state">正在读取系统配置…</div>';
+    return settingsDetailHeader('系统配置', '考试时间、开放区域与岗位') + '<div class="sheet settings-form">' +
+      '<label>每日考试开始时间<input id="mobile-config-start" type="time" value="' + esc(config.start_time) + '"></label><label>每日考试截止时间<input id="mobile-config-end" type="time" value="' + esc(config.end_time) + '"></label>' +
+      settingsTagEditor('开放区域', 'regions', config.regions, '如：尿素塔') + settingsTagEditor('岗位 / 工种', 'jobs', config.jobs, '如：电工') +
+      '<button class="settings-primary" type="button" ' + (state.settings.busy ? 'disabled' : '') + ' onclick="mobileAdminSaveSettingsCore()">' + (state.settings.busy ? '保存中…' : '保存系统配置') + '</button></div>';
+  }
+  function settingsTagEditor(label, type, values, placeholder) {
+    var tags = values.length ? values.map(function (value, index) { return '<span class="settings-tag">' + esc(value) + '<button type="button" aria-label="删除' + esc(value) + '" onclick="mobileAdminRemoveSettingsTag(\'' + type + '\',' + index + ')">×</button></span>'; }).join('') : '<span class="settings-empty">暂未添加</span>';
+    return '<div class="settings-field"><span>' + label + '</span><div class="settings-tags">' + tags + '</div><div class="settings-inline-add"><input id="mobile-config-' + type + '" type="text" placeholder="' + esc(placeholder) + '"><button type="button" onclick="mobileAdminAddSettingsTag(\'' + type + '\')">添加</button></div></div>';
+  }
+  function settingsUnitsPanel() {
+    var companies = [];
+    try { companies = typeof recordsAllCompanies !== 'undefined' && Array.isArray(recordsAllCompanies) ? recordsAllCompanies : []; } catch (e) { /* ignore */ }
+    return settingsDetailHeader('培训单位', '当前系统中已出现的工作单位') + '<div class="sheet"><p class="settings-hint">培训单位由注册账号的工作单位自动汇集。要调整归属，请编辑对应注册用户，不会影响已经录入的历史培训单位。</p>' +
+      (companies.length ? companies.map(function (company) { return '<div class="list-line"><div>' + esc(company) + '<small>已在培训记录中使用</small></div><span class="value-tag">单位</span></div>'; }).join('') : '<div class="empty-state">暂未发现培训单位</div>') +
+      '<button type="button" class="settings-primary" onclick="mobileAdminGo(\'pending\')">前往注册用户管理</button></div>';
+  }
+  function settingsBankPanel() {
+    var subjects = state.settings.subjects;
+    if (!subjects) return settingsDetailHeader('考试题库', '科目、题目与导入更新') + '<div class="empty-state">正在读取考试科目…</div>';
+    return settingsDetailHeader('考试题库', '科目、题目与导入更新') + '<div class="sheet"><div class="settings-inline-add"><input id="mobile-bank-subject" type="text" placeholder="输入新科目名称"><button type="button" onclick="mobileAdminAddExamSubject()">新增科目</button></div><div class="settings-list">' +
+      (subjects.length ? subjects.map(function (subject) { return '<div class="settings-list-card"><div><strong>' + esc(subject.name) + '</strong><small>Excel 题库可直接上传更新</small></div><div class="settings-list-actions"><label class="small-action">上传<input type="file" accept=".xlsx" onchange="mobileAdminUploadExamSubject(' + jsArg(subject.name) + ',this)"></label><button class="small-action danger-action" type="button" onclick="mobileAdminDeleteExamSubject(' + jsArg(subject.name) + ')">删除</button></div></div>'; }).join('') : '<div class="empty-state">暂未配置考试科目</div>') + '</div></div>';
+  }
+  function settingsAdminsPanel() {
+    var admins = state.settings.admins;
+    if (!admins) return settingsDetailHeader('二级管理员', '账号、权限与状态') + '<div class="empty-state">正在读取二级管理员…</div>';
+    var editor = state.settings.adminEditor;
+    var editorHtml = editor ? '<div class="sheet settings-form"><h4>' + (editor.id ? '编辑二级管理员' : '新增二级管理员') + '</h4><label>账号<input id="mobile-subadmin-username" value="' + esc(editor.username || '') + '" placeholder="手机号或用户名"></label><label>真实姓名<input id="mobile-subadmin-realname" value="' + esc(editor.real_name || '') + '" placeholder="真实姓名"></label><label>公司 / 部门<input id="mobile-subadmin-company" value="' + esc(editor.company || '') + '" placeholder="公司或部门"></label><label>' + (editor.id ? '新密码（留空不修改）' : '密码') + '<input id="mobile-subadmin-password" type="password" placeholder="至少 6 位"></label><div class="settings-form-actions"><button type="button" onclick="mobileAdminCancelSubAdminEdit()">取消</button><button class="settings-primary" type="button" onclick="mobileAdminSaveSubAdmin()">保存</button></div></div>' : '<button type="button" class="settings-primary" onclick="mobileAdminNewSubAdmin()">新增二级管理员</button>';
+    return settingsDetailHeader('二级管理员', '账号、权限与状态') + editorHtml + '<div class="settings-list">' +
+      (admins.length ? admins.map(function (admin) { return '<article class="settings-list-card"><div><strong>' + esc(admin.real_name || admin.username) + '</strong><small>' + esc(admin.username) + ' · ' + esc(admin.company || '--') + '</small></div><div class="settings-list-actions"><button class="small-action" type="button" onclick="mobileAdminEditSubAdmin(' + Number(admin.id) + ')">编辑</button><button class="small-action danger-action" type="button" onclick="mobileAdminDeleteSubAdmin(' + Number(admin.id) + ',' + jsArg(admin.username) + ')">删除</button></div></article>'; }).join('') : '<div class="empty-state">暂无二级管理员</div>') + '</div>';
+  }
+  function settingsPasswordPanel() {
+    return settingsDetailHeader('修改密码', '更新当前管理员密码') + '<div class="sheet settings-form"><label>当前密码<input id="mobile-password-old" type="password" autocomplete="current-password"></label><label>新密码<input id="mobile-password-new" type="password" autocomplete="new-password" placeholder="至少 6 位"></label><label>确认新密码<input id="mobile-password-confirm" type="password" autocomplete="new-password"></label><button class="settings-primary" type="button" onclick="mobileAdminChangePassword()">保存新密码</button></div>';
   }
   function nav() {
     var tabs = [['records', '记录', 'records'], ['pending', '注册', 'users'], ['restore', '恢复', 'restore'], ['exam', '考试', 'exam'], ['settings', '设置', 'settings']];
@@ -293,7 +360,7 @@
   window.mobileAdminGo = function (tab) {
     state.tab = tab;
     state.downloadOpen = false;
-    if (tab === 'settings') { render(); return; }
+    if (tab === 'settings') { if (!state.settings.config) loadSettingsCore(); render(); return; }
     if (typeof window.switchAdminTab === 'function') window.switchAdminTab(tab);
     else { render(); loadCurrentTab(); }
   };
@@ -357,19 +424,196 @@
     if (typeof window.loadExamRecords === 'function') window.loadExamRecords(); else render();
   };
   window.mobileAdminToggleExamHistory = function (id) { state.examHistoryId = state.examHistoryId === id ? null : id; render(); };
-  window.mobileAdminOpenLegacyConfig = function (section, anchor) {
-    deactivate();
-    if (typeof window.switchAdminTab === 'function') window.switchAdminTab('config');
-    if (typeof window.switchConfigSubTab === 'function') window.switchConfigSubTab(section);
-    if (anchor) setTimeout(function () { var target = document.getElementById(anchor); if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 80);
-    var button = document.getElementById('mobile-admin-return');
-    if (!button) {
-      button = document.createElement('button');
-      button.id = 'mobile-admin-return';
-      button.type = 'button';
-      button.textContent = '返回手机管理';
-      button.onclick = function () { activate(); button.remove(); };
-      document.body.appendChild(button);
+  function authHeaders() {
+    try { return { 'Authorization': token }; } catch (e) { return {}; }
+  }
+  function setSettingsMessage(message, isError) {
+    state.settings.notice = isError ? '' : message;
+    state.settings.error = isError ? message : '';
+  }
+  async function requestSettings(url, options) {
+    var response = await fetch(url, options || { headers: authHeaders() });
+    var result = await response.json().catch(function () { return {}; });
+    if (!response.ok || result.code !== 200) throw new Error(result.detail || result.message || '操作失败');
+    return result;
+  }
+  async function loadSettingsCore() {
+    try {
+      state.settings.error = '';
+      var result = await requestSettings('/api/admin/config', { headers: authHeaders() });
+      var data = result.data || {};
+      state.settings.config = {
+        start_time: data.exam_start_time || '08:00',
+        end_time: data.exam_end_time || '12:00',
+        regions: String(data.regions || '').split(',').map(function (item) { return item.trim(); }).filter(Boolean),
+        jobs: String(data.job_types || '').split(',').map(function (item) { return item.trim(); }).filter(Boolean)
+      };
+      if (typeof window.loadSystemConfig === 'function') window.loadSystemConfig();
+    } catch (error) { setSettingsMessage(error.message || '读取系统配置失败', true); }
+    if (isMobile() && state.tab === 'settings') render();
+  }
+  async function loadSettingsSubjects() {
+    try {
+      state.settings.error = '';
+      var result = await requestSettings('/api/exam_subjects', { headers: authHeaders() });
+      state.settings.subjects = result.data || [];
+    } catch (error) { setSettingsMessage(error.message || '读取考试科目失败', true); state.settings.subjects = []; }
+    if (isMobile() && state.tab === 'settings') render();
+  }
+  async function loadSettingsAdmins() {
+    try {
+      state.settings.error = '';
+      var result = await requestSettings('/api/admin/sub_admins', { headers: authHeaders() });
+      state.settings.admins = result.data || [];
+    } catch (error) { setSettingsMessage(error.message || '读取二级管理员失败', true); state.settings.admins = []; }
+    if (isMobile() && state.tab === 'settings') render();
+  }
+  window.mobileAdminOpenSettings = function (view) {
+    state.settingsView = view;
+    state.settings.notice = '';
+    state.settings.error = '';
+    if (view === 'home' && !state.settings.config) loadSettingsCore();
+    if (view === 'core') { state.settings.config = null; loadSettingsCore(); }
+    if (view === 'units' && typeof window.loadCompanies === 'function') Promise.resolve(window.loadCompanies()).then(function () { if (isMobile() && state.tab === 'settings') render(); });
+    if (view === 'bank') { state.settings.subjects = null; loadSettingsSubjects(); }
+    if (view === 'admins') { state.settings.admins = null; state.settings.adminEditor = null; loadSettingsAdmins(); }
+    render();
+  };
+  window.mobileAdminAddSettingsTag = function (type) {
+    var config = state.settings.config;
+    var input = document.getElementById('mobile-config-' + type);
+    var value = input ? input.value.trim() : '';
+    if (!config || !value) return;
+    var target = type === 'regions' ? config.regions : config.jobs;
+    if (target.indexOf(value) !== -1) { setSettingsMessage('该项已经存在', true); render(); return; }
+    target.push(value);
+    render();
+  };
+  window.mobileAdminRemoveSettingsTag = function (type, index) {
+    var config = state.settings.config;
+    if (!config) return;
+    var target = type === 'regions' ? config.regions : config.jobs;
+    target.splice(index, 1);
+    render();
+  };
+  window.mobileAdminSaveSettingsCore = async function () {
+    var config = state.settings.config;
+    var start = document.getElementById('mobile-config-start');
+    var end = document.getElementById('mobile-config-end');
+    if (!config || !start || !end || !start.value || !end.value) { setSettingsMessage('请完整填写考试时间', true); render(); return; }
+    config.start_time = start.value;
+    config.end_time = end.value;
+    state.settings.busy = true;
+    render();
+    try {
+      var formData = new FormData();
+      formData.append('start_time', config.start_time);
+      formData.append('end_time', config.end_time);
+      formData.append('regions', config.regions.join(','));
+      formData.append('job_types', config.jobs.join(','));
+      await requestSettings('/api/admin/config', { method: 'POST', headers: authHeaders(), body: formData });
+      setSettingsMessage('系统配置已保存', false);
+      if (typeof window.loadSystemConfig === 'function') window.loadSystemConfig();
+    } catch (error) { setSettingsMessage(error.message || '保存系统配置失败', true); }
+    state.settings.busy = false;
+    render();
+  };
+  window.mobileAdminAddExamSubject = async function () {
+    var input = document.getElementById('mobile-bank-subject');
+    var name = input ? input.value.trim() : '';
+    if (!name) { setSettingsMessage('请输入科目名称', true); render(); return; }
+    try {
+      var formData = new FormData(); formData.append('name', name);
+      await requestSettings('/api/admin/add_exam_subject', { method: 'POST', headers: authHeaders(), body: formData });
+      setSettingsMessage('已新增科目：' + name, false);
+      await loadSettingsSubjects();
+    } catch (error) { setSettingsMessage(error.message || '新增科目失败', true); render(); }
+  };
+  window.mobileAdminDeleteExamSubject = async function (name) {
+    if (!confirm('确定删除科目“' + name + '”吗？题库文件会保留，但该科目不能再用于考试。')) return;
+    try {
+      var formData = new FormData(); formData.append('name', name);
+      await requestSettings('/api/admin/delete_exam_subject', { method: 'POST', headers: authHeaders(), body: formData });
+      setSettingsMessage('已删除科目：' + name, false);
+      await loadSettingsSubjects();
+    } catch (error) { setSettingsMessage(error.message || '删除科目失败', true); render(); }
+  };
+  window.mobileAdminUploadExamSubject = async function (name, input) {
+    var file = input && input.files ? input.files[0] : null;
+    if (!file) return;
+    try {
+      var formData = new FormData(); formData.append('exam_type', name); formData.append('file', file);
+      var result = await requestSettings('/api/admin/upload_exam_bank', { method: 'POST', headers: authHeaders(), body: formData });
+      setSettingsMessage(name + '题库已更新，共 ' + (result.question_count || 0) + ' 道题', false);
+    } catch (error) { setSettingsMessage(error.message || '上传题库失败', true); }
+    if (input) input.value = '';
+    render();
+  };
+  window.mobileAdminNewSubAdmin = function () { state.settings.adminEditor = {}; render(); };
+  window.mobileAdminCancelSubAdminEdit = function () { state.settings.adminEditor = null; render(); };
+  window.mobileAdminEditSubAdmin = function (id) {
+    var source = (state.settings.admins || []).filter(function (item) { return Number(item.id) === Number(id); })[0];
+    if (!source) return;
+    state.settings.adminEditor = { id: source.id, username: source.username, real_name: source.real_name, company: source.company };
+    render();
+  };
+  window.mobileAdminSaveSubAdmin = async function () {
+    var editor = state.settings.adminEditor || {};
+    var username = (document.getElementById('mobile-subadmin-username') || {}).value || '';
+    var realName = (document.getElementById('mobile-subadmin-realname') || {}).value || '';
+    var company = (document.getElementById('mobile-subadmin-company') || {}).value || '';
+    var password = (document.getElementById('mobile-subadmin-password') || {}).value || '';
+    username = username.trim(); realName = realName.trim(); company = company.trim(); password = password.trim();
+    if (!username || !realName || !company || (!editor.id && !password)) { setSettingsMessage('请填写所有必填项；新增管理员必须设置密码', true); render(); return; }
+    if (password && password.length < 6) { setSettingsMessage('密码长度不能少于 6 位', true); render(); return; }
+    try {
+      var formData = new FormData();
+      formData.append('username', username); formData.append('real_name', realName); formData.append('company', company);
+      var url = '/api/admin/add_sub_admin';
+      if (editor.id) { url = '/api/admin/update_sub_admin'; formData.append('sub_admin_id', editor.id); formData.append('new_username', username); formData.append('new_password', password); }
+      else formData.append('password', password);
+      await requestSettings(url, { method: 'POST', headers: authHeaders(), body: formData });
+      state.settings.adminEditor = null;
+      setSettingsMessage(editor.id ? '二级管理员已更新' : '二级管理员已添加', false);
+      await loadSettingsAdmins();
+    } catch (error) { setSettingsMessage(error.message || '保存二级管理员失败', true); render(); }
+  };
+  window.mobileAdminDeleteSubAdmin = async function (id, name) {
+    if (!confirm('确定删除二级管理员“' + name + '”吗？')) return;
+    try {
+      var formData = new FormData(); formData.append('sub_admin_id', id);
+      await requestSettings('/api/admin/delete_sub_admin', { method: 'POST', headers: authHeaders(), body: formData });
+      setSettingsMessage('二级管理员已删除', false);
+      await loadSettingsAdmins();
+    } catch (error) { setSettingsMessage(error.message || '删除二级管理员失败', true); render(); }
+  };
+  window.mobileAdminChangePassword = async function () {
+    var oldPassword = (document.getElementById('mobile-password-old') || {}).value || '';
+    var newPassword = (document.getElementById('mobile-password-new') || {}).value || '';
+    var confirmPassword = (document.getElementById('mobile-password-confirm') || {}).value || '';
+    if (!oldPassword || !newPassword || !confirmPassword) { setSettingsMessage('请完整填写密码', true); render(); return; }
+    if (newPassword.length < 6) { setSettingsMessage('新密码长度不能少于 6 位', true); render(); return; }
+    if (newPassword !== confirmPassword) { setSettingsMessage('两次输入的新密码不一致', true); render(); return; }
+    if (!confirm('确定修改管理员密码吗？修改后需要重新登录。')) return;
+    try {
+      var formData = new FormData(); formData.append('old_password', oldPassword); formData.append('new_password', newPassword);
+      await requestSettings('/api/admin/update_password', { method: 'POST', headers: authHeaders(), body: formData });
+      setSettingsMessage('密码修改成功，即将重新登录', false);
+      render();
+      setTimeout(function () { if (typeof window.logout === 'function') window.logout(); }, 1200);
+    } catch (error) { setSettingsMessage(error.message || '修改密码失败', true); render(); }
+  };
+  window.mobileAdminSetUserStatus = async function (id, status) {
+    var action = status === 'disabled' ? '停用' : '启用';
+    var hint = status === 'disabled' ? '停用后该账号不能登录，过去录入的人员和培训记录不会删除。' : '启用后该账号可以重新登录。';
+    if (!confirm('确定' + action + '该注册账号吗？\n' + hint)) return;
+    try {
+      var formData = new FormData(); formData.append('user_id', id); formData.append('status', status);
+      var result = await requestSettings('/api/admin/user/status', { method: 'POST', headers: authHeaders(), body: formData });
+      if (typeof window.showAlert === 'function') window.showAlert('success', result.message || ('账号已' + action));
+      if (typeof window.loadPendingUsers === 'function') window.loadPendingUsers();
+    } catch (error) {
+      if (typeof window.showAlert === 'function') window.showAlert('error', error.message || (action + '失败'));
     }
   };
 
