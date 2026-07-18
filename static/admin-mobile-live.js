@@ -60,6 +60,7 @@
       restore: '<svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.7"></path><path d="M4 4v5h5"></path></svg>',
       exam: '<svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"></rect><path d="M8 8h8M8 12h8M8 16h4"></path></svg>',
       settings: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.1 2.1-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5v.2h-3v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1-2.1-2.1.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H5.3v-3h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1 2.1-2.1.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.5v-.2h3v.2a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1 2.1 2.1-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.5 1h.2v3h-.2a1.7 1.7 0 0 0-1.5 1Z"></path></svg>',
+      logout: '<svg viewBox="0 0 24 24"><path d="M10 17l5-5-5-5"></path><path d="M15 12H3"></path><path d="M21 19V5a2 2 0 0 0-2-2h-7"></path></svg>',
       arrow: '<svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"></path></svg>'
     };
     return icons[name] || '';
@@ -249,10 +250,13 @@
     var end = config ? config.end_time : '--';
     var regions = config && config.regions.length ? config.regions.join('、') : '未配置';
     return '<section class="tab-panel ' + (state.tab === 'settings' ? 'is-active' : '') + '" data-panel="settings">' +
-      settingsRow('系统配置', '考试 ' + start + ' – ' + end + ' · 区域 ' + regions, 'core') + settingsRow('培训单位', '查看当前单位与归属来源', 'units') + settingsRow('考试题库', '科目、题目、导入与更新', 'bank') + settingsRow('二级管理员', '账号、权限与状态', 'admins') + settingsRow('修改密码', '更新当前管理员密码', 'password') + settingsNotice() + '</section>';
+      settingsRow('系统配置', '考试 ' + start + ' – ' + end + ' · 区域 ' + regions, 'core') + settingsRow('培训单位', '查看当前单位与归属来源', 'units') + settingsRow('考试题库', '科目、题目、导入与更新', 'bank') + settingsRow('二级管理员', '账号、权限与状态', 'admins') + settingsRow('修改密码', '更新当前管理员密码', 'password') + settingsLogoutRow() + settingsNotice() + '</section>';
   }
   function settingsRow(title, detail, view) {
     return '<button class="settings-row" type="button" onclick="mobileAdminOpenSettings(\'' + view + '\')"><span class="settings-icon">' + icon('settings') + '</span><span class="settings-copy"><strong>' + title + '</strong><span>' + detail + '</span></span>' + icon('arrow') + '</button>';
+  }
+  function settingsLogoutRow() {
+    return '<button class="settings-row settings-logout-row" type="button" onclick="mobileAdminLogout()"><span class="settings-icon">' + icon('logout') + '</span><span class="settings-copy"><strong>退出登录</strong><span>清除本机登录状态并返回登录页</span></span></button>';
   }
   function settingsNotice() {
     if (!state.settings.notice && !state.settings.error) return '';
@@ -492,6 +496,16 @@
     if (view === 'bank') { state.settings.subjects = null; loadSettingsSubjects(); }
     if (view === 'admins') { state.settings.admins = null; state.settings.adminEditor = null; loadSettingsAdmins(); }
     render();
+  };
+  window.mobileAdminLogout = function () {
+    if (!confirm('确定退出当前管理员账号吗？')) return;
+    if (typeof window.logout === 'function') {
+      window.logout();
+      return;
+    }
+    localStorage.clear();
+    sessionStorage.clear();
+    window.location.href = '/login';
   };
   window.mobileAdminAddSettingsTag = function (type) {
     var config = state.settings.config;

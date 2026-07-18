@@ -227,6 +227,10 @@
   #mobile-admin-live .settings-copy { flex:1; min-width:0; }
   #mobile-admin-live .settings-copy strong { display:block; font-weight:650; }
   #mobile-admin-live .settings-copy span { display:block; overflow:hidden; margin-top:3px; color:var(--app-muted); font-size:.78rem; text-overflow:ellipsis; white-space:nowrap; }
+  #mobile-admin-live .settings-logout-row { border-color:rgba(248,113,113,.35); background:rgba(127,29,29,.20); }
+  #mobile-admin-live .settings-logout-row .settings-icon { color:#fecaca; background:rgba(239,68,68,.18); }
+  #mobile-admin-live .settings-logout-row .settings-copy strong { color:#fecaca; }
+  #mobile-admin-live .settings-logout-row:active { transform:scale(.985); }
   #mobile-admin-live .settings-detail { animation:live-panel-enter .22s ease-out; }
   #mobile-admin-live .settings-detail-header { display:flex; align-items:center; gap:10px; margin:2px 0 13px; }
   #mobile-admin-live .settings-detail-header h3 { margin:0; font-size:1rem; font-weight:650; }
