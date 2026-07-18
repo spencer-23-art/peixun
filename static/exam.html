@@ -580,7 +580,7 @@
         </div>
       </div>
       <div class="result-footer">
-        <button class="btn btn-primary" onclick="restartExamDirectly()">重新答题</button>
+        <button class="btn btn-primary" id="restart-exam-button" onclick="restartExamDirectly()">重新答题</button>
         <button class="btn btn-secondary" onclick="restartExamWithNewSubject()">更换科目 / 返回</button>
       </div>
     </div>
@@ -706,6 +706,25 @@
 
       document.getElementById('start-error').style.display = 'none';
 
+      try {
+        const response = await fetch('/api/exam/check_eligibility', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, id_last6: verifiedIdLast6, exam_type: examType })
+        });
+        const result = await response.json();
+        if (!response.ok || result.code !== 200 || !result.allowed) {
+          document.getElementById('start-error').textContent = result.detail || '该科目暂不能开始答题';
+          document.getElementById('start-error').style.display = 'block';
+          return;
+        }
+      } catch (error) {
+        console.error('检查考试资格失败:', error);
+        document.getElementById('start-error').textContent = '检查考试资格失败，请检查网络后重试';
+        document.getElementById('start-error').style.display = 'block';
+        return;
+      }
+
       examData.name = name;
       examData.company = company;
       examData.idLast6 = verifiedIdLast6;
@@ -724,7 +743,7 @@
         renderQuestionNav();
       } catch (error) {
         console.error('加载试题失败:', error);
-        alert('加载试题失败，请稍后重试');
+        alert(error.message || '加载试题失败，请稍后重试');
       }
     }
 
@@ -779,7 +798,7 @@
         const shuffled = allQuestions.sort(() => Math.random() - 0.5);
         examData.questions = shuffled.slice(0, 25);
       } else {
-        throw new Error(result.message || '加载试题失败');
+        throw new Error(result.detail || result.message || '加载试题失败');
       }
     }
 
@@ -965,6 +984,9 @@
         message.style.color = 'var(--danger-color)';
       }
 
+      const restartButton = document.getElementById('restart-exam-button');
+      if (restartButton) restartButton.style.display = isPass ? 'none' : 'block';
+
       showPanel('result-panel');
     }
 
@@ -990,7 +1012,7 @@
         renderQuestionNav();
       } catch (error) {
         console.error('加载试题失败:', error);
-        alert('加载试题失败，请稍后重试');
+        alert(error.message || '加载试题失败，请稍后重试');
       }
     }
 

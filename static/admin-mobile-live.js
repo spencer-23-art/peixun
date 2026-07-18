@@ -21,6 +21,7 @@
     recordFiltersOpen: false,
     recordStatus: 'all',
     downloadOpen: false,
+    composing: { record: false, exam: false, pending: false, restore: false },
     pendingQuery: '',
     restoreQuery: '',
     examCompanyOpen: false,
@@ -133,7 +134,7 @@
     return '<section class="tab-panel ' + (state.tab === 'records' ? 'is-active' : '') + '" data-panel="records">' +
       '<div class="summary-grid"><article class="summary-card primary"><div class="summary-label">培训记录</div><div class="summary-value">' + total + '</div><div class="summary-note">完整保留历史培训</div></article><article class="summary-card"><div class="summary-label">本页待下载</div><div class="summary-value">' + pending + '</div><div class="summary-note">默认已勾选，可逐个调整</div></article></div>' +
       '<div class="page-toolbar"><div class="company-combobox"><span class="search-glyph">' + icon('search') + '</span>' +
-        '<input type="search" id="live-record-search" value="' + esc(query) + '" placeholder="姓名、单位、身份证、手机号" oninput="mobileAdminRecordSearch(this.value)">' +
+        '<input type="search" id="live-record-search" value="' + esc(query) + '" placeholder="姓名、单位、身份证、手机号" oncompositionstart="mobileAdminCompositionStart(\'record\')" oncompositionend="mobileAdminCompositionEnd(\'record\',this.value)" oninput="mobileAdminRecordSearch(this.value,event)">' +
         '<button class="company-toggle" type="button" aria-label="选择培训单位" onclick="mobileAdminToggleRecordCompany(event)">' + icon('down') + '</button>' +
         '<div class="company-options ' + (state.recordCompanyOpen ? 'is-open' : '') + '">' + companyButtons + '</div></div>' +
       '<button class="toolbar-btn" type="button" aria-label="筛选培训记录" onclick="mobileAdminToggleRecordFilters(event)">' + icon('filter') + '</button>' +
@@ -169,7 +170,7 @@
     });
     return '<section class="tab-panel ' + (state.tab === 'pending' ? 'is-active' : '') + '" data-panel="pending">' +
       '<div class="sheet"><h3 class="sheet-title">注册用户管理</h3><div class="list-line"><div>这里仅展示已注册用户<small>允许、拒绝及其他审批统一在右上角铃铛处理。</small></div><span class="state-pill">' + users.length + ' 人</span></div></div>' +
-      '<div class="page-toolbar"><div class="company-combobox"><span class="search-glyph">' + icon('search') + '</span><input type="search" value="' + esc(state.pendingQuery) + '" placeholder="搜索用户名、姓名、单位" oninput="mobileAdminPendingSearch(this.value)"></div></div>' +
+      '<div class="page-toolbar"><div class="company-combobox"><span class="search-glyph">' + icon('search') + '</span><input type="search" value="' + esc(state.pendingQuery) + '" placeholder="搜索用户名、姓名、单位" oncompositionstart="mobileAdminCompositionStart(\'pending\')" oncompositionend="mobileAdminCompositionEnd(\'pending\',this.value)" oninput="mobileAdminPendingSearch(this.value,event)"></div></div>' +
       '<div class="record-stack">' + (users.length ? users.map(userCard).join('') : '<div class="empty-state">没有符合条件的注册用户</div>') + '</div></section>';
   }
   function userCard(u) {
@@ -189,7 +190,7 @@
     });
     return '<section class="tab-panel ' + (state.tab === 'restore' ? 'is-active' : '') + '" data-panel="restore">' +
       '<div class="sheet"><h3 class="sheet-title">门禁恢复管理</h3><div class="list-line"><div>待恢复人员默认已勾选<small>已恢复下载的人员会变灰，仍保留历史。</small></div><button class="small-action" type="button" onclick="exportRestoreData()">下载所选</button></div></div>' +
-      '<div class="page-toolbar"><div class="company-combobox"><span class="search-glyph">' + icon('search') + '</span><input type="search" value="' + esc(state.restoreQuery) + '" placeholder="姓名、单位、身份证、手机号" oninput="mobileAdminRestoreSearch(this.value)"></div></div>' +
+      '<div class="page-toolbar"><div class="company-combobox"><span class="search-glyph">' + icon('search') + '</span><input type="search" value="' + esc(state.restoreQuery) + '" placeholder="姓名、单位、身份证、手机号" oncompositionstart="mobileAdminCompositionStart(\'restore\')" oncompositionend="mobileAdminCompositionEnd(\'restore\',this.value)" oninput="mobileAdminRestoreSearch(this.value,event)"></div></div>' +
       '<div class="record-stack">' + (records.length ? records.map(restoreCard).join('') : '<div class="empty-state">当前没有门禁恢复记录</div>') + '</div></section>';
   }
   function restoreCard(r) {
@@ -216,7 +217,7 @@
     var subjectOptions = [''].concat(subjects).map(function (item) { return '<button type="button" class="filter-option ' + (subject === item ? 'is-selected' : '') + '" onclick="mobileAdminSelectExamSubject(' + jsArg(item) + ')">' + esc(item || '全部科目') + '</button>'; }).join('');
     return '<section class="tab-panel ' + (state.tab === 'exam' ? 'is-active' : '') + '" data-panel="exam">' +
       '<div class="sheet exam-summary"><div class="score-ring">' + (recordCount ? Math.round(passCount * 100 / recordCount) : 0) + '%</div><div><h3 class="sheet-title">考试信息</h3><div class="summary-note">共 ' + recordCount + ' 人，合格 ' + passCount + ' 人；成绩以最后一次考试为准。</div></div></div>' +
-      '<div class="page-toolbar"><div class="company-combobox"><span class="search-glyph">' + icon('search') + '</span><input type="search" value="' + esc(query) + '" placeholder="姓名、单位、身份证、手机号" oninput="mobileAdminExamSearch(this.value)"><button class="company-toggle" type="button" onclick="mobileAdminToggleExamCompany(event)">' + icon('down') + '</button><div class="company-options ' + (state.examCompanyOpen ? 'is-open' : '') + '">' + companyOptions + '</div></div><button class="toolbar-btn" type="button" aria-label="筛选考试信息" onclick="mobileAdminToggleExamFilters(event)">' + icon('filter') + '</button></div>' +
+      '<div class="page-toolbar"><div class="company-combobox"><span class="search-glyph">' + icon('search') + '</span><input type="search" value="' + esc(query) + '" placeholder="姓名、单位、身份证、手机号" oncompositionstart="mobileAdminCompositionStart(\'exam\')" oncompositionend="mobileAdminCompositionEnd(\'exam\',this.value)" oninput="mobileAdminExamSearch(this.value,event)"><button class="company-toggle" type="button" onclick="mobileAdminToggleExamCompany(event)">' + icon('down') + '</button><div class="company-options ' + (state.examCompanyOpen ? 'is-open' : '') + '">' + companyOptions + '</div></div><button class="toolbar-btn" type="button" aria-label="筛选考试信息" onclick="mobileAdminToggleExamFilters(event)">' + icon('filter') + '</button></div>' +
       '<div class="filter-panel ' + (state.examFiltersOpen ? 'is-open' : '') + '"><div class="filter-group"><span class="filter-group-label">考试科目</span><div class="filter-options">' + subjectOptions + '</div></div><div class="filter-panel-actions"><button type="button" onclick="mobileAdminClearExamFilters()">重置</button><button type="button" class="apply-filter" onclick="mobileAdminToggleExamFilters()">完成</button></div></div>' +
       '<div class="section-heading"><h3>' + esc(company || '全部工作单位') + '</h3><span>成绩为最后一次</span></div><div class="record-stack">' +
       (mobileExamRecords.length ? mobileExamRecords.map(examCard).join('') : '<div class="empty-state">没有符合条件的考试记录</div>') + '</div>' + examPager() + '</section>';
@@ -367,7 +368,22 @@
     try { filterCompany = company; recordsPage = 1; document.getElementById('filter-company').value = company; } catch (e) { /* page loading */ }
     if (typeof window.loadRecords === 'function') window.loadRecords(); else render();
   };
-  window.mobileAdminRecordSearch = function (value) {
+  window.mobileAdminCompositionStart = function (field) {
+    if (!state.composing.hasOwnProperty(field)) return;
+    state.composing[field] = true;
+    if (field === 'record') clearTimeout(searchTimer);
+    if (field === 'exam') clearTimeout(examSearchTimer);
+  };
+  window.mobileAdminCompositionEnd = function (field, value) {
+    if (!state.composing.hasOwnProperty(field)) return;
+    state.composing[field] = false;
+    if (field === 'record') window.mobileAdminRecordSearch(value);
+    else if (field === 'exam') window.mobileAdminExamSearch(value);
+    else if (field === 'pending') window.mobileAdminPendingSearch(value);
+    else if (field === 'restore') window.mobileAdminRestoreSearch(value);
+  };
+  window.mobileAdminRecordSearch = function (value, event) {
+    if (state.composing.record || (event && event.isComposing)) return;
     clearTimeout(searchTimer);
     searchTimer = setTimeout(function () {
       try { filterName = value; recordsPage = 1; document.getElementById('filter-name').value = value; } catch (e) { /* page loading */ }
@@ -384,8 +400,8 @@
   window.mobileAdminToggleDownload = function (event) { if (event) event.stopPropagation(); state.downloadOpen = !state.downloadOpen; state.recordCompanyOpen = false; render(); };
   window.mobileAdminExport = function (format) { state.downloadOpen = false; render(); if (typeof window.exportData === 'function') window.exportData(format); };
   window.mobileAdminToggleRecord = function (id, checked) { if (typeof window.handleSingleCheckboxChange === 'function') window.handleSingleCheckboxChange({ checked: checked }, id); else render(); };
-  window.mobileAdminPendingSearch = function (value) { state.pendingQuery = value; render(); };
-  window.mobileAdminRestoreSearch = function (value) { state.restoreQuery = value; render(); };
+  window.mobileAdminPendingSearch = function (value, event) { if (state.composing.pending || (event && event.isComposing)) return; state.pendingQuery = value; render(); };
+  window.mobileAdminRestoreSearch = function (value, event) { if (state.composing.restore || (event && event.isComposing)) return; state.restoreQuery = value; render(); };
   window.mobileAdminToggleRestore = function (id, checked) { if (typeof window.handleSingleRestoreCheckboxChange === 'function') window.handleSingleRestoreCheckboxChange({ checked: checked }, id); else render(); };
   window.mobileAdminToggleExamCompany = function (event) { if (event) event.stopPropagation(); state.examCompanyOpen = !state.examCompanyOpen; render(); };
   window.mobileAdminSelectExamCompany = function (company) {
@@ -395,7 +411,8 @@
     try { examRecordsPage = 1; } catch (e) { /* ignore */ }
     if (typeof window.loadExamRecords === 'function') window.loadExamRecords(); else render();
   };
-  window.mobileAdminExamSearch = function (value) {
+  window.mobileAdminExamSearch = function (value, event) {
+    if (state.composing.exam || (event && event.isComposing)) return;
     clearTimeout(examSearchTimer);
     examSearchTimer = setTimeout(function () {
       try { examFilterName = value; examRecordsPage = 1; document.getElementById('exam-filter-name').value = value; } catch (e) { /* ignore */ }

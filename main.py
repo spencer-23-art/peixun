@@ -77,6 +77,9 @@ DEFAULT_EXAM_SUBJECTS = [
     {"name": "叉车", "file": "叉车工.xlsx"}
 ]
 
+# 考试及格线：达到该分数后，该人员的同一科目不再允许重新答题。
+EXAM_PASSING_SCORE = 90
+
 def get_exam_file_map() -> dict:
     """读取 configs 中的考试科目配置，返回 {科目名: 文件名} 映射；缺失或损坏时回退默认。"""
     val = get_config('exam_subjects', '')
@@ -413,6 +416,38 @@ def get_latest_training_record(cursor, name: str, id_last6: str):
     ''', (name, id_last6))
     return cursor.fetchone()
 
+
+def get_passing_exam_record(cursor, name: str, id_last6: str, exam_type: str):
+    """返回该考生该科目已合格的最近一次考试记录。
+
+    新记录保存身份证后六位；历史记录没有该字段时，回查保留的培训记录，
+    这样人员换公司后也不会绕过“合格后不可重考”的规则。
+    """
+    cursor.execute('''
+        SELECT e.*
+        FROM exam_records e
+        WHERE e.name = ?
+          AND e.exam_type = ?
+          AND e.score >= ?
+          AND (
+              e.id_last6 = ?
+              OR (
+                  (e.id_last6 IS NULL OR TRIM(e.id_last6) = '')
+                  AND EXISTS (
+                      SELECT 1
+                      FROM records r
+                      LEFT JOIN users u ON r.user_id = u.id
+                      WHERE r.name = e.name
+                        AND SUBSTR(r.id_card, -6) = ?
+                        AND COALESCE(NULLIF(r.company, ''), u.company, '') = e.company
+                  )
+              )
+          )
+        ORDER BY e.created_at DESC, e.id DESC
+        LIMIT 1
+    ''', (name, exam_type, EXAM_PASSING_SCORE, id_last6, id_last6))
+    return cursor.fetchone()
+
 # 初始化数据库
 def init_db():
     if not os.path.exists(UPLOAD_DIR):
@@ -531,6 +566,7 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
         company TEXT NOT NULL,
+        id_last6 TEXT DEFAULT '',
         exam_type TEXT NOT NULL,
         score INTEGER NOT NULL,
         answered_count INTEGER NOT NULL,
@@ -539,6 +575,10 @@ def init_db():
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
     ''')
+    try:
+        cursor.execute("ALTER TABLE exam_records ADD COLUMN id_last6 TEXT DEFAULT ''")
+    except sqlite3.OperationalError:
+        pass
     
     # 答题详情表
     cursor.execute('''
@@ -584,6 +624,7 @@ def init_db():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_exam_records_created_at ON exam_records (created_at)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_exam_records_name ON exam_records (name)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_exam_records_company ON exam_records (company)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_exam_records_identity ON exam_records (name, id_last6, exam_type, score)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_users_company ON users (company)")
     
     # 自愈逻辑：给 users 增加 is_deleted 和 created_at 字段。
@@ -2303,6 +2344,41 @@ def exam_verify(data: dict, request: Request):
     conn.close()
     return {"code": 200, "matched": False, "error": "not_found"}
 
+
+@app.post("/api/exam/check_eligibility")
+def check_exam_eligibility(data: dict):
+    """在开始答题前确认身份和该科目的重考资格。"""
+    name = (data.get('name') or '').strip()
+    id_last6 = (data.get('id_last6') or '').strip()
+    exam_type = (data.get('exam_type') or '').strip()
+    if not name or len(id_last6) != 6 or not exam_type:
+        raise HTTPException(status_code=400, detail="缺少姓名、身份证后六位或考试科目")
+
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    try:
+        cursor = conn.cursor()
+        latest_training = get_latest_training_record(cursor, name, id_last6)
+        if not latest_training:
+            cursor.execute('''
+                SELECT 1 FROM exam_approvals
+                WHERE name = ? AND id_last6 = ? AND status = 'approved'
+                ORDER BY created_at DESC LIMIT 1
+            ''', (name, id_last6))
+            if not cursor.fetchone():
+                raise HTTPException(status_code=403, detail="请先完成身份验证")
+
+        passed = get_passing_exam_record(cursor, name, id_last6, exam_type)
+        if passed:
+            return {
+                "code": 200,
+                "allowed": False,
+                "detail": f"您已在{exam_type}考试中取得{passed['score']}分，已合格，无需重复答题"
+            }
+        return {"code": 200, "allowed": True}
+    finally:
+        conn.close()
+
 # 获取答题审批列表（管理员）
 @app.get("/api/admin/exam-approvals")
 def get_exam_approvals(admin = Depends(get_admin_user)):
@@ -2650,6 +2726,14 @@ def save_exam_record(data: dict):
         if not company:
             raise HTTPException(status_code=400, detail="缺少工作单位")
 
+        # 服务端再次强制校验，避免绕过页面直接提交重复答卷。
+        passed = get_passing_exam_record(cursor, name, id_last6, exam_type)
+        if passed:
+            raise HTTPException(
+                status_code=409,
+                detail=f"您已在{exam_type}考试中取得{passed['score']}分，已合格，不能重新答题"
+            )
+
         # 频率限制：同一姓名+单位+科目 5 分钟内只能提交一次，防恶意刷分，不影响正常重考
         cursor.execute('''
             SELECT created_at FROM exam_records
@@ -2672,9 +2756,9 @@ def save_exam_record(data: dict):
 
         # 插入答题记录
         cursor.execute('''
-            INSERT INTO exam_records (name, company, exam_type, score, answered_count, correct_count, duration, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (name, company, exam_type, score, answered_count, correct_count, duration, beijing_now().strftime("%Y-%m-%d %H:%M:%S")))
+            INSERT INTO exam_records (name, company, id_last6, exam_type, score, answered_count, correct_count, duration, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (name, company, id_last6, exam_type, score, answered_count, correct_count, duration, beijing_now().strftime("%Y-%m-%d %H:%M:%S")))
 
         record_id = cursor.lastrowid
 
