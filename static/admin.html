@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>培训信息录入系统 - 管理后台</title>
   <link rel="stylesheet" href="/static/css/style.css?v=1.0.6">
+  <link rel="stylesheet" href="/static/css/mobile-app.css?v=1.1.0">
   <style>
     /* 消息小铃铛与响应式消息审批 UI 样式 */
     .bell-container {
@@ -673,6 +674,29 @@
 
     <!-- TAB 1: 已录入培训数据 -->
     <div class="tab-content active" id="admin-content-records">
+      <div class="mobile-toolbar" id="mobile-record-toolbar" aria-label="培训记录操作">
+        <div class="mobile-combobox" id="mobile-record-combobox">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="m16 16 4 4"></path></svg>
+          <input id="mobile-record-query" type="search" placeholder="姓名、单位、身份证、手机号" autocomplete="off" oninput="handleMobileRecordQuery()">
+          <button type="button" class="mobile-combobox-toggle" aria-label="选择培训单位" onclick="toggleMobileCompanyMenu('record')">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+          </button>
+          <div class="mobile-company-menu" id="mobile-record-company-menu"></div>
+        </div>
+        <button class="mobile-toolbar-button" type="button" aria-label="筛选培训记录" aria-expanded="false" onclick="toggleMobileFilterPanel('records')">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h10M4 18h6"></path><circle cx="17" cy="12" r="2"></circle><circle cx="13" cy="18" r="2"></circle></svg>
+        </button>
+        <div class="mobile-download-wrap">
+          <button class="mobile-toolbar-button" type="button" aria-label="下载所选人员" aria-expanded="false" onclick="toggleMobileDownloadMenu()">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12"></path><path d="m7 10 5 5 5-5"></path><path d="M5 21h14"></path></svg>
+          </button>
+          <div class="mobile-download-menu" id="mobile-download-menu">
+            <button type="button" onclick="exportMobileRecords('excel')">下载 Excel</button>
+            <button type="button" onclick="exportMobileRecords('csv')">下载 CSV</button>
+            <button type="button" onclick="exportMobileRecords('photos')">下载照片包</button>
+          </div>
+        </div>
+      </div>
       
       <!-- 重新设计的精美筛选器卡片 -->
       <div class="filter-card">
@@ -797,6 +821,19 @@
 
     <!-- TAB 4: 在线答题 -->
     <div class="tab-content" id="admin-content-exam">
+      <div class="mobile-toolbar" id="mobile-exam-toolbar" aria-label="考试记录操作">
+        <div class="mobile-combobox" id="mobile-exam-combobox">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="m16 16 4 4"></path></svg>
+          <input id="mobile-exam-query" type="search" placeholder="考生、单位、身份证、科目" autocomplete="off" oninput="handleMobileExamQuery()">
+          <button type="button" class="mobile-combobox-toggle" aria-label="选择培训单位" onclick="toggleMobileCompanyMenu('exam')">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+          </button>
+          <div class="mobile-company-menu" id="mobile-exam-company-menu"></div>
+        </div>
+        <button class="mobile-toolbar-button" type="button" aria-label="筛选考试记录" aria-expanded="false" onclick="toggleMobileFilterPanel('exam')">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h10M4 18h6"></path><circle cx="17" cy="12" r="2"></circle><circle cx="13" cy="18" r="2"></circle></svg>
+        </button>
+      </div>
       
       <!-- 答题审批模块 -->
       <div class="glass-container" id="exam-approval-section" style="display: none; max-width: 100%; padding: 20px; margin-bottom: 20px; background: rgba(255,255,255,0.01) !important; border: 1px solid var(--glass-border) !important;">
@@ -1638,6 +1675,7 @@
     
 
     function switchAdminTab(tab) {
+      if (typeof setMobileTab === 'function') setMobileTab(tab);
       document.querySelectorAll('.admin-nav-item').forEach(function(item) { item.classList.remove('active'); });
       document.querySelectorAll('.sidebar-menu-item').forEach(function(item) { item.classList.remove('active'); });
       document.querySelectorAll('.tab-content').forEach(function(content) { content.classList.remove('active'); });
@@ -2268,6 +2306,8 @@
       document.getElementById('filter-end-date').value = '';
       document.getElementById('filter-company').value = '';
       document.getElementById('filter-name').value = '';
+      var mobileQuery = document.getElementById('mobile-record-query');
+      if (mobileQuery) mobileQuery.value = '';
       filterStartDate = '';
       filterEndDate = '';
       filterCompany = '';
@@ -2501,6 +2541,12 @@
       if (format === 'excel') {
         const url = '/api/admin/export/excel?ids=' + encodeURIComponent(ids);
         downloadFileWithToken(url, '培训人员信息表.xlsx', false);
+      } else if (format === 'csv') {
+        const csvUrl = '/api/admin/export/gate/csv?ids=' + encodeURIComponent(ids);
+        downloadFileWithToken(csvUrl, '培训人员导入表.csv', true);
+      } else if (format === 'photos') {
+        const photosUrl = '/api/admin/export/gate/photos?ids=' + encodeURIComponent(ids);
+        downloadFileWithToken(photosUrl, '培训人员照片.zip', false);
       } else if (format === 'gate') {
         // 1. 下载 CSV 文件（此接口会同时更新已下载状态，故传入 shouldRefreshList 为 true）
         const csvUrl = '/api/admin/export/gate/csv?ids=' + encodeURIComponent(ids);
@@ -3632,6 +3678,8 @@
       document.getElementById('exam-filter-company').value = '';
       document.getElementById('exam-filter-type').value = '';
       document.getElementById('exam-filter-name').value = '';
+      var mobileQuery = document.getElementById('mobile-exam-query');
+      if (mobileQuery) mobileQuery.value = '';
       examFilterName = '';
       examRecordsPage = 1;
       var dropdown = document.getElementById('exam-company-dropdown');
@@ -4323,7 +4371,150 @@
         }
       }
     })();
+
+    // 手机端 App 外壳：复用既有数据接口与桌面端操作，仅改变移动端的信息层级和触控入口。
+    function setMobileTab(tab) {
+      document.querySelectorAll('.app-tab[data-tab]').forEach(function(item) {
+        item.classList.toggle('active', item.dataset.tab === tab);
+        item.setAttribute('aria-selected', item.dataset.tab === tab ? 'true' : 'false');
+      });
+    }
+
+    function getMobileFilterPanel(type) {
+      var contentId = type === 'exam' ? 'admin-content-exam' : 'admin-content-records';
+      var content = document.getElementById(contentId);
+      if (!content) return null;
+      return content.querySelector('.filter-card');
+    }
+
+    function toggleMobileFilterPanel(type) {
+      var panel = getMobileFilterPanel(type);
+      if (!panel) return;
+      var willOpen = !panel.classList.contains('mobile-filter-open');
+      document.querySelectorAll('.filter-card.mobile-filter-open').forEach(function(item) {
+        item.classList.remove('mobile-filter-open');
+      });
+      panel.classList.toggle('mobile-filter-open', willOpen);
+      var toolbar = document.getElementById(type === 'exam' ? 'mobile-exam-toolbar' : 'mobile-record-toolbar');
+      var button = toolbar && toolbar.querySelector('.mobile-toolbar-button');
+      if (button) button.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+    }
+
+    function renderMobileCompanyMenu(type) {
+      var isExam = type === 'exam';
+      var menu = document.getElementById(isExam ? 'mobile-exam-company-menu' : 'mobile-record-company-menu');
+      if (!menu) return;
+      var companies = isExam ? allCompanies : recordsAllCompanies;
+      var selected = isExam ? (document.getElementById('exam-filter-company').value || '') : filterCompany;
+      menu.innerHTML = '';
+      [{ label: '全部培训单位', value: '' }].concat((companies || []).map(function(name) { return { label: name, value: name }; })).forEach(function(option) {
+        var button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = option.label;
+        button.className = option.value === selected ? 'selected' : '';
+        button.onclick = function() { selectMobileCompany(type, option.value); };
+        menu.appendChild(button);
+      });
+    }
+
+    function toggleMobileCompanyMenu(type) {
+      var targetId = type === 'exam' ? 'mobile-exam-company-menu' : 'mobile-record-company-menu';
+      var menu = document.getElementById(targetId);
+      if (!menu) return;
+      var willOpen = !menu.classList.contains('open');
+      document.querySelectorAll('.mobile-company-menu.open').forEach(function(item) { item.classList.remove('open'); });
+      if (willOpen) {
+        renderMobileCompanyMenu(type);
+        menu.classList.add('open');
+      }
+    }
+
+    function selectMobileCompany(type, company) {
+      if (type === 'exam') {
+        document.getElementById('exam-filter-company').value = company;
+        document.getElementById('mobile-exam-query').value = company;
+        examFilterName = '';
+        var examNameInput = document.getElementById('exam-filter-name');
+        if (examNameInput) examNameInput.value = '';
+        examRecordsPage = 1;
+        loadExamRecords();
+      } else {
+        document.getElementById('filter-company').value = company;
+        document.getElementById('mobile-record-query').value = company;
+        filterCompany = company;
+        filterName = '';
+        document.getElementById('filter-name').value = '';
+        recordsPage = 1;
+        loadRecords();
+      }
+      document.querySelectorAll('.mobile-company-menu.open').forEach(function(item) { item.classList.remove('open'); });
+    }
+
+    var mobileRecordSearchTimer = null;
+    function handleMobileRecordQuery() {
+      clearTimeout(mobileRecordSearchTimer);
+      mobileRecordSearchTimer = setTimeout(function() {
+        var query = document.getElementById('mobile-record-query').value.trim();
+        filterCompany = '';
+        document.getElementById('filter-company').value = '';
+        filterName = query;
+        document.getElementById('filter-name').value = query;
+        recordsPage = 1;
+        loadRecords();
+      }, 260);
+    }
+
+    var mobileExamSearchTimer = null;
+    function handleMobileExamQuery() {
+      clearTimeout(mobileExamSearchTimer);
+      mobileExamSearchTimer = setTimeout(function() {
+        var query = document.getElementById('mobile-exam-query').value.trim();
+        document.getElementById('exam-filter-company').value = '';
+        examFilterName = query;
+        var examNameInput = document.getElementById('exam-filter-name');
+        if (examNameInput) examNameInput.value = query;
+        examRecordsPage = 1;
+        loadExamRecords();
+      }, 260);
+    }
+
+    function toggleMobileDownloadMenu() {
+      var menu = document.getElementById('mobile-download-menu');
+      if (!menu) return;
+      var willOpen = !menu.classList.contains('open');
+      menu.classList.toggle('open', willOpen);
+      var button = menu.parentElement.querySelector('.mobile-toolbar-button');
+      if (button) button.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+    }
+
+    function exportMobileRecords(format) {
+      var menu = document.getElementById('mobile-download-menu');
+      if (menu) menu.classList.remove('open');
+      exportData(format);
+    }
+
+    document.addEventListener('click', function(event) {
+      if (!event.target.closest('.mobile-combobox')) {
+        document.querySelectorAll('.mobile-company-menu.open').forEach(function(item) { item.classList.remove('open'); });
+      }
+      if (!event.target.closest('.mobile-download-wrap')) {
+        var menu = document.getElementById('mobile-download-menu');
+        if (menu) menu.classList.remove('open');
+      }
+    });
+
+    window.addEventListener('DOMContentLoaded', function() {
+      setMobileTab('records');
+    });
   </script>
+
+  <nav class="app-tabbar" aria-label="管理端主导航">
+    <button class="app-tab active" type="button" data-tab="records" aria-selected="true" onclick="switchAdminTab('records'); setMobileTab('records')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10a2 2 0 0 1 2 2v16H5V5a2 2 0 0 1 2-2Z"></path><path d="M9 8h6M9 12h6M9 16h4"></path></svg><span class="app-tab-label">记录</span></button>
+    <button class="app-tab" type="button" data-tab="pending" aria-selected="false" onclick="switchAdminTab('pending'); setMobileTab('pending')"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"></circle><path d="M3 21v-2a6 6 0 0 1 12 0v2"></path><path d="M16 11a3 3 0 1 0 0-6M17 21v-2a6 6 0 0 0-3-5.2"></path></svg><span class="app-tab-label">注册管理</span></button>
+    <button class="app-tab" type="button" data-tab="restore" aria-selected="false" onclick="switchAdminTab('restore'); setMobileTab('restore')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"></path><path d="M3 4v5h5"></path><path d="M12 7v5l3 2"></path></svg><span class="app-tab-label">门禁</span></button>
+    <button class="app-tab" type="button" data-tab="exam" aria-selected="false" onclick="switchAdminTab('exam'); setMobileTab('exam')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 19 8-14 8 14"></path><path d="M6.5 15h11"></path></svg><span class="app-tab-label">考试</span></button>
+    <button class="app-tab" type="button" data-tab="config" aria-selected="false" onclick="switchAdminTab('config'); setMobileTab('config')"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.1 2.1-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56v.1h-3v-.1A1.7 1.7 0 0 0 10.7 18.6a1.7 1.7 0 0 0-1.88.34l-.06.06-2.1-2.1.06-.06A1.7 1.7 0 0 0 7.06 15 1.7 1.7 0 0 0 5.5 14H5.4v-3h.1A1.7 1.7 0 0 0 7.06 10a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.1-2.1.06.06A1.7 1.7 0 0 0 10.7 6.36a1.7 1.7 0 0 0 1.03-1.56V4.7h3v.1a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.88-.34l.06-.06 2.1 2.1-.06.06A1.7 1.7 0 0 0 19.4 10a1.7 1.7 0 0 0 1.56 1h.1v3h-.1A1.7 1.7 0 0 0 19.4 15Z"></path></svg><span class="app-tab-label">设置</span></button>
+  </nav>
 
 </body>
 </html>

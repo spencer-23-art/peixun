@@ -1717,8 +1717,10 @@ def get_all_records(start_date: str = None, end_date: str = None, company: str =
         params.append(company.strip())
         
     if name and name.strip():
-        conditions.append("r.name LIKE ?")
-        params.append(f"%{name.strip()}%")
+        # 管理端移动搜索框：姓名、单位、身份证和手机号均可检索。
+        keyword = f"%{name.strip()}%"
+        conditions.append("(r.name LIKE ? OR r.company LIKE ? OR r.id_card LIKE ? OR r.phone LIKE ?)")
+        params.extend([keyword, keyword, keyword, keyword])
     
     start = start_date.strip() if start_date and start_date.strip() else None
     end = end_date.strip() if end_date and end_date.strip() else None
@@ -2685,8 +2687,10 @@ def get_exam_records(company: str = '', exam_type: str = '', name: str = '',
             base_query += " AND exam_type = ?"
             params.append(exam_type)
         if name:
-            base_query += " AND name LIKE ?"
-            params.append(f"%{name}%")
+            # 手机端合并搜索：姓名、工作单位、身份证后六位及科目均可查。
+            keyword = f"%{name}%"
+            base_query += " AND (name LIKE ? OR company LIKE ? OR exam_type LIKE ? OR EXISTS (SELECT 1 FROM records r WHERE r.name = exam_records.name AND r.company = exam_records.company AND (r.id_card LIKE ? OR r.phone LIKE ?)))"
+            params.extend([keyword, keyword, keyword, keyword, keyword])
             
         # 查出全部符合条件的记录，以便在内存中去重合并多次答题
         query = f"SELECT * {base_query} ORDER BY created_at DESC"
