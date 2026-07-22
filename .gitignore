@@ -14,6 +14,8 @@ app_stdout.log
 *.pem
 cert.pem
 key.pem
+# Android 仅内置这张公开 CA 证书；服务器私钥仍只保存在 /data/peixun/tls。
+!android-app/app/src/main/res/raw/peixun_private_ca.pem
 
 # 导出产物（运行时生成）
 training_records_export.*
