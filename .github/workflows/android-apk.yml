@@ -41,8 +41,28 @@ jobs:
         run: echo "$KEYSTORE_B64" | base64 --decode > "$ANDROID_KEYSTORE_PATH"
 
       - name: Build release APK
+        id: apk_build
         working-directory: android-app
-        run: gradle :app:assembleRelease --no-daemon
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle :app:assembleRelease --no-daemon 2>&1 | tee "$RUNNER_TEMP/peixun-android-build.log"
+          build_status=${PIPESTATUS[0]}
+          if [ "$build_status" -ne 0 ]; then
+            summary=$(grep -E '(^e: |^error: |FAILURE:|What went wrong|Execution failed)' "$RUNNER_TEMP/peixun-android-build.log" | tail -n 8 || true)
+            summary=${summary//$'\n'/ }
+            echo "::error title=APK build failed::${summary:0:900}"
+          fi
+          exit "$build_status"
+
+      - name: Upload build diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: peixun-mobile-build-log-${{ github.run_number }}
+          path: ${{ runner.temp }}/peixun-android-build.log
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Verify APK signature
         working-directory: android-app
