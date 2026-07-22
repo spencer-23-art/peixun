@@ -1,3 +1,5 @@
+import org.gradle.api.tasks.Copy
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -11,6 +13,11 @@ val hasReleaseSigning = listOf(
 ).all { System.getenv(it)?.isNotBlank() == true }
 
 val buildNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
+val generatedIconDirectory = layout.buildDirectory.dir("generated/res/launcherIcon")
+val generateLauncherIcon by tasks.registering(Copy::class) {
+    from(rootProject.file("../tubiao.png"))
+    into(generatedIconDirectory.map { it.dir("drawable-nodpi") })
+}
 
 android {
     namespace = "com.peixun.mobile"
@@ -61,4 +68,14 @@ android {
     buildFeatures {
         buildConfig = true
     }
+
+    sourceSets {
+        getByName("main") {
+            res.srcDir(generatedIconDirectory)
+        }
+    }
+}
+
+tasks.named("preBuild") {
+    dependsOn(generateLauncherIcon)
 }

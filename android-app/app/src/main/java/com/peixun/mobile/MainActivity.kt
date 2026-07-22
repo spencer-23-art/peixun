@@ -53,11 +53,17 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableImmersiveMode()
-        requestPreferredRefreshRate()
-        setContentView(createContentView())
-        configureWebView()
-        webView.loadUrl(APP_URL)
+        try {
+            enableImmersiveMode()
+            requestPreferredRefreshRate()
+            setContentView(createContentView())
+            configureWebView()
+            webView.loadUrl(APP_URL)
+        } catch (_: Exception) {
+            // An unavailable WebView provider or an OEM-specific window setting must not
+            // terminate the app before the user can see what needs attention.
+            showStartupFallback()
+        }
     }
 
     override fun onResume() {
@@ -320,33 +326,62 @@ class MainActivity : Activity() {
         if (::errorPanel.isInitialized) errorPanel.visibility = View.GONE
     }
 
+    private fun showStartupFallback() {
+        val fallback = TextView(this).apply {
+            text = "应用启动异常，请更新系统 Android System WebView 后重试"
+            setTextColor(Color.WHITE)
+            setBackgroundColor(Color.rgb(15, 23, 42))
+            textSize = 16f
+            gravity = Gravity.CENTER
+            setPadding(dp(28), dp(28), dp(28), dp(28))
+        }
+        setContentView(fallback)
+    }
+
     @Suppress("DEPRECATION")
     private fun enableImmersiveMode() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            window.setDecorFitsSystemWindows(false)
-            window.insetsController?.apply {
-                hide(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
-                systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                window.setDecorFitsSystemWindows(false)
+                window.insetsController?.apply {
+                    hide(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
+                    systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                }
+            } else {
+                window.decorView.systemUiVisibility =
+                    View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
+                        View.SYSTEM_UI_FLAG_FULLSCREEN or
+                        View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+                        View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+                        View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
+                        View.SYSTEM_UI_FLAG_LAYOUT_STABLE
             }
-        } else {
-            window.decorView.systemUiVisibility =
-                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
-                    View.SYSTEM_UI_FLAG_FULLSCREEN or
-                    View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
-                    View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
-                    View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
-                    View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+        } catch (_: RuntimeException) {
+            // Fullscreen is an enhancement; an OEM policy must not block app startup.
         }
     }
 
     @Suppress("DEPRECATION")
     private fun requestPreferredRefreshRate() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
-        val display = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) this.display else windowManager.defaultDisplay
-        val preferredMode = display?.supportedModes?.maxByOrNull { it.refreshRate } ?: return
-        window.attributes = window.attributes.apply {
-            preferredDisplayModeId = preferredMode.modeId
-            preferredRefreshRate = preferredMode.refreshRate
+        try {
+            val display = (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) this.display else windowManager.defaultDisplay)
+                ?: return
+            val activeMode = display.mode
+            val preferredRate = display.supportedModes
+                .filter {
+                    it.physicalWidth == activeMode.physicalWidth &&
+                        it.physicalHeight == activeMode.physicalHeight
+                }
+                .maxOfOrNull { it.refreshRate } ?: return
+            if (preferredRate > display.refreshRate) {
+                window.attributes = window.attributes.apply {
+                    // Advisory only: Android may keep an adaptive refresh rate to save battery.
+                    preferredRefreshRate = preferredRate
+                }
+            }
+        } catch (_: RuntimeException) {
+            // Keep the system-selected refresh rate on unusual display implementations.
         }
     }
 
