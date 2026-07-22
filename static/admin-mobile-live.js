@@ -23,6 +23,8 @@
     downloadOpen: false,
     composing: { record: false, exam: false, pending: false, restore: false },
     pendingQuery: '',
+    pendingCompanyOpen: false,
+    pendingCompany: '',
     restoreQuery: '',
     examCompanyOpen: false,
     examFiltersOpen: false,
@@ -166,14 +168,22 @@
   }
   function pendingPanel() {
     var query = String(state.pendingQuery || '').trim().toLowerCase();
-    var users = getGlobalArray('users').filter(function (u) {
-      var isVisible = u && (u.status === 'approved' || u.status === 'disabled');
-      return isVisible && (!query || [u.username, u.real_name, u.company, u.phone].some(function (x) { return String(x || '').toLowerCase().indexOf(query) !== -1; }));
+    var selectedCompany = String(state.pendingCompany || '');
+    var allUsers = getGlobalArray('users').filter(function (u) {
+      return u && (u.status === 'approved' || u.status === 'disabled');
+    });
+    var companies = Array.from(new Set(allUsers.map(function (u) { return String(u.company || '').trim(); }).filter(Boolean))).sort();
+    var companyOptions = [''].concat(companies).map(function (company) {
+      return '<button type="button" onclick="mobileAdminSelectPendingCompany(' + jsArg(company) + ')">' + esc(company || '全部工作单位') + '</button>';
+    }).join('');
+    var users = allUsers.filter(function (u) {
+      var companyMatch = !selectedCompany || String(u.company || '') === selectedCompany;
+      return companyMatch && (!query || [u.username, u.real_name, u.company, u.phone].some(function (x) { return String(x || '').toLowerCase().indexOf(query) !== -1; }));
     });
     return '<section class="tab-panel ' + (state.tab === 'pending' ? 'is-active' : '') + '" data-panel="pending">' +
       '<div class="sheet"><h3 class="sheet-title">注册用户管理</h3><div class="list-line"><div>这里仅展示已通过或已停用的注册用户<small>待审核和已拒绝申请统一在右上角铃铛处理。</small></div><span class="state-pill">' + users.length + ' 人</span></div></div>' +
-      '<div class="page-toolbar"><div class="company-combobox"><span class="search-glyph">' + icon('search') + '</span><input type="search" value="' + esc(state.pendingQuery) + '" placeholder="搜索用户名、姓名、单位" oncompositionstart="mobileAdminCompositionStart(\'pending\')" oncompositionend="mobileAdminCompositionEnd(\'pending\',this.value)" oninput="mobileAdminPendingSearch(this.value,event)"></div></div>' +
-      '<div class="record-stack">' + (users.length ? users.map(userCard).join('') : '<div class="empty-state">没有符合条件的注册用户</div>') + '</div></section>';
+      '<div class="page-toolbar"><div class="company-combobox"><span class="search-glyph">' + icon('search') + '</span><input type="search" value="' + esc(state.pendingQuery) + '" placeholder="用户名、姓名、单位、手机号" oncompositionstart="mobileAdminCompositionStart(\'pending\')" oncompositionend="mobileAdminCompositionEnd(\'pending\',this.value)" oninput="mobileAdminPendingSearch(this.value,event)"><button class="company-toggle" type="button" aria-label="选择工作单位" onclick="mobileAdminTogglePendingCompany(event)">' + icon('down') + '</button><div class="company-options ' + (state.pendingCompanyOpen ? 'is-open' : '') + '">' + companyOptions + '</div></div></div>' +
+      '<div class="section-heading"><h3>' + esc(selectedCompany || '全部工作单位') + '</h3><span>当前 ' + users.length + ' 人</span></div><div class="record-stack">' + (users.length ? users.map(userCard).join('') : '<div class="empty-state">没有符合条件的注册用户</div>') + '</div></section>';
   }
   function userCard(u) {
     var status = u.status === 'approved' ? '已通过' : (u.status === 'rejected' ? '已拒绝' : '待审批');
@@ -406,6 +416,8 @@
   window.mobileAdminExport = function (format) { state.downloadOpen = false; render(); if (typeof window.exportData === 'function') window.exportData(format); };
   window.mobileAdminToggleRecord = function (id, checked) { if (typeof window.handleSingleCheckboxChange === 'function') window.handleSingleCheckboxChange({ checked: checked }, id); else render(); };
   window.mobileAdminPendingSearch = function (value, event) { if (state.composing.pending || (event && event.isComposing)) return; state.pendingQuery = value; render(); };
+  window.mobileAdminTogglePendingCompany = function (event) { if (event) event.stopPropagation(); state.pendingCompanyOpen = !state.pendingCompanyOpen; state.recordCompanyOpen = false; state.examCompanyOpen = false; render(); };
+  window.mobileAdminSelectPendingCompany = function (company) { state.pendingCompany = company || ''; state.pendingCompanyOpen = false; render(); };
   window.mobileAdminRestoreSearch = function (value, event) { if (state.composing.restore || (event && event.isComposing)) return; state.restoreQuery = value; render(); };
   window.mobileAdminToggleRestore = function (id, checked) { if (typeof window.handleSingleRestoreCheckboxChange === 'function') window.handleSingleRestoreCheckboxChange({ checked: checked }, id); else render(); };
   window.mobileAdminToggleExamCompany = function (event) { if (event) event.stopPropagation(); state.examCompanyOpen = !state.examCompanyOpen; render(); };
@@ -649,7 +661,7 @@
   document.addEventListener('click', function (event) {
     if (!isMobile()) return;
     var changed = false;
-    if (!event.target.closest('.company-combobox') && (state.recordCompanyOpen || state.examCompanyOpen)) { state.recordCompanyOpen = false; state.examCompanyOpen = false; changed = true; }
+    if (!event.target.closest('.company-combobox') && (state.recordCompanyOpen || state.pendingCompanyOpen || state.examCompanyOpen)) { state.recordCompanyOpen = false; state.pendingCompanyOpen = false; state.examCompanyOpen = false; changed = true; }
     if (!event.target.closest('.download-wrap') && state.downloadOpen) { state.downloadOpen = false; changed = true; }
     if (changed) render();
   });
