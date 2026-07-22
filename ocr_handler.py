@@ -813,15 +813,21 @@ def _is_real_crop(candidate, source):
     return ch * cw < sh * sw * 0.97
 
 
-def _document_preprocessor_candidate(image):
+def _document_preprocessor_candidate(image, use_screen_filter=False):
+    """使用开源文档裁切器生成候选卡面。
+
+    手机拍摄屏幕时，第二次尝试会使用轻度去横纹副本；仅当原图版本
+    未完整识别时才会进入该分支，避免不必要地改变普通照片。
+    """
     try:
         from document_preprocessor import DocumentPreprocessor
         import PIL.Image
         preprocessor = DocumentPreprocessor()
-        pil_img = PIL.Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+        source = _reduce_screen_pattern(image) if use_screen_filter else image
+        pil_img = PIL.Image.fromarray(cv2.cvtColor(source, cv2.COLOR_BGR2RGB))
         pil_warped = preprocessor.detect_and_warp_document(pil_img)
         candidate = cv2.cvtColor(np.asarray(pil_warped), cv2.COLOR_RGB2BGR)
-        return candidate if _is_real_crop(candidate, image) else None
+        return candidate if _is_real_crop(candidate, source) else None
     except Exception as exc:
         print(f"[OCR-Debug] document-preprocessor不可用: {type(exc).__name__}")
         return None
@@ -832,6 +838,58 @@ def _candidate_score(ocr_score, image):
     ratio = w / max(h, 1)
     aspect_bonus = max(0.0, 55.0 - abs(ratio - TARGET_ASPECT_RATIO) * 120.0)
     return ocr_score + aspect_bonus
+
+
+def _is_valid_id_card_number(id_card):
+    """验证 18 位居民身份证格式和校验位，避免误识别文本提前结束回退。"""
+    value = str(id_card or "").strip().upper()
+    if not re.fullmatch(r"[1-9]\d{16}[\dX]", value):
+        return False
+    weights = (7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2)
+    check_codes = "10X98765432"
+    checksum = sum(int(value[index]) * weights[index] for index in range(17)) % 11
+    return value[-1] == check_codes[checksum]
+
+
+def _has_complete_identity(metrics):
+    """当前阶段是否已完整识别姓名和可校验的身份证号。"""
+    _, name, id_card, _ = metrics
+    clean_name = re.sub(r"[\s·・]", "", str(name or ""))
+    return len(clean_name) >= 2 and _is_valid_id_card_number(id_card)
+
+
+def _is_structurally_safe_crop(candidate, source):
+    """防止信息虽然被 OCR 读到，但候选图把卡片边缘或主体切掉。"""
+    if not _is_real_crop(candidate, source):
+        return False
+    height, width = candidate.shape[:2]
+    long_edge, short_edge = max(width, height), max(1, min(width, height))
+    ratio = long_edge / short_edge
+    source_area = max(source.shape[0] * source.shape[1], 1)
+    crop_area = height * width
+    return 1.28 <= ratio <= 2.00 and crop_area >= source_area * 0.035
+
+
+def _evaluate_crop_candidate(engine, method, candidate, source):
+    """统一做结构检查、方向整理和 OCR 完整度评分。"""
+    if not _is_structurally_safe_crop(candidate, source):
+        print(f"[OCR-Debug] 裁切候选丢弃: {method}, 原因: 结构不可靠")
+        return None
+    prepared = _prepare_card_candidate(candidate)
+    _, metrics = _run_ocr(engine, prepared)
+    score = _candidate_score(metrics[0], prepared)
+    complete = _has_complete_identity(metrics)
+    print(
+        f"[OCR-Debug] 裁切候选: {method}, 尺寸: {prepared.shape[1]}x{prepared.shape[0]}, "
+        f"质量分: {score:.1f}, 姓名身份证完整: {'是' if complete else '否'}"
+    )
+    return {
+        "method": method,
+        "image": prepared,
+        "metrics": metrics,
+        "score": score,
+        "complete": complete,
+    }
 
 
 def ocr_idcard_process(image_path):
@@ -847,63 +905,88 @@ def ocr_idcard_process(image_path):
     name, id_card, nation = initial_metrics[1], initial_metrics[2], initial_metrics[3]
     print(f"[OCR-Debug] 输入方向: {orientation_method}, OCR框: {len(initial_ocr or [])}, 质量分: {initial_metrics[0]:.1f}")
 
-    candidate_specs = []
-    if initial_ocr and len(initial_ocr) >= 2:
-        anchor_crop = _crop_by_ocr_boxes(oriented, initial_ocr)
-        if _is_real_crop(anchor_crop, oriented):
-            candidate_specs.append(("ocr_anchors", anchor_crop))
+    # 按人工确认的顺序串行回退：开源文档裁切器 → OpenCV → OCR 锚点。
+    # 每一道都必须先重新识别出完整姓名和校验通过的身份证号，才能停止。
+    print("[OCR-Debug] 裁切顺序: document_preprocessor -> opencv -> ocr_anchors")
+    evaluations = []
+    selected = None
 
-    quad = _detect_id_card_body_quad(oriented)
-    if quad is not None:
-        body_crop = _four_point_transform(oriented, _expand_quad(quad, oriented.shape, scale_x=1.07, scale_y=1.10))
-        if _is_real_crop(body_crop, oriented):
-            candidate_specs.append(("card_body", body_crop))
+    # 第一道：开源 document-preprocessor。普通图先原图；信息不完整时再抗横纹。
+    for method, use_screen_filter in (
+        ("document_preprocessor", False),
+        ("document_preprocessor_screen_filter", True),
+    ):
+        candidate = _document_preprocessor_candidate(oriented, use_screen_filter=use_screen_filter)
+        if candidate is None:
+            print(f"[OCR-Debug] 第一道无有效候选: {method}")
+            continue
+        evaluation = _evaluate_crop_candidate(engine, method, candidate, oriented)
+        if evaluation is None:
+            continue
+        evaluations.append(evaluation)
+        if evaluation["complete"]:
+            selected = evaluation
+            break
 
-    contour_crop = crop_by_card_contour(oriented, is_special_cert=False)
-    if _is_real_crop(contour_crop, oriented):
-        candidate_specs.append(("card_contour", contour_crop))
+    # 第二道：OpenCV 卡面检测，再尝试轮廓检测。
+    if selected is None:
+        print("[OCR-Debug] 第一道未完整识别，进入第二道 OpenCV")
+        opencv_candidates = []
+        quad = _detect_id_card_body_quad(oriented)
+        if quad is not None:
+            body_crop = _four_point_transform(oriented, _expand_quad(quad, oriented.shape, scale_x=1.07, scale_y=1.10))
+            opencv_candidates.append(("opencv_card_body", body_crop))
+        contour_crop = crop_by_card_contour(oriented, is_special_cert=False)
+        opencv_candidates.append(("opencv_card_contour", contour_crop))
+        for method, candidate in opencv_candidates:
+            if candidate is None:
+                print(f"[OCR-Debug] 第二道无有效候选: {method}")
+                continue
+            evaluation = _evaluate_crop_candidate(engine, method, candidate, oriented)
+            if evaluation is None:
+                continue
+            evaluations.append(evaluation)
+            if evaluation["complete"]:
+                selected = evaluation
+                break
 
-    best_crop = None
-    best_crop_method = "original"
-    best_crop_score = -1.0
-    best_crop_ocr_score = -1.0
-    for method, candidate in candidate_specs:
-        prepared = _prepare_card_candidate(candidate)
-        candidate_ocr, metrics = _run_ocr(engine, prepared)
-        score = _candidate_score(metrics[0], prepared)
-        print(f"[OCR-Debug] 裁切候选: {method}, 尺寸: {prepared.shape[1]}x{prepared.shape[0]}, 质量分: {score:.1f}")
-        if score > best_crop_score:
-            best_crop, best_crop_method, best_crop_score = prepared, method, score
-            best_crop_ocr_score = metrics[0]
+    # 第三道：用 OCR 文字框定位；该方法内部会在锚点不足时使用 IQR 回退。
+    if selected is None:
+        print("[OCR-Debug] 第二道未完整识别，进入第三道 OCR 文字框")
+        if initial_ocr and len(initial_ocr) >= 2:
+            anchor_crop = _crop_by_ocr_boxes(oriented, initial_ocr)
+            evaluation = _evaluate_crop_candidate(engine, "ocr_anchors", anchor_crop, oriented)
+            if evaluation is not None:
+                evaluations.append(evaluation)
+                if evaluation["complete"]:
+                    selected = evaluation
+        else:
+            print("[OCR-Debug] 第三道无有效 OCR 文字框")
+
+    # 汇总所有候选中的最佳识别字段；仅当裁切图明显提升信息质量时才作为不完整结果保存。
+    for evaluation in evaluations:
+        metrics = evaluation["metrics"]
         if metrics[0] > best_info_score:
             best_info_score = metrics[0]
             name, id_card, nation = metrics[1], metrics[2], metrics[3]
-        if metrics[1] and metrics[2] and metrics[0] >= 260:
-            break
 
-    # 前三种方法没有形成可靠卡面时，最后才尝试第三方文档裁切。
-    if best_crop is None or best_crop_score < 180:
-        document_crop = _document_preprocessor_candidate(oriented)
-        if document_crop is not None:
-            prepared = _prepare_card_candidate(document_crop)
-            _, metrics = _run_ocr(engine, prepared)
-            score = _candidate_score(metrics[0], prepared)
-            if score > best_crop_score:
-                best_crop, best_crop_method, best_crop_score = prepared, "document_preprocessor", score
-                best_crop_ocr_score = metrics[0]
-            if metrics[0] > best_info_score:
-                best_info_score = metrics[0]
-                name, id_card, nation = metrics[1], metrics[2], metrics[3]
+    if selected is not None:
+        img_cropped = selected["image"]
+        crop_method = selected["method"]
+        _, name, id_card, nation = selected["metrics"]
+        best_info_score = selected["metrics"][0]
+    else:
+        best_partial = max(evaluations, key=lambda item: item["score"], default=None)
+        if best_partial is not None and best_partial["metrics"][0] >= initial_metrics[0] + 35:
+            img_cropped = best_partial["image"]
+            crop_method = best_partial["method"] + "_partial"
+            print("[OCR-Debug] 三道均未完整识别，保留信息质量明显更高的安全裁切候选")
+        else:
+            img_cropped = oriented.copy()
+            crop_method = "original_safe"
+            print("[OCR-Debug] 三道均未完整识别，保护性保留原图")
 
-    # 原图已经完整识别、但所有裁切候选都明显变差时，保留原图，避免二次误裁。
-    if best_crop_ocr_score < 160 and initial_metrics[0] >= 260:
-        best_crop = None
-        best_crop_method = "original"
-
-    # 没有任何可信裁切时保留整张原图，保证绝不因算法失败而丢信息。
-    img_cropped = best_crop if best_crop is not None else oriented.copy()
-    crop_method = best_crop_method if best_crop is not None else "original_safe"
-    if best_crop is not None and img_cropped.shape[1] < 856:
+    if crop_method != "original_safe" and img_cropped.shape[1] < 856:
         scale = 856.0 / img_cropped.shape[1]
         img_cropped = cv2.resize(img_cropped, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
     print(f"[OCR-Debug] 最终裁切: {crop_method}, 尺寸: {img_cropped.shape[1]}x{img_cropped.shape[0]}, 信息分: {best_info_score:.1f}")
