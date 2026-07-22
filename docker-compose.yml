@@ -1,6 +1,20 @@
 version: '3.8'
 
 services:
+  # Android APK uses this TLS entry point. The certificate private key lives only
+  # on the server under /data/peixun/tls and is deliberately not part of Git.
+  peixun-proxy:
+    image: nginx:1.27-alpine
+    container_name: peixun-proxy
+    ports:
+      - "443:443"
+    volumes:
+      - ./deploy/nginx/peixun.conf:/etc/nginx/conf.d/default.conf:ro
+      - /data/peixun/tls:/etc/nginx/tls:ro
+    depends_on:
+      - peixun-app
+    restart: always
+
   redis:
     image: redis:alpine
     container_name: peixun-redis
