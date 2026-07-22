@@ -8,7 +8,7 @@ APK 由 GitHub Actions 构建：进入仓库的 **Actions → Build Android APK*
 
 为确保以后的 APK 可以直接覆盖更新，请在 GitHub 仓库 **Settings → Secrets and variables → Actions** 配置以下四个 Secrets：
 
-- `ANDROID_KEYSTORE_BASE64`：正式 `.jks` 签名文件的 Base64 文本
+- `ANDROID_KEYSTORE_BASE64`：正式 `.p12` 或 `.jks` 签名文件的 Base64 文本
 - `ANDROID_KEYSTORE_PASSWORD`：签名文件密码
 - `ANDROID_KEY_ALIAS`：密钥别名
 - `ANDROID_KEY_PASSWORD`：别名密码
