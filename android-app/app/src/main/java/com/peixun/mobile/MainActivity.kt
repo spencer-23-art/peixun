@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
+import android.util.Log
 import android.view.Gravity
 import android.view.View
 import android.view.WindowInsets
@@ -38,6 +39,7 @@ import javax.net.ssl.HttpsURLConnection
 
 class MainActivity : Activity() {
     companion object {
+        private const val TAG = "PeixunDisplay"
         private const val APP_URL = "https://8.148.25.74/"
         private const val APP_HOST = "8.148.25.74"
         private const val FILE_CHOOSER_REQUEST = 1001
@@ -54,6 +56,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         try {
+            configureFullscreenWindow()
             enableImmersiveMode()
             requestPreferredRefreshRate()
             setContentView(createContentView())
@@ -68,6 +71,7 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        configureFullscreenWindow()
         enableImmersiveMode()
         requestPreferredRefreshRate()
     }
@@ -127,6 +131,10 @@ class MainActivity : Activity() {
             FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.MATCH_PARENT
         ))
+        // Keep scrolling and CSS compositing on the GPU.  This is the normal
+        // WebView default, but stating it explicitly avoids OEM fallbacks.
+        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
+        webView.overScrollMode = View.OVER_SCROLL_NEVER
 
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -185,6 +193,17 @@ class MainActivity : Activity() {
             userAgentString = "$userAgentString PeixunMobile/1.0"
         }
         CookieManager.getInstance().setAcceptCookie(true)
+
+        // Some Android 9/10 builds reveal the status bar again after a WebView
+        // navigation or a file picker returns. Re-apply immersive mode once the
+        // system has finished its own visibility update.
+        webView.setOnSystemUiVisibilityChangeListener {
+            webView.postDelayed({
+                if (!isFinishing && (Build.VERSION.SDK_INT < Build.VERSION_CODES.JELLY_BEAN_MR1 || !isDestroyed)) {
+                    enableImmersiveMode()
+                }
+            }, 180)
+        }
 
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
@@ -338,6 +357,32 @@ class MainActivity : Activity() {
         setContentView(fallback)
     }
 
+    private fun configureFullscreenWindow() {
+        try {
+            window.setFlags(
+                WindowManager.LayoutParams.FLAG_FULLSCREEN,
+                WindowManager.LayoutParams.FLAG_FULLSCREEN
+            )
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                window.attributes = window.attributes.apply {
+                    // Allow the WebView to render behind a notch or punch hole.
+                    // The web pages use safe-area insets to keep controls clear.
+                    layoutInDisplayCutoutMode =
+                        WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                }
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                window.statusBarColor = Color.TRANSPARENT
+                window.navigationBarColor = Color.TRANSPARENT
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                window.setDecorFitsSystemWindows(false)
+            }
+        } catch (_: RuntimeException) {
+            // Fullscreen remains an enhancement on unusual OEM window managers.
+        }
+    }
+
     @Suppress("DEPRECATION")
     private fun enableImmersiveMode() {
         try {
@@ -373,13 +418,24 @@ class MainActivity : Activity() {
                     it.physicalWidth == activeMode.physicalWidth &&
                         it.physicalHeight == activeMode.physicalHeight
                 }
-                .maxOfOrNull { it.refreshRate } ?: return
-            if (preferredRate > display.refreshRate) {
+                .maxByOrNull { it.refreshRate } ?: return
+            val currentAttributes = window.attributes
+            if (
+                currentAttributes.preferredDisplayModeId != preferredRate.modeId ||
+                currentAttributes.preferredRefreshRate != preferredRate.refreshRate
+            ) {
                 window.attributes = window.attributes.apply {
-                    // Advisory only: Android may keep an adaptive refresh rate to save battery.
-                    preferredRefreshRate = preferredRate
+                    // Both fields are advisory. The mode id helps Android 9/10;
+                    // the refresh-rate hint is preferred on newer Android releases.
+                    preferredDisplayModeId = preferredRate.modeId
+                    preferredRefreshRate = preferredRate.refreshRate
                 }
             }
+            Log.i(
+                TAG,
+                "Requested ${preferredRate.refreshRate}Hz (mode ${preferredRate.modeId}); " +
+                    "active display is ${display.refreshRate}Hz"
+            )
         } catch (_: RuntimeException) {
             // Keep the system-selected refresh rate on unusual display implementations.
         }
