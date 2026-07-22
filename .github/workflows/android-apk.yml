@@ -44,16 +44,19 @@ jobs:
         id: apk_build
         working-directory: android-app
         shell: bash
+        continue-on-error: true
         run: |
           set -o pipefail
           gradle :app:assembleRelease --no-daemon 2>&1 | tee "$RUNNER_TEMP/peixun-android-build.log"
-          build_status=${PIPESTATUS[0]}
-          if [ "$build_status" -ne 0 ]; then
-            summary=$(grep -E '(^e: |^error: |FAILURE:|What went wrong|Execution failed)' "$RUNNER_TEMP/peixun-android-build.log" | tail -n 8 || true)
-            summary=${summary//$'\n'/ }
-            echo "::error title=APK build failed::${summary:0:900}"
-          fi
-          exit "$build_status"
+          exit ${PIPESTATUS[0]}
+
+      - name: Surface build failure
+        if: ${{ steps.apk_build.outcome == 'failure' }}
+        shell: bash
+        run: |
+          summary=$(tail -n 30 "$RUNNER_TEMP/peixun-android-build.log" | tr '\n' ' ' | sed 's/%/%25/g' | cut -c1-900)
+          echo "::error title=APK build failed::${summary}"
+          exit 1
 
       - name: Upload build diagnostics
         if: ${{ always() }}
