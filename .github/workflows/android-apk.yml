@@ -54,7 +54,10 @@ jobs:
         if: ${{ steps.apk_build.outcome == 'failure' }}
         shell: bash
         run: |
-          summary=$(tail -n 30 "$RUNNER_TEMP/peixun-android-build.log" | tr '\n' ' ' | sed 's/%/%25/g' | cut -c1-900)
+          summary=$(grep -E '(^ERROR:|^error:|^AAPT:|Android resource linking failed|resource .* not found|attribute .* not found)' "$RUNNER_TEMP/peixun-android-build.log" | tail -n 10 | tr '\n' ' ' | sed 's/%/%25/g' | cut -c1-900)
+          if [ -z "$summary" ]; then
+            summary=$(tail -n 12 "$RUNNER_TEMP/peixun-android-build.log" | tr '\n' ' ' | sed 's/%/%25/g' | cut -c1-900)
+          fi
           echo "::error title=APK build failed::${summary}"
           exit 1
 
