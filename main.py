@@ -278,6 +278,112 @@ def safe_temp_id_path(path: str) -> bool:
     # 必须在 temp_ids 目录之下，且文件真实存在
     return real.startswith(base + os.sep) and os.path.isfile(real)
 
+
+def _parse_cleanup_dates(start_date: str, end_date: str):
+    """Validate an inclusive Beijing-date range used by the admin cleanup tool."""
+    try:
+        start = datetime.strptime((start_date or '').strip(), "%Y-%m-%d").date()
+        end = datetime.strptime((end_date or '').strip(), "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="请选择正确的开始和结束日期")
+    if start > end:
+        raise HTTPException(status_code=400, detail="开始日期不能晚于结束日期")
+    return start.isoformat(), end.isoformat()
+
+
+def _require_primary_admin(admin):
+    """Bulk deletion is intentionally limited to the primary administrator."""
+    if admin['username'] != 'admin':
+        raise HTTPException(status_code=403, detail="仅超级管理员可以清理资料")
+
+
+def _managed_upload_path(path: str):
+    """Return an existing upload file only when it is safely inside uploads/."""
+    if not path:
+        return None
+    upload_root = os.path.realpath(UPLOAD_DIR)
+    candidate = os.path.realpath(str(path))
+    try:
+        if os.path.commonpath([upload_root, candidate]) != upload_root:
+            return None
+    except ValueError:
+        return None
+    return candidate if os.path.isfile(candidate) else None
+
+
+def _build_storage_cleanup_plan(cursor, start_date: str, end_date: str):
+    """Collect only files owned by selected training records, without deleting yet."""
+    date_filter = "substr(created_at, 1, 10) >= ? AND substr(created_at, 1, 10) <= ?"
+    cursor.execute(
+        f"SELECT id, id_card, photo_path, word_path FROM records WHERE {date_filter}",
+        (start_date, end_date)
+    )
+    records = cursor.fetchall()
+    cursor.execute(
+        f"""
+        SELECT id, photo_path, id_card_img_path FROM record_updates
+        WHERE record_id IN (SELECT id FROM records WHERE {date_filter})
+        """,
+        (start_date, end_date)
+    )
+    updates = cursor.fetchall()
+
+    file_candidates = []
+    for record in records:
+        file_candidates.extend([
+            (record['photo_path'], 'photo'),
+            (record['word_path'], 'card')
+        ])
+    for update in updates:
+        file_candidates.extend([
+            (update['photo_path'], 'update_attachment'),
+            (update['id_card_img_path'], 'update_attachment')
+        ])
+
+    # An ID card image is named by ID number and can be shared by multiple
+    # training entries. Remove it only when no record outside this range uses it.
+    id_cards = sorted({str(record['id_card']).strip() for record in records if record['id_card']})
+    remaining_id_cards = set()
+    if id_cards:
+        placeholders = ','.join('?' for _ in id_cards)
+        cursor.execute(
+            f"""
+            SELECT DISTINCT id_card FROM records
+            WHERE id_card IN ({placeholders})
+              AND NOT ({date_filter})
+            """,
+            tuple(id_cards) + (start_date, end_date)
+        )
+        remaining_id_cards = {str(row['id_card']).strip() for row in cursor.fetchall()}
+    for id_card in id_cards:
+        if id_card not in remaining_id_cards and validate_id_card(id_card):
+            file_candidates.append((os.path.join(UPLOAD_DIR, 'idcards', f"{id_card}.png"), 'id_card'))
+
+    files = {}
+    for path, kind in file_candidates:
+        managed_path = _managed_upload_path(path)
+        if not managed_path:
+            continue
+        if managed_path not in files:
+            try:
+                files[managed_path] = {
+                    'kind': kind,
+                    'size': os.path.getsize(managed_path)
+                }
+            except OSError:
+                pass
+
+    kind_counts = defaultdict(int)
+    for info in files.values():
+        kind_counts[info['kind']] += 1
+    return {
+        'records': records,
+        'updates': updates,
+        'files': files,
+        'file_counts': dict(kind_counts),
+        'estimated_bytes': sum(info['size'] for info in files.values())
+    }
+
 # R4: 过滤字符串中不能用于文件名的字符（跨平台），用于导出文件命名。
 _FILENAME_INVALID_CHARS = r'\/:*?"<>|'
 
@@ -3130,6 +3236,128 @@ def delete_exam_subject(name: str = Form(...), admin = Depends(get_admin_user)):
     return {"code": 200, "message": "科目删除成功", "data": new_subjects}
 
 # 获取考试配置（仅管理员）
+@app.get("/api/admin/storage-cleanup/preview")
+def preview_storage_cleanup(
+    start_date: str,
+    end_date: str,
+    admin = Depends(get_admin_user)
+):
+    """Preview a destructive cleanup without modifying database rows or files."""
+    _require_primary_admin(admin)
+    start_date, end_date = _parse_cleanup_dates(start_date, end_date)
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    try:
+        plan = _build_storage_cleanup_plan(conn.cursor(), start_date, end_date)
+        return {
+            "code": 200,
+            "data": {
+                "start_date": start_date,
+                "end_date": end_date,
+                "record_count": len(plan['records']),
+                "update_request_count": len(plan['updates']),
+                "file_count": len(plan['files']),
+                "estimated_bytes": plan['estimated_bytes'],
+                "file_counts": plan['file_counts'],
+                "exam_records_kept": True
+            }
+        }
+    finally:
+        conn.close()
+
+
+@app.post("/api/admin/storage-cleanup")
+def cleanup_storage(
+    start_date: str = Form(...),
+    end_date: str = Form(...),
+    confirm_phrase: str = Form(...),
+    admin = Depends(get_admin_user)
+):
+    """Permanently remove selected training archives and their managed files."""
+    _require_primary_admin(admin)
+    if confirm_phrase.strip() != "清理资料":
+        raise HTTPException(status_code=400, detail="请输入“清理资料”后才能执行永久清理")
+
+    start_date, end_date = _parse_cleanup_dates(start_date, end_date)
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    plan = None
+    try:
+        cursor = conn.cursor()
+        # A write lock ensures the previewed records cannot change midway through
+        # cleanup. New records outside the selected range remain unaffected.
+        cursor.execute("BEGIN IMMEDIATE")
+        plan = _build_storage_cleanup_plan(cursor, start_date, end_date)
+        if not plan['records']:
+            conn.rollback()
+            return {
+                "code": 200,
+                "message": "所选日期内没有可清理的录入资料",
+                "data": {
+                    "record_count": 0,
+                    "update_request_count": 0,
+                    "file_count": 0,
+                    "bytes_reclaimed": 0,
+                    "exam_records_kept": True
+                }
+            }
+
+        date_filter = "substr(created_at, 1, 10) >= ? AND substr(created_at, 1, 10) <= ?"
+        cursor.execute(
+            f"DELETE FROM record_updates WHERE record_id IN (SELECT id FROM records WHERE {date_filter})",
+            (start_date, end_date)
+        )
+        cursor.execute(
+            f"DELETE FROM records WHERE {date_filter}",
+            (start_date, end_date)
+        )
+        conn.commit()
+
+        removed_files = 0
+        bytes_reclaimed = 0
+        failed_files = 0
+        for file_path, info in plan['files'].items():
+            try:
+                os.remove(file_path)
+                removed_files += 1
+                bytes_reclaimed += info['size']
+            except OSError:
+                failed_files += 1
+
+        # SQLite keeps freed pages until vacuumed. Checkpoint and vacuum after
+        # committing so the storage cleanup actually releases disk space.
+        vacuum_error = ''
+        try:
+            cursor.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            cursor.execute("VACUUM")
+        except sqlite3.Error as error:
+            vacuum_error = str(error)
+            print(f"[Storage cleanup] Database vacuum skipped: {vacuum_error}")
+
+        return {
+            "code": 200,
+            "message": "资料清理完成",
+            "data": {
+                "record_count": len(plan['records']),
+                "update_request_count": len(plan['updates']),
+                "file_count": removed_files,
+                "failed_file_count": failed_files,
+                "bytes_reclaimed": bytes_reclaimed,
+                "database_vacuumed": not bool(vacuum_error),
+                "exam_records_kept": True
+            }
+        }
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as error:
+        conn.rollback()
+        print(f"[Storage cleanup] Failed: {error}")
+        raise HTTPException(status_code=500, detail="资料清理失败，未完成的数据库删除已回滚")
+    finally:
+        conn.close()
+
+
 @app.get("/api/admin/config")
 def get_configs_api(admin = Depends(get_admin_user)):
     default_jobs = '普工,木工,泥工,钢筋工,电焊工,电工,安拆工,塔吊司机,吊车司机,信号工,电梯司机,管理人员,安全员'

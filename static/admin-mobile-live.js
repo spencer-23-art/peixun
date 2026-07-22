@@ -37,7 +37,11 @@
       notice: '',
       error: '',
       busy: false,
-      adminEditor: null
+      adminEditor: null,
+      cleanupStart: '',
+      cleanupEnd: '',
+      cleanupPreview: null,
+      cleanupResult: null
     }
   };
 
@@ -261,7 +265,7 @@
     var end = config ? config.end_time : '--';
     var regions = config && config.regions.length ? config.regions.join('、') : '未配置';
     return '<section class="tab-panel ' + (state.tab === 'settings' ? 'is-active' : '') + '" data-panel="settings">' +
-      settingsRow('系统配置', '考试 ' + start + ' – ' + end + ' · 区域 ' + regions, 'core') + settingsRow('培训单位', '查看当前单位与归属来源', 'units') + settingsRow('考试题库', '科目、题目、导入与更新', 'bank') + settingsRow('二级管理员', '账号、权限与状态', 'admins') + settingsRow('修改密码', '更新当前管理员密码', 'password') + settingsLogoutRow() + settingsNotice() + '</section>';
+      settingsRow('系统配置', '考试 ' + start + ' – ' + end + ' · 区域 ' + regions, 'core') + settingsRow('培训单位', '查看当前单位与归属来源', 'units') + settingsRow('考试题库', '科目、题目、导入与更新', 'bank') + settingsRow('二级管理员', '账号、权限与状态', 'admins') + settingsRow('修改密码', '更新当前管理员密码', 'password') + settingsRow('清理资料', '按日期清理录入档案与上传文件', 'cleanup') + settingsLogoutRow() + settingsNotice() + '</section>';
   }
   function settingsRow(title, detail, view) {
     return '<button class="settings-row" type="button" onclick="mobileAdminOpenSettings(\'' + view + '\')"><span class="settings-icon">' + icon('settings') + '</span><span class="settings-copy"><strong>' + title + '</strong><span>' + detail + '</span></span>' + icon('arrow') + '</button>';
@@ -283,6 +287,7 @@
     if (state.settingsView === 'bank') body = settingsBankPanel();
     if (state.settingsView === 'admins') body = settingsAdminsPanel();
     if (state.settingsView === 'password') body = settingsPasswordPanel();
+    if (state.settingsView === 'cleanup') body = settingsCleanupPanel();
     return '<section class="tab-panel is-active settings-detail" data-panel="settings">' + body + settingsNotice() + '</section>';
   }
   function settingsCorePanel() {
@@ -317,6 +322,28 @@
     var editorHtml = editor ? '<div class="sheet settings-form"><h4>' + (editor.id ? '编辑二级管理员' : '新增二级管理员') + '</h4><label>账号<input id="mobile-subadmin-username" value="' + esc(editor.username || '') + '" placeholder="手机号或用户名"></label><label>真实姓名<input id="mobile-subadmin-realname" value="' + esc(editor.real_name || '') + '" placeholder="真实姓名"></label><label>公司 / 部门<input id="mobile-subadmin-company" value="' + esc(editor.company || '') + '" placeholder="公司或部门"></label><label>' + (editor.id ? '新密码（留空不修改）' : '密码') + '<input id="mobile-subadmin-password" type="password" placeholder="至少 6 位"></label><div class="settings-form-actions"><button type="button" onclick="mobileAdminCancelSubAdminEdit()">取消</button><button class="settings-primary" type="button" onclick="mobileAdminSaveSubAdmin()">保存</button></div></div>' : '<button type="button" class="settings-primary" onclick="mobileAdminNewSubAdmin()">新增二级管理员</button>';
     return settingsDetailHeader('二级管理员', '账号、权限与状态') + editorHtml + '<div class="settings-list">' +
       (admins.length ? admins.map(function (admin) { return '<article class="settings-list-card"><div><strong>' + esc(admin.real_name || admin.username) + '</strong><small>' + esc(admin.username) + ' · ' + esc(admin.company || '--') + '</small></div><div class="settings-list-actions"><button class="small-action" type="button" onclick="mobileAdminEditSubAdmin(' + Number(admin.id) + ')">编辑</button><button class="small-action danger-action" type="button" onclick="mobileAdminDeleteSubAdmin(' + Number(admin.id) + ',' + jsArg(admin.username) + ')">删除</button></div></article>'; }).join('') : '<div class="empty-state">暂无二级管理员</div>') + '</div>';
+  }
+  function formatCleanupBytes(value) {
+    var bytes = Number(value || 0);
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+  }
+  function settingsCleanupPanel() {
+    var preview = state.settings.cleanupPreview;
+    var result = state.settings.cleanupResult;
+    var feedback = '';
+    if (preview) {
+      feedback = '<div class="settings-notice"><strong>清理预览</strong><br>' + esc(preview.start_date) + ' 至 ' + esc(preview.end_date) + '：将删除 ' + Number(preview.record_count || 0) + ' 条录入档案、' + Number(preview.update_request_count || 0) + ' 条关联修改申请、' + Number(preview.file_count || 0) + ' 个文件，预计释放 ' + formatCleanupBytes(preview.estimated_bytes) + '。<br><small>考试记录、注册账号、系统配置和题库不会删除。</small></div>';
+    }
+    if (result) {
+      feedback = '<div class="settings-notice"><strong>清理完成</strong><br>已删除 ' + Number(result.record_count || 0) + ' 条录入档案、' + Number(result.file_count || 0) + ' 个文件，实际释放 ' + formatCleanupBytes(result.bytes_reclaimed) + '。考试记录仍已保留。</div>';
+    }
+    return settingsDetailHeader('清理资料', '按录入日期清理服务器中的培训档案') + '<div class="sheet settings-form">' +
+      '<p class="settings-hint">此操作永久删除人员档案、现场照片、身份证裁切图、登记卡及该档案关联的待审核修改申请。注册用户、题库和考试记录会保留。</p>' +
+      '<label>开始日期<input type="date" value="' + esc(state.settings.cleanupStart) + '" onchange="mobileAdminSetCleanupDate(\'start\',this.value)"></label>' +
+      '<label>结束日期<input type="date" value="' + esc(state.settings.cleanupEnd) + '" onchange="mobileAdminSetCleanupDate(\'end\',this.value)"></label>' +
+      '<div class="settings-form-actions"><button type="button" onclick="mobileAdminPreviewCleanup()">预览范围</button><button class="settings-primary" type="button" style="background:#dc2626;border-color:#ef4444;" ' + (state.settings.busy ? 'disabled' : '') + ' onclick="mobileAdminRunCleanup()">永久清理</button></div>' + feedback + '</div>';
   }
   function settingsPasswordPanel() {
     return settingsDetailHeader('修改密码', '更新当前管理员密码') + '<div class="sheet settings-form"><label>当前密码<input id="mobile-password-old" type="password" autocomplete="current-password"></label><label>新密码<input id="mobile-password-new" type="password" autocomplete="new-password" placeholder="至少 6 位"></label><label>确认新密码<input id="mobile-password-confirm" type="password" autocomplete="new-password"></label><button class="settings-primary" type="button" onclick="mobileAdminChangePassword()">保存新密码</button></div>';
@@ -508,6 +535,58 @@
     if (view === 'units' && typeof window.loadCompanies === 'function') Promise.resolve(window.loadCompanies()).then(function () { if (isMobile() && state.tab === 'settings') render(); });
     if (view === 'bank') { state.settings.subjects = null; loadSettingsSubjects(); }
     if (view === 'admins') { state.settings.admins = null; state.settings.adminEditor = null; loadSettingsAdmins(); }
+    if (view === 'cleanup') { state.settings.cleanupPreview = null; state.settings.cleanupResult = null; }
+    render();
+  };
+  window.mobileAdminSetCleanupDate = function (kind, value) {
+    if (kind === 'start') state.settings.cleanupStart = value || '';
+    if (kind === 'end') state.settings.cleanupEnd = value || '';
+    state.settings.cleanupPreview = null;
+    state.settings.cleanupResult = null;
+  };
+  function getCleanupDates() {
+    var start = state.settings.cleanupStart;
+    var end = state.settings.cleanupEnd;
+    if (!start || !end) throw new Error('请选择完整的清理日期范围');
+    if (start > end) throw new Error('开始日期不能晚于结束日期');
+    return { start: start, end: end };
+  }
+  window.mobileAdminPreviewCleanup = async function () {
+    try {
+      var dates = getCleanupDates();
+      state.settings.busy = true;
+      render();
+      var result = await requestSettings('/api/admin/storage-cleanup/preview?start_date=' + encodeURIComponent(dates.start) + '&end_date=' + encodeURIComponent(dates.end), { headers: authHeaders() });
+      state.settings.cleanupPreview = result.data || null;
+      state.settings.cleanupResult = null;
+      setSettingsMessage('', false);
+    } catch (error) {
+      setSettingsMessage(error.message || '无法预览清理范围', true);
+    }
+    state.settings.busy = false;
+    render();
+  };
+  window.mobileAdminRunCleanup = async function () {
+    try {
+      var dates = getCleanupDates();
+      var phrase = window.prompt('此操作不可恢复。请输入“清理资料”确认永久删除：');
+      if (phrase === null) return;
+      if (phrase !== '清理资料') throw new Error('确认文字不正确，未执行清理');
+      state.settings.busy = true;
+      render();
+      var formData = new FormData();
+      formData.append('start_date', dates.start);
+      formData.append('end_date', dates.end);
+      formData.append('confirm_phrase', phrase);
+      var result = await requestSettings('/api/admin/storage-cleanup', { method: 'POST', headers: authHeaders(), body: formData });
+      state.settings.cleanupResult = result.data || null;
+      state.settings.cleanupPreview = null;
+      setSettingsMessage(result.message || '资料清理完成', false);
+      if (typeof window.loadRecords === 'function') window.loadRecords();
+    } catch (error) {
+      setSettingsMessage(error.message || '资料清理失败', true);
+    }
+    state.settings.busy = false;
     render();
   };
   window.mobileAdminLogout = function () {

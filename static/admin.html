@@ -936,10 +936,28 @@
           <div class="config-menu-item" onclick="switchConfigSubTab('password')" id="cfg-menu-password" style="padding: 12px 16px; border-radius: 8px; background: rgba(255,255,255,0.02); border: 1px solid var(--glass-border); color: var(--text-muted); font-weight: 500; cursor: pointer; text-align: left; transition: all 0.2s;">
             🔒 管理员密码修改
           </div>
+          <div class="config-menu-item" onclick="switchConfigSubTab('cleanup')" id="cfg-menu-cleanup" style="padding: 12px 16px; border-radius: 8px; background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); color: #fca5a5; font-weight: 500; cursor: pointer; text-align: left; transition: all 0.2s;">
+            🗑️ 清理资料
+          </div>
         </div>
 
         <!-- 右边：标题栏中的内容 -->
         <div class="config-content" style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 20px;">
+          <div id="cfg-panel-cleanup" class="config-sub-panel" style="display: none; width: 100%;">
+            <div class="glass-container" style="max-width: 100%; margin: 0; padding: 30px; border: 1px solid rgba(239,68,68,0.26); border-radius: 12px; background: rgba(127,29,29,0.12); box-sizing: border-box; width: 100%;">
+              <h3 style="margin-bottom: 12px; font-size: 1.25rem; color: #fecaca; border-bottom: 1px solid rgba(239,68,68,0.22); padding-bottom: 12px; text-align: left;">清理录入资料</h3>
+              <p style="margin: 0 0 20px; color: var(--text-muted); line-height: 1.7; text-align: left;">按录入日期永久删除人员档案、现场照片、身份证裁切图、登记卡和关联的待审核修改申请。注册用户、系统配置、题库和考试记录会保留。</p>
+              <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-bottom: 16px; text-align: left;">
+                <label style="display: grid; gap: 8px; color: var(--text-muted); font-size: 0.9rem;">开始日期<input id="cleanup-start-date" class="form-control" type="date" style="width: 100%; box-sizing: border-box; margin: 0;"></label>
+                <label style="display: grid; gap: 8px; color: var(--text-muted); font-size: 0.9rem;">结束日期<input id="cleanup-end-date" class="form-control" type="date" style="width: 100%; box-sizing: border-box; margin: 0;"></label>
+              </div>
+              <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center; text-align: left;">
+                <button class="btn btn-secondary" type="button" onclick="previewStorageCleanup()" style="width: auto; padding: 10px 18px; margin: 0;">预览清理范围</button>
+                <button class="btn" type="button" onclick="runStorageCleanup()" style="width: auto; padding: 10px 18px; margin: 0; background: #dc2626; color: #fff; border: 1px solid #ef4444;">永久清理</button>
+              </div>
+              <div id="storage-cleanup-preview" style="display: none; margin-top: 18px; padding: 14px; border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; background: rgba(15,23,42,0.56); color: var(--text-main); line-height: 1.7; text-align: left;"></div>
+            </div>
+          </div>
           <!-- 1. 系统核心参数配置 -->
           <div id="cfg-panel-core" class="config-sub-panel" style="width: 100%;">
             <div class="glass-container" style="max-width: 100%; margin: 0; padding: 30px; border: 1px solid var(--glass-border); border-radius: 12px; background: rgba(255, 255, 255, 0.02); box-sizing: border-box; width: 100%;">
@@ -4061,6 +4079,91 @@
       }
     }
 
+    function getStorageCleanupDates() {
+      const startDate = document.getElementById('cleanup-start-date')?.value || '';
+      const endDate = document.getElementById('cleanup-end-date')?.value || '';
+      if (!startDate || !endDate) {
+        showAlert('error', '请选择完整的清理日期范围');
+        return null;
+      }
+      if (startDate > endDate) {
+        showAlert('error', '开始日期不能晚于结束日期');
+        return null;
+      }
+      return { startDate, endDate };
+    }
+
+    function formatStorageBytes(bytes) {
+      const value = Number(bytes || 0);
+      if (value < 1024) return value + ' B';
+      if (value < 1024 * 1024) return (value / 1024).toFixed(1) + ' KB';
+      return (value / (1024 * 1024)).toFixed(2) + ' MB';
+    }
+
+    function renderStorageCleanupPreview(data) {
+      const panel = document.getElementById('storage-cleanup-preview');
+      if (!panel) return;
+      panel.style.display = 'block';
+      panel.innerHTML = '<strong>清理预览</strong><br>' +
+        escapeHtml(data.start_date) + ' 至 ' + escapeHtml(data.end_date) + '：将删除 <b>' + Number(data.record_count || 0) + '</b> 条录入档案、' +
+        Number(data.update_request_count || 0) + ' 条关联修改申请、' + Number(data.file_count || 0) + ' 个文件，预计释放 <b>' + formatStorageBytes(data.estimated_bytes) + '</b>。<br>' +
+        '<span style="color:#cbd5e1;">考试记录、注册账号、系统配置和题库不会删除。</span>';
+    }
+
+    async function previewStorageCleanup() {
+      const dates = getStorageCleanupDates();
+      if (!dates) return;
+      try {
+        const response = await fetch('/api/admin/storage-cleanup/preview?start_date=' + encodeURIComponent(dates.startDate) + '&end_date=' + encodeURIComponent(dates.endDate), {
+          headers: { 'Authorization': token }
+        });
+        const result = await response.json();
+        if (response.ok && result.code === 200) {
+          renderStorageCleanupPreview(result.data || {});
+        } else {
+          showAlert('error', result.detail || '无法预览清理范围');
+        }
+      } catch (error) {
+        showAlert('error', '预览清理范围时出现网络错误');
+      }
+    }
+
+    async function runStorageCleanup() {
+      const dates = getStorageCleanupDates();
+      if (!dates) return;
+      const phrase = prompt('此操作不可恢复。请输入“清理资料”确认永久删除：');
+      if (phrase !== '清理资料') {
+        if (phrase !== null) showAlert('error', '确认文字不正确，未执行清理');
+        return;
+      }
+      const formData = new FormData();
+      formData.append('start_date', dates.startDate);
+      formData.append('end_date', dates.endDate);
+      formData.append('confirm_phrase', phrase);
+      try {
+        const response = await fetch('/api/admin/storage-cleanup', {
+          method: 'POST',
+          headers: { 'Authorization': token },
+          body: formData
+        });
+        const result = await response.json();
+        if (response.ok && result.code === 200) {
+          const data = result.data || {};
+          const panel = document.getElementById('storage-cleanup-preview');
+          if (panel) {
+            panel.style.display = 'block';
+            panel.innerHTML = '<strong>清理完成</strong><br>已删除 ' + Number(data.record_count || 0) + ' 条录入档案、' + Number(data.file_count || 0) + ' 个文件，实际释放 ' + formatStorageBytes(data.bytes_reclaimed) + '。考试记录仍已保留。';
+          }
+          showAlert('success', result.message || '资料清理完成');
+          if (typeof loadRecords === 'function') loadRecords();
+        } else {
+          showAlert('error', result.detail || '资料清理失败');
+        }
+      } catch (error) {
+        showAlert('error', '资料清理时出现网络错误');
+      }
+    }
+
     async function uploadExamBank(examType, inputEl) {
       const file = inputEl.files[0];
       if (!file) return;
@@ -4522,7 +4625,7 @@
     <button class="app-tab" type="button" data-tab="config" aria-selected="false" onclick="switchAdminTab('config'); setMobileTab('config')"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.1 2.1-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56v.1h-3v-.1A1.7 1.7 0 0 0 10.7 18.6a1.7 1.7 0 0 0-1.88.34l-.06.06-2.1-2.1.06-.06A1.7 1.7 0 0 0 7.06 15 1.7 1.7 0 0 0 5.5 14H5.4v-3h.1A1.7 1.7 0 0 0 7.06 10a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.1-2.1.06.06A1.7 1.7 0 0 0 10.7 6.36a1.7 1.7 0 0 0 1.03-1.56V4.7h3v.1a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.88-.34l.06-.06 2.1 2.1-.06.06A1.7 1.7 0 0 0 19.4 10a1.7 1.7 0 0 0 1.56 1h.1v3h-.1A1.7 1.7 0 0 0 19.4 15Z"></path></svg><span class="app-tab-label">设置</span></button>
   </nav>
   <section id="mobile-admin-live" aria-label="培训管理移动端"></section>
-  <script src="/static/admin-mobile-live.js?v=1.0.7"></script>
+  <script src="/static/admin-mobile-live.js?v=1.0.8"></script>
 
 </body>
 </html>
