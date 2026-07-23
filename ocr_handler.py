@@ -813,23 +813,93 @@ def _is_real_crop(candidate, source):
     return ch * cw < sh * sw * 0.97
 
 
-def _document_preprocessor_candidate(image, use_screen_filter=False):
-    """使用开源文档裁切器生成候选卡面。
+def _enhance_document_edges(image, screen_mode=False):
+    """提高文档预处理器的边缘输入质量，不改变原始 OCR 主输入。"""
+    if image is None or image.size == 0:
+        return image
+    source = _reduce_screen_pattern(image) if screen_mode else image
+    # 在 LAB 的亮度通道上做温和局部对比度增强，保留证件颜色和人像，
+    # 再做轻度锐化，使被压缩、拍屏或轻微虚焦的卡边更容易被 Canny 找到。
+    lab = cv2.cvtColor(source, cv2.COLOR_BGR2LAB)
+    l_chan, a_chan, b_chan = cv2.split(lab)
+    l_chan = cv2.createCLAHE(
+        clipLimit=2.0 if screen_mode else 1.7,
+        tileGridSize=(8, 8)
+    ).apply(l_chan)
+    enhanced = cv2.cvtColor(cv2.merge((l_chan, a_chan, b_chan)), cv2.COLOR_LAB2BGR)
+    softened = cv2.GaussianBlur(enhanced, (0, 0), 1.1)
+    return cv2.addWeighted(enhanced, 1.20, softened, -0.20, 0)
 
-    手机拍摄屏幕时，第二次尝试会使用轻度去横纹副本；仅当原图版本
-    未完整识别时才会进入该分支，避免不必要地改变普通照片。
-    """
+
+def _document_preprocessor_profile(profile):
+    """针对满屏证件、普通拍摄和屏幕拍摄提供不同的轮廓阈值。"""
+    profiles = {
+        # 默认库在 1000px 下处理，满屏或高分辨率证件的边缘会被明显缩弱。
+        "standard": {
+            "max_proc_dim": 1600,
+            "canny_threshold1": 35,
+            "canny_threshold2": 120,
+            "contour_epsilon_coef": 0.024,
+            "min_page_area_ratio": 0.16,
+            "min_rectangularity": 0.62,
+            "screen_mode": False,
+        },
+        # 对轻微虚焦、压缩和卡片占画面较小的拍照，放宽边缘与矩形门槛。
+        "edge_enhanced": {
+            "max_proc_dim": 1600,
+            "canny_threshold1": 22,
+            "canny_threshold2": 96,
+            "contour_epsilon_coef": 0.028,
+            "min_page_area_ratio": 0.10,
+            "min_rectangularity": 0.56,
+            "screen_mode": False,
+        },
+        # 拍摄显示器时先抑制横纹/摩尔纹，再使用较低的边缘阈值。
+        "screen_enhanced": {
+            "max_proc_dim": 1600,
+            "canny_threshold1": 16,
+            "canny_threshold2": 78,
+            "contour_epsilon_coef": 0.030,
+            "min_page_area_ratio": 0.09,
+            "min_rectangularity": 0.52,
+            "screen_mode": True,
+        },
+    }
+    return profiles[profile]
+
+
+def _document_preprocessor_candidate(image, profile="standard"):
+    """使用开源文档裁切器生成候选卡面，并按输入场景调节检测参数。"""
     try:
         from document_preprocessor import DocumentPreprocessor
+        from document_preprocessor.core import PreprocessorConfig
         import PIL.Image
-        preprocessor = DocumentPreprocessor()
-        source = _reduce_screen_pattern(image) if use_screen_filter else image
+
+        settings = _document_preprocessor_profile(profile)
+        source = (
+            _enhance_document_edges(image, screen_mode=settings["screen_mode"])
+            if profile != "standard" else image
+        )
+        config = PreprocessorConfig(
+            max_proc_dim=settings["max_proc_dim"],
+            canny_threshold1=settings["canny_threshold1"],
+            canny_threshold2=settings["canny_threshold2"],
+            contour_epsilon_coef=settings["contour_epsilon_coef"],
+            min_page_area_ratio=settings["min_page_area_ratio"],
+            min_rectangularity=settings["min_rectangularity"],
+        )
+        preprocessor = DocumentPreprocessor(config=config)
         pil_img = PIL.Image.fromarray(cv2.cvtColor(source, cv2.COLOR_BGR2RGB))
         pil_warped = preprocessor.detect_and_warp_document(pil_img)
         candidate = cv2.cvtColor(np.asarray(pil_warped), cv2.COLOR_RGB2BGR)
-        return candidate if _is_real_crop(candidate, source) else None
+        if _is_real_crop(candidate, image):
+            return candidate
+        # 库在找不到四角时会原样返回输入图；这不是有效裁切，继续尝试
+        # 更适配的第一道 profile，而不是提前把“原图”标记为成功。
+        print(f"[OCR-Debug] 文档预处理未找到有效卡边: {profile}")
+        return None
     except Exception as exc:
-        print(f"[OCR-Debug] document-preprocessor不可用: {type(exc).__name__}")
+        print(f"[OCR-Debug] document-preprocessor不可用: {profile}, {type(exc).__name__}")
         return None
 
 
@@ -911,12 +981,14 @@ def ocr_idcard_process(image_path):
     evaluations = []
     selected = None
 
-    # 第一道：开源 document-preprocessor。普通图先原图；信息不完整时再抗横纹。
-    for method, use_screen_filter in (
-        ("document_preprocessor", False),
-        ("document_preprocessor_screen_filter", True),
+    # 第一道：优先开源 document-preprocessor。依次尝试原图、高细节边缘、
+    # 拍屏抗横纹三种输入；每种仍必须通过完整身份信息校验。
+    for method, profile in (
+        ("document_preprocessor", "standard"),
+        ("document_preprocessor_edge_enhanced", "edge_enhanced"),
+        ("document_preprocessor_screen_enhanced", "screen_enhanced"),
     ):
-        candidate = _document_preprocessor_candidate(oriented, use_screen_filter=use_screen_filter)
+        candidate = _document_preprocessor_candidate(oriented, profile=profile)
         if candidate is None:
             print(f"[OCR-Debug] 第一道无有效候选: {method}")
             continue
