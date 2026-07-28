@@ -521,6 +521,13 @@
         </table>
       </div>
       <div id="history-no-data" class="no-data" style="display: none;">暂无已录入的历史记录</div>
+      <div id="history-pagination" style="display: none; margin-top: 18px; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+        <span id="history-page-summary" style="font-size: 0.85rem; color: var(--text-muted);"></span>
+        <div style="display: flex; gap: 8px;">
+          <button type="button" id="history-prev-page" class="btn btn-secondary" style="width: auto; margin: 0; padding: 7px 13px;" onclick="changeHistoryPage(-1)">上一页</button>
+          <button type="button" id="history-next-page" class="btn btn-secondary" style="width: auto; margin: 0; padding: 7px 13px;" onclick="changeHistoryPage(1)">下一页</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -717,6 +724,9 @@
     let compressedPhotoBlob = null; 
     let currentEditRecordId = null;
     let historyData = [];
+    let historyPage = 1;
+    let historyTotal = 0;
+    const HISTORY_PAGE_SIZE = 20;
 
     function compressImageFile(file, minSizeKB, maxSizeKB, callback) {
       if (typeof maxSizeKB === 'function') {
@@ -1107,14 +1117,15 @@
     async function loadHistory() {
       const tbody = document.getElementById('history-table-body');
       const noData = document.getElementById('history-no-data');
+      const pagination = document.getElementById('history-pagination');
       if (!tbody) return;
       tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">加载中...</td></tr>';
       
       const searchName = document.getElementById('history-search-name').value.trim();
       try {
-        let url = '/api/records';
+        let url = '/api/records?page=' + historyPage;
         if (searchName) {
-          url += '?name=' + encodeURIComponent(searchName);
+          url += '&name=' + encodeURIComponent(searchName);
         }
         const response = await fetch(url, {
           headers: {
@@ -1125,9 +1136,17 @@
         if (handleAuthFail(response, result)) return;
         if (response.ok) {
           historyData = result.data || [];
+          historyTotal = Number(result.total || 0);
+          historyPage = Number(result.page || historyPage || 1);
           if (historyData.length === 0) {
             noData.style.display = 'block';
             tbody.innerHTML = '';
+            if (historyTotal > 0 && historyPage > 1) {
+              historyPage = Math.ceil(historyTotal / HISTORY_PAGE_SIZE);
+              loadHistory();
+              return;
+            }
+            renderHistoryPagination();
             return;
           }
           noData.style.display = 'none';
@@ -1173,16 +1192,48 @@
             `;
             tbody.appendChild(tr);
           });
+          renderHistoryPagination();
         } else {
+          if (pagination) pagination.style.display = 'none';
           tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--danger-color);">${result.detail || '获取历史失败'}</td></tr>`;
         }
       } catch (err) {
+        if (pagination) pagination.style.display = 'none';
         tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--danger-color);">网络错误，无法加载</td></tr>';
       }
     }
 
+    function renderHistoryPagination() {
+      const pagination = document.getElementById('history-pagination');
+      const summary = document.getElementById('history-page-summary');
+      const prev = document.getElementById('history-prev-page');
+      const next = document.getElementById('history-next-page');
+      if (!pagination || !summary || !prev || !next) return;
+
+      if (historyTotal <= 0) {
+        pagination.style.display = 'none';
+        return;
+      }
+
+      const totalPages = Math.max(1, Math.ceil(historyTotal / HISTORY_PAGE_SIZE));
+      historyPage = Math.min(Math.max(1, historyPage), totalPages);
+      summary.textContent = '共 ' + historyTotal + ' 人 · 第 ' + historyPage + ' / ' + totalPages + ' 页';
+      prev.disabled = historyPage <= 1;
+      next.disabled = historyPage >= totalPages;
+      pagination.style.display = 'flex';
+    }
+
+    function changeHistoryPage(delta) {
+      const totalPages = Math.max(1, Math.ceil(historyTotal / HISTORY_PAGE_SIZE));
+      const targetPage = historyPage + delta;
+      if (targetPage < 1 || targetPage > totalPages) return;
+      historyPage = targetPage;
+      loadHistory();
+    }
+
     // 搜索框输入防抖 (历史记录)
     function handleHistorySearch() {
+      historyPage = 1;
       clearTimeout(historySearchTimeout);
       historySearchTimeout = setTimeout(() => {
         loadHistory();
@@ -1191,6 +1242,7 @@
 
     function clearHistorySearch() {
       document.getElementById('history-search-name').value = '';
+      historyPage = 1;
       loadHistory();
     }
 

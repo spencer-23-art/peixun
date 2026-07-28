@@ -1555,33 +1555,46 @@ async def create_record(
             
     return {"code": 200, "message": "信息录入成功！"}
 
-# 获取当前用户录入的历史记录（默认最近10天，支持姓名搜索查全局，仅录入员自己）
+# 获取当前用户录入的历史记录（全量分页，支持姓名搜索，仅录入员自己）
 @app.get("/api/records")
-def get_user_records(name: str = None, current_user = Depends(get_current_user)):
+def get_user_records(page: int = 1, name: str = None, current_user = Depends(get_current_user)):
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
-    
+
+    page = max(1, int(page or 1))
+    page_size = 20
     conditions = ["user_id = ?"]
     params = [current_user['id']]
-    
+
     if name and name.strip():
         conditions.append("name LIKE ?")
         params.append(f"%{name.strip()}%")
-    else:
-        ten_days_ago = (beijing_now() - timedelta(days=9)).strftime("%Y-%m-%d 00:00:00")
-        conditions.append("created_at >= ?")
-        params.append(ten_days_ago)
-        
+
+    where_clause = " AND ".join(conditions)
+    cursor.execute(f'''
+    SELECT COUNT(*)
+    FROM records
+    WHERE {where_clause}
+    ''', params)
+    total = cursor.fetchone()[0]
+
     query = f'''
-    SELECT * FROM records 
+    SELECT * FROM records
     WHERE {" AND ".join(conditions)}
     ORDER BY created_at DESC
+    LIMIT ? OFFSET ?
     '''
-    cursor.execute(query, params)
+    cursor.execute(query, params + [page_size, (page - 1) * page_size])
     records = [dict(row) for row in cursor.fetchall()]
     conn.close()
-    return {"code": 200, "data": records}
+    return {
+        "code": 200,
+        "data": records,
+        "total": total,
+        "page": page,
+        "limit": page_size
+    }
 
 # 修改已录入的信息（仅能修改属于自己的记录）
 @app.post("/api/record/update")
