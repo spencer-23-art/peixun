@@ -264,6 +264,10 @@
   #mobile-admin-live .settings-form-actions { display:grid; grid-template-columns:1fr 1.3fr; gap:8px; }
   #mobile-admin-live .settings-form-actions .settings-primary { margin:0; }
   #mobile-admin-live .settings-hint { margin:0 0 10px; color:var(--app-muted); font-size:.79rem; line-height:1.6; }
+  #mobile-admin-live .settings-test-toggle { display:flex; align-items:center; justify-content:space-between; gap:14px; padding:13px; border:1px solid rgba(129,140,248,.28); border-radius:12px; color:var(--app-text); background:rgba(79,70,229,.12); }
+  #mobile-admin-live .settings-test-toggle strong { display:block; font-size:.88rem; }
+  #mobile-admin-live .settings-test-toggle small { display:block; margin-top:4px; color:var(--app-muted); font-size:.74rem; line-height:1.45; }
+  #mobile-admin-live .settings-test-toggle input { width:21px; height:21px; flex:0 0 auto; accent-color:#6366f1; }
   #mobile-admin-live .settings-list { display:grid; gap:9px; margin-top:11px; }
   #mobile-admin-live .settings-list-card { display:flex; align-items:center; justify-content:space-between; gap:9px; padding:11px; border:1px solid var(--app-line); border-radius:12px; background:rgba(15,23,42,.30); }
   #mobile-admin-live .settings-list-card strong { display:block; color:var(--app-text); font-size:.84rem; }

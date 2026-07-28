@@ -71,6 +71,19 @@
       object-fit: contain;
       background-color: rgba(0, 0, 0, 0.4);
     }
+    .photo-uploaders {
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      gap: 18px;
+      flex-wrap: wrap;
+    }
+    .photo-uploaders .photo-uploader {
+      margin: 0 0 25px;
+    }
+    #special-work-certificate-group {
+      display: none;
+    }
 
     /* 页签导航 */
     .admin-nav {
@@ -360,6 +373,7 @@
 
         <!-- 第一行：照片位 -->
         <div class="form-group">
+          <div class="photo-uploaders">
           <div class="photo-uploader" onclick="document.getElementById('photo-input').click()">
             <input type="file" id="photo-input" accept="image/*" onchange="handlePhotoChange(event)">
             <div class="photo-uploader-placeholder" id="uploader-placeholder">
@@ -370,6 +384,18 @@
               <p>拍摄真人照片/非身份证照</p>
             </div>
             <img src="" id="photo-preview" class="photo-preview" style="display: none;">
+          </div>
+          <div id="special-work-certificate-group" class="photo-uploader" onclick="document.getElementById('special-work-certificate-input').click()">
+            <input type="file" id="special-work-certificate-input" accept="image/*" onchange="handleSpecialWorkCertificateChange(event)">
+            <div class="photo-uploader-placeholder" id="special-work-certificate-placeholder">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              <p>特殊工种证件</p>
+            </div>
+            <img src="" id="special-work-certificate-preview" class="photo-preview" style="display: none;">
+          </div>
           </div>
         </div>
 
@@ -714,11 +740,61 @@
       }
     }
 
+    let specialWorkEnabled = false;
+    let specialWorkCertificateBlob = null;
+
+    function resetSpecialWorkCertificate() {
+      specialWorkCertificateBlob = null;
+      const input = document.getElementById('special-work-certificate-input');
+      const preview = document.getElementById('special-work-certificate-preview');
+      const placeholder = document.getElementById('special-work-certificate-placeholder');
+      if (input) input.value = '';
+      if (preview) {
+        preview.src = '';
+        preview.style.display = 'none';
+      }
+      if (placeholder) {
+        placeholder.style.display = 'flex';
+        placeholder.innerHTML = `
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          <p>特殊工种证件</p>
+        `;
+      }
+    }
+
+    function applySpecialWorkFeatureVisibility() {
+      const group = document.getElementById('special-work-certificate-group');
+      if (!group) return;
+      const visible = specialWorkEnabled && currentEditRecordId === null;
+      group.style.display = visible ? 'flex' : 'none';
+      if (!visible) resetSpecialWorkCertificate();
+    }
+
+    async function loadFeatureFlags() {
+      try {
+        const response = await fetch('/api/features', {
+          headers: { 'Authorization': token }
+        });
+        const result = await response.json();
+        if (handleAuthFail(response, result)) return;
+        if (response.ok && result.code === 200) {
+          specialWorkEnabled = Boolean(result.data && result.data.special_work_enabled);
+        }
+      } catch (err) {
+        console.error('加载功能开关失败', err);
+      }
+      applySpecialWorkFeatureVisibility();
+    }
+
     // 初始化获取用户信息与区域列表
     (async () => {
       await loadRegions();
       await loadJobTypes();
       await fetchUserStatus();
+      await loadFeatureFlags();
     })();
 
     let compressedPhotoBlob = null; 
@@ -813,6 +889,98 @@
         img.src = e.target.result;
       };
       reader.readAsDataURL(file);
+    }
+
+    function compressImageToMaxSize(file, maxSizeKB, callback) {
+      if (!file.type.startsWith('image/')) {
+        showAlert('error', '所选文件不是有效的图片！');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const image = new Image();
+        image.onload = async function() {
+          const maxPixels = 1800;
+          let width = image.width;
+          let height = image.height;
+          if (Math.max(width, height) > maxPixels) {
+            const ratio = maxPixels / Math.max(width, height);
+            width = Math.round(width * ratio);
+            height = Math.round(height * ratio);
+          }
+
+          const canvas = document.createElement('canvas');
+          const context = canvas.getContext('2d');
+          const maxBytes = maxSizeKB * 1024;
+          let scale = 1;
+          let fallbackBlob = null;
+
+          for (let sizeAttempt = 0; sizeAttempt < 5; sizeAttempt++) {
+            canvas.width = Math.max(1, Math.round(width * scale));
+            canvas.height = Math.max(1, Math.round(height * scale));
+            context.clearRect(0, 0, canvas.width, canvas.height);
+            context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+            let lowQuality = 0.05;
+            let highQuality = 1;
+            let bestBlob = null;
+            for (let qualityAttempt = 0; qualityAttempt < 9; qualityAttempt++) {
+              const quality = (lowQuality + highQuality) / 2;
+              const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', quality));
+              if (!blob) continue;
+              fallbackBlob = blob;
+              if (blob.size <= maxBytes) {
+                bestBlob = blob;
+                lowQuality = quality;
+              } else {
+                highQuality = quality;
+              }
+            }
+            if (bestBlob) {
+              callback(bestBlob);
+              return;
+            }
+            scale *= 0.72;
+          }
+          callback(fallbackBlob);
+        };
+        image.onerror = function() { showAlert('error', '图片读取失败，请重新选择'); };
+        image.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function handleSpecialWorkCertificateChange(event) {
+      const file = event.target.files[0];
+      if (!file || !specialWorkEnabled) return;
+      const placeholder = document.getElementById('special-work-certificate-placeholder');
+      const preview = document.getElementById('special-work-certificate-preview');
+      if (!file.type.startsWith('image/')) {
+        showAlert('error', '特殊工种证件必须是图片文件！');
+        event.target.value = '';
+        return;
+      }
+      placeholder.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="animate-spin">
+          <circle cx="12" cy="12" r="10" stroke-opacity="0.25"></circle>
+          <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4"></path>
+        </svg>
+        <p>正在压缩证件照至 200KB 内...</p>
+      `;
+      placeholder.style.display = 'flex';
+      preview.style.display = 'none';
+      compressImageToMaxSize(file, 200, (blob) => {
+        if (!blob || blob.size > 200 * 1024) {
+          resetSpecialWorkCertificate();
+          showAlert('error', '证件照压缩失败，请使用更清晰或尺寸更小的图片');
+          return;
+        }
+        specialWorkCertificateBlob = blob;
+        preview.src = URL.createObjectURL(blob);
+        preview.style.display = 'block';
+        placeholder.style.display = 'none';
+      });
+      event.target.value = '';
     }
 
     let alertTimeout = null;
@@ -1328,6 +1496,7 @@
       if (!record) return;
 
       currentEditRecordId = id;
+      applySpecialWorkFeatureVisibility();
 
       // 回填表单数据
       const nameField = document.getElementById('name');
@@ -1450,6 +1619,7 @@
     // 取消编辑
     function cancelEdit() {
       currentEditRecordId = null;
+      applySpecialWorkFeatureVisibility();
       document.getElementById('form-record').reset();
       
       // 恢复禁用的样式和属性
@@ -1584,6 +1754,10 @@
         formData.append('photo', compressedPhotoBlob, 'photo.jpg');
       }
 
+      if (currentEditRecordId === null && specialWorkEnabled && specialWorkCertificateBlob) {
+        formData.append('special_work_certificate', specialWorkCertificateBlob, 'special-work-certificate.jpg');
+      }
+
       let url = '/api/record';
       if (currentEditRecordId !== null) {
         url = '/api/record/update';
@@ -1614,6 +1788,7 @@
           };
 
           currentEditRecordId = null;
+          applySpecialWorkFeatureVisibility();
           document.getElementById('form-title').innerText = '培训人员信息录入';
           document.getElementById('btn-submit').innerText = '确 认 提 交 信 息';
           document.getElementById('btn-cancel-edit').style.display = 'none';

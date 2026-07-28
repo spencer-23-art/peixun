@@ -216,6 +216,11 @@ def get_config(key: str, default: str) -> str:
     except Exception:
         return default
 
+
+def is_special_work_enabled() -> bool:
+    """Return whether the optional special-work certificate flow is enabled."""
+    return get_config('special_work_enabled', 'false').strip().lower() in ('1', 'true', 'yes', 'on')
+
 def beijing_now() -> datetime:
     """统一返回北京时间 (UTC+8) 当前时间，不受服务器本地时区影响（L4）。"""
     return datetime.now(timezone(timedelta(hours=8))).replace(tzinfo=None)
@@ -315,7 +320,7 @@ def _build_storage_cleanup_plan(cursor, start_date: str, end_date: str):
     """Collect only files owned by selected training records, without deleting yet."""
     date_filter = "substr(created_at, 1, 10) >= ? AND substr(created_at, 1, 10) <= ?"
     cursor.execute(
-        f"SELECT id, id_card, photo_path, word_path FROM records WHERE {date_filter}",
+        f"SELECT id, id_card, photo_path, word_path, special_work_cert_path FROM records WHERE {date_filter}",
         (start_date, end_date)
     )
     records = cursor.fetchall()
@@ -332,7 +337,8 @@ def _build_storage_cleanup_plan(cursor, start_date: str, end_date: str):
     for record in records:
         file_candidates.extend([
             (record['photo_path'], 'photo'),
-            (record['word_path'], 'card')
+            (record['word_path'], 'card'),
+            (record['special_work_cert_path'], 'special_work_certificate')
         ])
     for update in updates:
         file_candidates.extend([
@@ -463,6 +469,27 @@ def pack_photos_zip(records) -> bytes:
                 counter += 1
             added_filenames.add(filename)
             zip_file.write(photo_path, arcname=filename)
+    return zip_buffer.getvalue()
+
+
+def pack_special_work_certificates_zip(records) -> bytes:
+    """Build a ZIP containing the selected records' special-work certificates."""
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        added_filenames = set()
+        for record in records:
+            certificate_path = _managed_upload_path(record['special_work_cert_path'])
+            if not certificate_path:
+                continue
+            file_ext = os.path.splitext(certificate_path)[1].lower() or '.jpg'
+            base_filename = f"{safe_filename_part(record['name'])}_{safe_filename_part(record['id_card'])}_特殊工种证件"
+            filename = f"{base_filename}{file_ext}"
+            counter = 1
+            while filename in added_filenames:
+                filename = f"{base_filename}_{counter}{file_ext}"
+                counter += 1
+            added_filenames.add(filename)
+            zip_file.write(certificate_path, arcname=filename)
     return zip_buffer.getvalue()
 
 def _csv_download_response(content: bytes, filename: str):
@@ -598,6 +625,7 @@ def init_db():
         age INTEGER,
         company TEXT DEFAULT '',
         remark TEXT DEFAULT '',
+        special_work_cert_path TEXT DEFAULT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY(user_id) REFERENCES users(id)
     )
@@ -658,6 +686,11 @@ def init_db():
         conn.commit()
     except sqlite3.OperationalError:
         pass
+    try:
+        cursor.execute("ALTER TABLE records ADD COLUMN special_work_cert_path TEXT DEFAULT NULL")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
     cursor.execute('''
         UPDATE records
         SET company = COALESCE(
@@ -710,6 +743,7 @@ def init_db():
     cursor.execute("INSERT OR IGNORE INTO configs (key, value) VALUES ('exam_start_time', '08:00:00')")
     cursor.execute("INSERT OR IGNORE INTO configs (key, value) VALUES ('exam_end_time', '12:00:00')")
     cursor.execute("INSERT OR IGNORE INTO configs (key, value) VALUES ('regions', '三元肥,尿素塔')")
+    cursor.execute("INSERT OR IGNORE INTO configs (key, value) VALUES ('special_work_enabled', 'false')")
         
     # 答题审批表
     cursor.execute('''
@@ -842,7 +876,12 @@ async def log_requests(request, call_next):
 @app.middleware("http")
 async def protect_uploads(request, call_next):
     path = request.url.path
-    protected_prefixes = ("/uploads/idcards/", "/uploads/cards/", "/uploads/temp_ids/")
+    protected_prefixes = (
+        "/uploads/idcards/",
+        "/uploads/cards/",
+        "/uploads/temp_ids/",
+        "/uploads/special_work_certificates/"
+    )
     if any(path.startswith(p) for p in protected_prefixes):
         token = request.query_params.get("token") or request.headers.get("authorization")
         if not token or not verify_token(token):
@@ -1063,6 +1102,17 @@ def user_status(current_user = Depends(get_current_user)):
         }
     }
 
+
+@app.get("/api/features")
+def get_enabled_features(current_user = Depends(get_current_user)):
+    """Expose only the feature flags needed by authenticated clients."""
+    return {
+        "code": 200,
+        "data": {
+            "special_work_enabled": is_special_work_enabled()
+        }
+    }
+
 # 获取待审批用户列表（仅管理员）
 # 获取所有注册普通用户列表（包括 pending, approved, rejected，仅管理员）
 @app.get("/api/admin/pending")
@@ -1172,13 +1222,14 @@ def delete_record(record_id: int = Form(...), admin = Depends(get_admin_user)):
     cursor = conn.cursor()
     
     # 1. 获取照片路径，以便随后进行物理删除
-    cursor.execute("SELECT photo_path FROM records WHERE id = ?", (record_id,))
+    cursor.execute("SELECT photo_path, special_work_cert_path FROM records WHERE id = ?", (record_id,))
     row = cursor.fetchone()
     if not row:
         conn.close()
         raise HTTPException(status_code=404, detail="该人员记录不存在")
         
     photo_path = row[0]
+    special_work_cert_path = row[1]
     
     # 2. 从数据库删除记录
     cursor.execute("DELETE FROM records WHERE id = ?", (record_id,))
@@ -1189,6 +1240,11 @@ def delete_record(record_id: int = Form(...), admin = Depends(get_admin_user)):
     if photo_path and os.path.exists(photo_path):
         try:
             os.remove(photo_path)
+        except Exception:
+            pass
+    if special_work_cert_path and os.path.exists(special_work_cert_path):
+        try:
+            os.remove(special_work_cert_path)
         except Exception:
             pass
             
@@ -1476,6 +1532,7 @@ async def create_record(
     remark: str = Form(""),
     id_card_img_path: str = Form(None),
     photo: UploadFile = File(...),
+    special_work_certificate: UploadFile = File(None),
     current_user = Depends(get_current_user)
 ):
     if not validate_id_card(id_card):
@@ -1505,14 +1562,47 @@ async def create_record(
     
     with open(photo_path, "wb") as f:
         shutil.copyfileobj(photo.file, f)
+
+    special_work_cert_path = None
+    if special_work_certificate and special_work_certificate.filename:
+        if not is_special_work_enabled():
+            try:
+                os.remove(photo_path)
+            except OSError:
+                pass
+            raise HTTPException(status_code=403, detail="特殊工种证件功能尚未启用")
+
+        certificate_ext = os.path.splitext(special_work_certificate.filename)[1].lower()
+        allowed_certificate_extensions = {'.jpg', '.jpeg', '.png'}
+        if certificate_ext not in allowed_certificate_extensions:
+            try:
+                os.remove(photo_path)
+            except OSError:
+                pass
+            raise HTTPException(status_code=400, detail="特殊工种证件仅支持 jpg、jpeg、png 图片")
+
+        certificate_content = await special_work_certificate.read(1024 * 1024 + 1)
+        if len(certificate_content) > 1024 * 1024:
+            try:
+                os.remove(photo_path)
+            except OSError:
+                pass
+            raise HTTPException(status_code=400, detail="特殊工种证件图片不能超过 1MB")
+
+        certificate_dir = os.path.join(UPLOAD_DIR, 'special_work_certificates')
+        os.makedirs(certificate_dir, exist_ok=True)
+        certificate_filename = f"special_work_{uuid.uuid4().hex}{certificate_ext}"
+        special_work_cert_path = os.path.join(certificate_dir, certificate_filename).replace('\\', '/')
+        with open(special_work_cert_path, 'wb') as f:
+            f.write(certificate_content)
         
     # 插入记录
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('''
-    INSERT INTO records (user_id, photo_path, name, nation, id_card, phone, address, job, education, region_auth, gender, age, company, remark, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (current_user['id'], photo_path, name, nation, id_card, phone, address, job, education, region_auth, gender, age, current_user['company'].strip(), remark, beijing_now().strftime("%Y-%m-%d %H:%M:%S")))
+    INSERT INTO records (user_id, photo_path, name, nation, id_card, phone, address, job, education, region_auth, gender, age, company, remark, special_work_cert_path, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (current_user['id'], photo_path, name, nation, id_card, phone, address, job, education, region_auth, gender, age, current_user['company'].strip(), remark, special_work_cert_path, beijing_now().strftime("%Y-%m-%d %H:%M:%S")))
     record_id = cursor.lastrowid
     conn.commit()
     conn.close()
@@ -2014,6 +2104,25 @@ def export_gate_photos(ids: str = None, admin = Depends(get_admin_user)):
     if not records:
         raise HTTPException(status_code=404, detail="未找到对应的记录")
     return _zip_download_response(pack_photos_zip(records), "培训人员照片.zip")
+
+
+@app.get("/api/admin/export/special-work-certificates")
+def export_special_work_certificates(ids: str = None, admin = Depends(get_admin_user)):
+    """Download selected special-work certificate photos when the test feature is enabled."""
+    if not is_special_work_enabled():
+        raise HTTPException(status_code=403, detail="特殊工种证件功能尚未启用")
+    id_list = parse_id_list(ids)
+    with get_db() as conn:
+        cursor = conn.cursor()
+        records, _ = fetch_records_by_ids(cursor, id_list, gate_only=False)
+    if not records:
+        raise HTTPException(status_code=404, detail="未找到对应的记录")
+    certificate_zip = pack_special_work_certificates_zip(records)
+    with zipfile.ZipFile(io.BytesIO(certificate_zip), 'r') as archive:
+        has_certificate = bool(archive.namelist())
+    if not has_certificate:
+        raise HTTPException(status_code=404, detail="所选人员没有已上传的特殊工种证件")
+    return _zip_download_response(certificate_zip, "特殊工种证件照.zip")
 
 # 门禁下载旧版兼容接口 (CSV 导入表和照片打包，支持按 ids 筛选，并更新已下载状态)
 @app.get("/api/admin/export/gate")
@@ -3380,7 +3489,8 @@ def get_configs_api(admin = Depends(get_admin_user)):
             "exam_start_time": get_config('exam_start_time', '08:00:00')[:5],
             "exam_end_time": get_config('exam_end_time', '12:00:00')[:5],
             "regions": get_config('regions', '三元肥,尿素塔'),
-            "job_types": get_config('job_types', default_jobs)
+            "job_types": get_config('job_types', default_jobs),
+            "special_work_enabled": is_special_work_enabled()
         }
     }
 
@@ -3418,6 +3528,26 @@ def save_config_api(
         raise HTTPException(status_code=500, detail="保存配置失败")
     finally:
         conn.close()
+
+
+@app.post("/api/admin/features/special-work")
+def save_special_work_feature(
+    enabled: str = Form(...),
+    admin = Depends(get_admin_user)
+):
+    enabled_value = str(enabled).strip().lower() in ('1', 'true', 'yes', 'on')
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT OR REPLACE INTO configs (key, value) VALUES ('special_work_enabled', ?)",
+            ('true' if enabled_value else 'false',)
+        )
+        conn.commit()
+    return {
+        "code": 200,
+        "message": "特殊工种功能已启用" if enabled_value else "特殊工种功能已关闭",
+        "data": {"special_work_enabled": enabled_value}
+    }
 
 # 修改管理员密码（仅管理员）
 @app.post("/api/admin/update_password")

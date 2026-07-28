@@ -6,7 +6,7 @@
   <title>培训信息录入系统 - 管理后台</title>
   <link rel="stylesheet" href="/static/css/style.css?v=1.0.6">
   <link rel="stylesheet" href="/static/css/mobile-app.css?v=1.1.0">
-  <link rel="stylesheet" href="/static/admin-mobile-live.css?v=1.0.4">
+  <link rel="stylesheet" href="/static/admin-mobile-live.css?v=1.0.5">
   <style>
     /* 消息小铃铛与响应式消息审批 UI 样式 */
     .bell-container {
@@ -658,6 +658,9 @@
           <svg style="width:16px;height:16px;margin-right:6px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><polyline points="9 11 12 14 22 4"></polyline><polyline points="21 12 21 21 3 21 3 3 12 3"></polyline></svg>
           下载门禁恢复 (CSV+照片)
         </button>
+        <button class="btn btn-secondary" id="btn-export-special-work" onclick="exportData('special_work')" style="margin-left: 8px; display: none;">
+          下载特殊工种证件
+        </button>
       </div>
     </div>
 
@@ -695,6 +698,7 @@
             <button type="button" onclick="exportMobileRecords('excel')">下载 Excel</button>
             <button type="button" onclick="exportMobileRecords('csv')">下载 CSV</button>
             <button type="button" onclick="exportMobileRecords('photos')">下载照片包</button>
+            <button id="mobile-download-special-work" type="button" onclick="exportMobileRecords('special_work')" style="display: none;">下载特殊工种证件</button>
           </div>
         </div>
       </div>
@@ -936,6 +940,9 @@
           <div class="config-menu-item" onclick="switchConfigSubTab('password')" id="cfg-menu-password" style="padding: 12px 16px; border-radius: 8px; background: rgba(255,255,255,0.02); border: 1px solid var(--glass-border); color: var(--text-muted); font-weight: 500; cursor: pointer; text-align: left; transition: all 0.2s;">
             🔒 管理员密码修改
           </div>
+          <div class="config-menu-item" onclick="switchConfigSubTab('test')" id="cfg-menu-test" style="padding: 12px 16px; border-radius: 8px; background: rgba(99,102,241,0.08); border: 1px solid rgba(129,140,248,0.24); color: #c7d2fe; font-weight: 500; cursor: pointer; text-align: left; transition: all 0.2s;">
+            🧪 测试功能
+          </div>
           <div class="config-menu-item" onclick="switchConfigSubTab('cleanup')" id="cfg-menu-cleanup" style="padding: 12px 16px; border-radius: 8px; background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); color: #fca5a5; font-weight: 500; cursor: pointer; text-align: left; transition: all 0.2s;">
             🗑️ 清理资料
           </div>
@@ -943,6 +950,16 @@
 
         <!-- 右边：标题栏中的内容 -->
         <div class="config-content" style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 20px;">
+          <div id="cfg-panel-test" class="config-sub-panel" style="display: none; width: 100%;">
+            <div class="glass-container" style="max-width: 100%; margin: 0; padding: 30px; border: 1px solid rgba(129,140,248,0.28); border-radius: 12px; background: rgba(79,70,229,0.08); box-sizing: border-box; width: 100%;">
+              <h3 style="margin-bottom: 12px; font-size: 1.25rem; color: #e0e7ff; border-bottom: 1px solid rgba(129,140,248,0.22); padding-bottom: 12px; text-align: left;">测试功能</h3>
+              <label style="display: flex; align-items: center; gap: 12px; padding: 14px; border: 1px solid rgba(129,140,248,0.22); border-radius: 10px; background: rgba(15,23,42,0.38); cursor: pointer; text-align: left;">
+                <input id="cfg-special-work-enabled" type="checkbox" style="width: 19px; height: 19px; accent-color: #6366f1;">
+                <span><strong style="display: block; color: var(--text-main);">特殊工种</strong><small style="display: block; margin-top: 4px; color: var(--text-muted); line-height: 1.55;">启用后，客户端显示特殊工种证件拍摄框，并允许下载所选人员的证件照压缩包。</small></span>
+              </label>
+              <div style="margin-top: 18px; text-align: left;"><button class="btn btn-primary" type="button" onclick="saveSpecialWorkFeature()" style="width: auto; padding: 10px 24px;">保存测试功能</button></div>
+            </div>
+          </div>
           <div id="cfg-panel-cleanup" class="config-sub-panel" style="display: none; width: 100%;">
             <div class="glass-container" style="max-width: 100%; margin: 0; padding: 30px; border: 1px solid rgba(239,68,68,0.26); border-radius: 12px; background: rgba(127,29,29,0.12); box-sizing: border-box; width: 100%;">
               <h3 style="margin-bottom: 12px; font-size: 1.25rem; color: #fecaca; border-bottom: 1px solid rgba(239,68,68,0.22); padding-bottom: 12px; text-align: left;">清理录入资料</h3>
@@ -2571,6 +2588,9 @@
       } else if (format === 'photos') {
         const photosUrl = '/api/admin/export/gate/photos?ids=' + encodeURIComponent(ids);
         downloadFileWithToken(photosUrl, '培训人员照片.zip', false);
+      } else if (format === 'special_work') {
+        const certificateUrl = '/api/admin/export/special-work-certificates?ids=' + encodeURIComponent(ids);
+        downloadFileWithToken(certificateUrl, '特殊工种证件照.zip', false);
       } else if (format === 'gate') {
         // 1. 下载 CSV 文件（此接口会同时更新已下载状态，故传入 shouldRefreshList 为 true）
         const csvUrl = '/api/admin/export/gate/csv?ids=' + encodeURIComponent(ids);
@@ -3916,6 +3936,8 @@
       
       if (subTab === 'bank') {
         loadExamBanks();
+      } else if (subTab === 'test') {
+        loadSystemConfig();
       } else if (subTab === 'password') {
         const subAdminSec = document.getElementById('sub-admins-section');
         if (currentAdminUsername === 'admin') {
@@ -4040,11 +4062,49 @@
           const jobsStr = result.data.job_types || '';
           configuredJobs = jobsStr.split(',').map(j => j.trim()).filter(j => j.length > 0);
           renderJobTags();
+
+          const specialWorkEnabled = Boolean(result.data.special_work_enabled);
+          const specialWorkCheckbox = document.getElementById('cfg-special-work-enabled');
+          if (specialWorkCheckbox) specialWorkCheckbox.checked = specialWorkEnabled;
+          applySpecialWorkFeatureControls(specialWorkEnabled);
         } else {
           showAlert('error', '加载系统配置失败');
         }
       } catch (err) {
         showAlert('error', '获取配置时网络错误');
+      }
+    }
+
+    function applySpecialWorkFeatureControls(enabled) {
+      const display = enabled ? '' : 'none';
+      const desktopButton = document.getElementById('btn-export-special-work');
+      const mobileButton = document.getElementById('mobile-download-special-work');
+      if (desktopButton) desktopButton.style.display = display;
+      if (mobileButton) mobileButton.style.display = display;
+    }
+
+    async function saveSpecialWorkFeature() {
+      const checkbox = document.getElementById('cfg-special-work-enabled');
+      if (!checkbox) return;
+      const enabled = checkbox.checked;
+      const formData = new FormData();
+      formData.append('enabled', enabled ? 'true' : 'false');
+      try {
+        const response = await fetch('/api/admin/features/special-work', {
+          method: 'POST',
+          headers: { 'Authorization': token },
+          body: formData
+        });
+        const result = await response.json();
+        if (!response.ok || result.code !== 200) {
+          throw new Error(result.detail || result.message || '保存测试功能失败');
+        }
+        const active = Boolean(result.data && result.data.special_work_enabled);
+        checkbox.checked = active;
+        applySpecialWorkFeatureControls(active);
+        showAlert('success', result.message || '测试功能已保存');
+      } catch (err) {
+        showAlert('error', err.message || '保存测试功能时网络错误');
       }
     }
 
@@ -4625,7 +4685,7 @@
     <button class="app-tab" type="button" data-tab="config" aria-selected="false" onclick="switchAdminTab('config'); setMobileTab('config')"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.1 2.1-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56v.1h-3v-.1A1.7 1.7 0 0 0 10.7 18.6a1.7 1.7 0 0 0-1.88.34l-.06.06-2.1-2.1.06-.06A1.7 1.7 0 0 0 7.06 15 1.7 1.7 0 0 0 5.5 14H5.4v-3h.1A1.7 1.7 0 0 0 7.06 10a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.1-2.1.06.06A1.7 1.7 0 0 0 10.7 6.36a1.7 1.7 0 0 0 1.03-1.56V4.7h3v.1a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.88-.34l.06-.06 2.1 2.1-.06.06A1.7 1.7 0 0 0 19.4 10a1.7 1.7 0 0 0 1.56 1h.1v3h-.1A1.7 1.7 0 0 0 19.4 15Z"></path></svg><span class="app-tab-label">设置</span></button>
   </nav>
   <section id="mobile-admin-live" aria-label="培训管理移动端"></section>
-  <script src="/static/admin-mobile-live.js?v=1.0.8"></script>
+  <script src="/static/admin-mobile-live.js?v=1.0.9"></script>
 
 </body>
 </html>

@@ -124,6 +124,7 @@
   }
   function recordPanel() {
     var records = recordsForMobile();
+    var specialWorkEnabled = Boolean(state.settings.config && state.settings.config.special_work_enabled);
     var total = 0;
     var pending = 0;
     try { total = typeof recordsTotal !== 'undefined' ? recordsTotal : records.length; } catch (e) { total = records.length; }
@@ -146,7 +147,7 @@
         '<div class="company-options ' + (state.recordCompanyOpen ? 'is-open' : '') + '">' + companyButtons + '</div></div>' +
       '<button class="toolbar-btn" type="button" aria-label="筛选培训记录" onclick="mobileAdminToggleRecordFilters(event)">' + icon('filter') + '</button>' +
       '<div class="download-wrap"><button class="toolbar-btn" type="button" aria-label="下载所选人员" onclick="mobileAdminToggleDownload(event)">' + icon('download') + '</button>' +
-        '<div class="download-chooser ' + (state.downloadOpen ? 'is-open' : '') + '"><h3>选择下载内容</h3><p>可按需要只下载一种内容。</p><div class="download-options"><button type="button" onclick="mobileAdminExport(\'excel\')">下载 Excel</button><button type="button" onclick="mobileAdminExport(\'csv\')">下载 CSV</button><button type="button" onclick="mobileAdminExport(\'photos\')">下载照片包</button></div></div></div></div>' +
+        '<div class="download-chooser ' + (state.downloadOpen ? 'is-open' : '') + '"><h3>选择下载内容</h3><p>可按需要只下载一种内容。</p><div class="download-options"><button type="button" onclick="mobileAdminExport(\'excel\')">下载 Excel</button><button type="button" onclick="mobileAdminExport(\'csv\')">下载 CSV</button><button type="button" onclick="mobileAdminExport(\'photos\')">下载照片包</button>' + (specialWorkEnabled ? '<button type="button" onclick="mobileAdminExport(\'special_work\')">下载特殊工种证件</button>' : '') + '</div></div></div></div>' +
       '<div class="filter-panel ' + (state.recordFiltersOpen ? 'is-open' : '') + '"><div class="filter-group"><span class="filter-group-label">下载状态</span><div class="filter-options">' + status('all', '全部') + status('pending', '未下载') + status('downloaded', '已下载') + status('today', '今日录入') + '</div></div>' +
         '<div class="filter-panel-actions"><button type="button" onclick="mobileAdminClearRecordFilters()">重置</button><button type="button" class="apply-filter" onclick="mobileAdminToggleRecordFilters()">完成</button></div></div>' +
       '<div class="section-heading"><h3>' + esc(selectedCompany || '全部培训单位') + '</h3><span>当前 ' + records.length + ' 人</span></div><div class="record-stack">' +
@@ -265,7 +266,7 @@
     var end = config ? config.end_time : '--';
     var regions = config && config.regions.length ? config.regions.join('、') : '未配置';
     return '<section class="tab-panel ' + (state.tab === 'settings' ? 'is-active' : '') + '" data-panel="settings">' +
-      settingsRow('系统配置', '考试 ' + start + ' – ' + end + ' · 区域 ' + regions, 'core') + settingsRow('培训单位', '查看当前单位与归属来源', 'units') + settingsRow('考试题库', '科目、题目、导入与更新', 'bank') + settingsRow('二级管理员', '账号、权限与状态', 'admins') + settingsRow('修改密码', '更新当前管理员密码', 'password') + settingsRow('清理资料', '按日期清理录入档案与上传文件', 'cleanup') + settingsLogoutRow() + settingsNotice() + '</section>';
+      settingsRow('系统配置', '考试 ' + start + ' – ' + end + ' · 区域 ' + regions, 'core') + settingsRow('培训单位', '查看当前单位与归属来源', 'units') + settingsRow('考试题库', '科目、题目、导入与更新', 'bank') + settingsRow('二级管理员', '账号、权限与状态', 'admins') + settingsRow('修改密码', '更新当前管理员密码', 'password') + settingsRow('测试功能', '特殊工种证件拍摄与下载开关', 'test') + settingsRow('清理资料', '按日期清理录入档案与上传文件', 'cleanup') + settingsLogoutRow() + settingsNotice() + '</section>';
   }
   function settingsRow(title, detail, view) {
     return '<button class="settings-row" type="button" onclick="mobileAdminOpenSettings(\'' + view + '\')"><span class="settings-icon">' + icon('settings') + '</span><span class="settings-copy"><strong>' + title + '</strong><span>' + detail + '</span></span>' + icon('arrow') + '</button>';
@@ -287,6 +288,7 @@
     if (state.settingsView === 'bank') body = settingsBankPanel();
     if (state.settingsView === 'admins') body = settingsAdminsPanel();
     if (state.settingsView === 'password') body = settingsPasswordPanel();
+    if (state.settingsView === 'test') body = settingsTestPanel();
     if (state.settingsView === 'cleanup') body = settingsCleanupPanel();
     return '<section class="tab-panel is-active settings-detail" data-panel="settings">' + body + settingsNotice() + '</section>';
   }
@@ -297,6 +299,14 @@
       '<div class="settings-field"><span>每日考试时间</span><div class="settings-time-row"><label class="settings-time-control"><span>开始</span><input id="mobile-config-start" type="time" value="' + esc(config.start_time) + '"></label><span class="settings-time-divider" aria-hidden="true">至</span><label class="settings-time-control"><span>截止</span><input id="mobile-config-end" type="time" value="' + esc(config.end_time) + '"></label></div></div>' +
       settingsTagEditor('开放区域', 'regions', config.regions, '如：尿素塔') + settingsTagEditor('岗位 / 工种', 'jobs', config.jobs, '如：电工') +
       '<button class="settings-primary" type="button" ' + (state.settings.busy ? 'disabled' : '') + ' onclick="mobileAdminSaveSettingsCore()">' + (state.settings.busy ? '保存中…' : '保存系统配置') + '</button></div>';
+  }
+  function settingsTestPanel() {
+    var config = state.settings.config;
+    if (!config) return settingsDetailHeader('测试功能', '功能开关') + '<div class="empty-state">正在读取测试功能配置…</div>';
+    var checked = config.special_work_enabled ? ' checked' : '';
+    return settingsDetailHeader('测试功能', '只在启用后对客户端和下载入口生效') + '<div class="sheet settings-form">' +
+      '<label class="settings-test-toggle"><span><strong>特殊工种</strong><small>客户端显示特殊工种证件拍摄框；下载菜单显示证件照压缩包。</small></span><input id="mobile-special-work-enabled" type="checkbox"' + checked + '></label>' +
+      '<button class="settings-primary" type="button" ' + (state.settings.busy ? 'disabled' : '') + ' onclick="mobileAdminSaveSpecialWorkFeature()">' + (state.settings.busy ? '保存中…' : '保存测试功能') + '</button></div>';
   }
   function settingsTagEditor(label, type, values, placeholder) {
     var tags = values.length ? values.map(function (value, index) { return '<span class="settings-tag">' + esc(value) + '<button type="button" aria-label="删除' + esc(value) + '" onclick="mobileAdminRemoveSettingsTag(\'' + type + '\',' + index + ')">×</button></span>'; }).join('') : '<span class="settings-empty">暂未添加</span>';
@@ -372,6 +382,7 @@
   function activate() {
     document.body.classList.add('mobile-admin-live-enabled');
     render();
+    if (!state.settings.config) loadSettingsCore();
     loadCurrentTab();
   }
   function deactivate() {
@@ -504,11 +515,12 @@
         start_time: data.exam_start_time || '08:00',
         end_time: data.exam_end_time || '12:00',
         regions: String(data.regions || '').split(',').map(function (item) { return item.trim(); }).filter(Boolean),
-        jobs: String(data.job_types || '').split(',').map(function (item) { return item.trim(); }).filter(Boolean)
+        jobs: String(data.job_types || '').split(',').map(function (item) { return item.trim(); }).filter(Boolean),
+        special_work_enabled: data.special_work_enabled === true || String(data.special_work_enabled).toLowerCase() === 'true'
       };
       if (typeof window.loadSystemConfig === 'function') window.loadSystemConfig();
     } catch (error) { setSettingsMessage(error.message || '读取系统配置失败', true); }
-    if (isMobile() && state.tab === 'settings') render();
+    if (isMobile()) render();
   }
   async function loadSettingsSubjects() {
     try {
@@ -531,7 +543,7 @@
     state.settings.notice = '';
     state.settings.error = '';
     if (view === 'home' && !state.settings.config) loadSettingsCore();
-    if (view === 'core') { state.settings.config = null; loadSettingsCore(); }
+    if (view === 'core' || view === 'test') { state.settings.config = null; loadSettingsCore(); }
     if (view === 'units' && typeof window.loadCompanies === 'function') Promise.resolve(window.loadCompanies()).then(function () { if (isMobile() && state.tab === 'settings') render(); });
     if (view === 'bank') { state.settings.subjects = null; loadSettingsSubjects(); }
     if (view === 'admins') { state.settings.admins = null; state.settings.adminEditor = null; loadSettingsAdmins(); }
@@ -635,6 +647,26 @@
       setSettingsMessage('系统配置已保存', false);
       if (typeof window.loadSystemConfig === 'function') window.loadSystemConfig();
     } catch (error) { setSettingsMessage(error.message || '保存系统配置失败', true); }
+    state.settings.busy = false;
+    render();
+  };
+  window.mobileAdminSaveSpecialWorkFeature = async function () {
+    var config = state.settings.config;
+    var input = document.getElementById('mobile-special-work-enabled');
+    if (!config || !input) return;
+    var enabled = Boolean(input.checked);
+    state.settings.busy = true;
+    render();
+    try {
+      var formData = new FormData();
+      formData.append('enabled', enabled ? 'true' : 'false');
+      var result = await requestSettings('/api/admin/features/special-work', { method: 'POST', headers: authHeaders(), body: formData });
+      config.special_work_enabled = Boolean(result.data && result.data.special_work_enabled);
+      setSettingsMessage(result.message || '测试功能已保存', false);
+      if (typeof window.applySpecialWorkFeatureControls === 'function') window.applySpecialWorkFeatureControls(config.special_work_enabled);
+    } catch (error) {
+      setSettingsMessage(error.message || '保存测试功能失败', true);
+    }
     state.settings.busy = false;
     render();
   };

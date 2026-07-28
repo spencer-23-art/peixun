@@ -13,7 +13,7 @@ from docx.shared import Inches
 from modelscope import snapshot_download
 from rapidocr_onnxruntime import RapidOCR
 from app.postprocess import NATIONS
-from app.config import DB_PATH, UPLOAD_DIR, TEMP_IDS_DIR, CARDS_DIR, IDCARD_SAVE_DIR
+from app.config import DB_PATH, UPLOAD_DIR, TEMP_IDS_DIR, CARDS_DIR
 
 
 # ================= 1. PP-OCRv6 Tiny 模型加载与 OCR 引擎 =================
@@ -1223,17 +1223,9 @@ def cleanup_old_words():
         conn.commit()
         conn.close()
         
-    # 2. 扫描 idcards 目录下的裁剪后持久化身份证照片，也仅保留一个月
-    if os.path.exists(IDCARD_SAVE_DIR):
-        for id_img_file in glob.glob(os.path.join(IDCARD_SAVE_DIR, "*")):
-            try:
-                mtime = os.path.getmtime(id_img_file)
-                if mtime < one_month_ago:
-                    os.remove(id_img_file)
-                    print(f"[Cleanup] 已成功自动清理 30 天前的身份证裁剪照片: {os.path.basename(id_img_file)}")
-            except Exception as e:
-                print(f"[Error] 自动清理身份证照片 {id_img_file} 失败: {e}")
-                
+    # 2. uploads/idcards 中的是已入库的正式身份证裁切图，永久保留；
+    #    仅在管理员主动清理对应录入资料时才会删除。
+
     # 3. 扫描 temp_ids 目录下的临时身份证照片，删除超过 1 天的
     if os.path.exists(TEMP_IDS_DIR):
         one_day_ago = now - 24 * 3600
