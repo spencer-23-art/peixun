@@ -8,6 +8,23 @@
   <link rel="stylesheet" href="/static/css/mobile-app.css?v=1.1.0">
   <link rel="stylesheet" href="/static/admin-mobile-live.css?v=1.0.5">
   <style>
+    /* 管理端人员详情在手机端也保持双列，覆盖通用表单的单列移动端规则。 */
+    #record-detail-modal .detail-form-grid {
+      display: grid !important;
+      grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+      gap: 12px !important;
+    }
+    #record-detail-modal .detail-form-grid .form-group {
+      min-width: 0;
+      margin-bottom: 0;
+    }
+    #record-detail-modal .detail-form-grid input,
+    #record-detail-modal .detail-form-grid select {
+      width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
+    }
+
     /* 消息小铃铛与响应式消息审批 UI 样式 */
     .bell-container {
       position: relative;
