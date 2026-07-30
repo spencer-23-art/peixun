@@ -221,6 +221,28 @@ def is_special_work_enabled() -> bool:
     """Return whether the optional special-work certificate flow is enabled."""
     return get_config('special_work_enabled', 'false').strip().lower() in ('1', 'true', 'yes', 'on')
 
+
+def is_blacklist_enabled() -> bool:
+    """Return whether the optional blacklist flow is enabled."""
+    return get_config('blacklist_enabled', 'false').strip().lower() in ('1', 'true', 'yes', 'on')
+
+
+def is_blacklisted_person(cursor, name: str = '', id_last6: str = '', id_card: str = '') -> bool:
+    """Check the optional blacklist by full identity when available, else by verified name + suffix."""
+    if not is_blacklist_enabled():
+        return False
+    id_card = (id_card or '').strip()
+    if id_card:
+        cursor.execute("SELECT 1 FROM blacklist_entries WHERE id_card = ? LIMIT 1", (id_card,))
+        return cursor.fetchone() is not None
+    if name and len(id_last6 or '') == 6:
+        cursor.execute(
+            "SELECT 1 FROM blacklist_entries WHERE name = ? AND SUBSTR(id_card, -6) = ? LIMIT 1",
+            (name.strip(), id_last6.strip())
+        )
+        return cursor.fetchone() is not None
+    return False
+
 def beijing_now() -> datetime:
     """统一返回北京时间 (UTC+8) 当前时间，不受服务器本地时区影响（L4）。"""
     return datetime.now(timezone(timedelta(hours=8))).replace(tzinfo=None)
@@ -297,9 +319,9 @@ def _parse_cleanup_dates(start_date: str, end_date: str):
 
 
 def _require_primary_admin(admin):
-    """Bulk deletion is intentionally limited to the primary administrator."""
+    """Keep system-level settings and destructive actions with the primary admin."""
     if admin['username'] != 'admin':
-        raise HTTPException(status_code=403, detail="仅超级管理员可以清理资料")
+        raise HTTPException(status_code=403, detail="仅超级管理员可以执行系统设置操作")
 
 
 def _managed_upload_path(path: str):
@@ -744,6 +766,21 @@ def init_db():
     cursor.execute("INSERT OR IGNORE INTO configs (key, value) VALUES ('exam_end_time', '12:00:00')")
     cursor.execute("INSERT OR IGNORE INTO configs (key, value) VALUES ('regions', '三元肥,尿素塔')")
     cursor.execute("INSERT OR IGNORE INTO configs (key, value) VALUES ('special_work_enabled', 'false')")
+    cursor.execute("INSERT OR IGNORE INTO configs (key, value) VALUES ('blacklist_enabled', 'false')")
+
+    # 测试功能：黑名单按身份证号唯一保存，同一人多次培训也只保留一条。
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS blacklist_entries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id_card TEXT NOT NULL UNIQUE,
+        name TEXT NOT NULL,
+        phone TEXT DEFAULT '',
+        company TEXT DEFAULT '',
+        source_record_id INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+    ''')
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_blacklist_entries_created_at ON blacklist_entries (created_at DESC)")
         
     # 答题审批表
     cursor.execute('''
@@ -1109,7 +1146,8 @@ def get_enabled_features(current_user = Depends(get_current_user)):
     return {
         "code": 200,
         "data": {
-            "special_work_enabled": is_special_work_enabled()
+            "special_work_enabled": is_special_work_enabled(),
+            "blacklist_enabled": is_blacklist_enabled()
         }
     }
 
@@ -1537,6 +1575,11 @@ async def create_record(
 ):
     if not validate_id_card(id_card):
         raise HTTPException(status_code=400, detail="身份证号码格式不正确")
+
+    if is_blacklist_enabled():
+        with get_db() as conn:
+            if is_blacklisted_person(conn.cursor(), id_card=id_card):
+                raise HTTPException(status_code=403, detail="此人已经加入黑名单")
 
     remark = (remark or '').strip()
     if len(remark) > 1000:
@@ -2050,9 +2093,11 @@ def get_all_records(start_date: str = None, end_date: str = None, company: str =
         total = cursor.fetchone()[0]
         
         query = f'''
-        SELECT r.*, u.real_name as recorder_name
+        SELECT r.*, u.real_name as recorder_name,
+               CASE WHEN b.id IS NULL THEN 0 ELSE 1 END AS is_blacklisted
         FROM records r 
         LEFT JOIN users u ON r.user_id = u.id 
+        LEFT JOIN blacklist_entries b ON NULLIF(TRIM(r.id_card), '') = b.id_card
         {where_clause}
         ORDER BY r.is_gate_downloaded ASC, r.created_at DESC
         LIMIT ? OFFSET ?
@@ -2061,9 +2106,11 @@ def get_all_records(start_date: str = None, end_date: str = None, company: str =
         cursor.execute(query, params + [limit, offset])
     else:
         query = f'''
-        SELECT r.*, u.real_name as recorder_name
+        SELECT r.*, u.real_name as recorder_name,
+               CASE WHEN b.id IS NULL THEN 0 ELSE 1 END AS is_blacklisted
         FROM records r 
         LEFT JOIN users u ON r.user_id = u.id 
+        LEFT JOIN blacklist_entries b ON NULLIF(TRIM(r.id_card), '') = b.id_card
         {where_clause}
         ORDER BY r.is_gate_downloaded ASC, r.created_at DESC
         '''
@@ -2444,6 +2491,7 @@ async def upload_exam_bank(
     admin = Depends(get_admin_user)
 ):
     """管理员上传 xlsx 题库文件，替换 shiti/ 目录中的对应文件"""
+    _require_primary_admin(admin)
     exam_file_map = get_exam_file_map()
     target_filename = exam_file_map.get(exam_type)
     if not target_filename:
@@ -2517,6 +2565,9 @@ def exam_verify(data: dict, request: Request):
     # Match by both name and ID suffix, then take the most recently uploaded
     # training entry.  Older training entries stay available in search results.
     latest_training = get_latest_training_record(cursor, name, id_last6)
+    if is_blacklisted_person(cursor, name, id_last6):
+        conn.close()
+        raise HTTPException(status_code=403, detail="此人已经加入黑名单，不能参加考试")
     if latest_training:
         conn.close()
         return {
@@ -2589,6 +2640,8 @@ def check_exam_eligibility(data: dict):
     try:
         cursor = conn.cursor()
         latest_training = get_latest_training_record(cursor, name, id_last6)
+        if is_blacklisted_person(cursor, name, id_last6):
+            raise HTTPException(status_code=403, detail="此人已经加入黑名单，不能参加考试")
         if not latest_training:
             cursor.execute('''
                 SELECT 1 FROM exam_approvals
@@ -2942,6 +2995,8 @@ def save_exam_record(data: dict):
         # Never trust the company sent by the browser for an existing trainee.
         # The newest training record is the source of truth for the exam unit.
         latest_training = get_latest_training_record(cursor, name, id_last6)
+        if is_blacklisted_person(cursor, name, id_last6):
+            raise HTTPException(status_code=403, detail="此人已经加入黑名单，不能参加考试")
         if latest_training:
             company = latest_training['training_company'] or ''
         else:
@@ -3326,6 +3381,7 @@ def get_exam_subjects():
 # 增加新考试科目（仅管理员）
 @app.post("/api/admin/add_exam_subject")
 def add_exam_subject(name: str = Form(...), admin = Depends(get_admin_user)):
+    _require_primary_admin(admin)
     name = name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="科目名称不能为空")
@@ -3346,6 +3402,7 @@ def add_exam_subject(name: str = Form(...), admin = Depends(get_admin_user)):
 # 删除考试科目（仅管理员）
 @app.post("/api/admin/delete_exam_subject")
 def delete_exam_subject(name: str = Form(...), admin = Depends(get_admin_user)):
+    _require_primary_admin(admin)
     name = name.strip()
     subjects = get_exam_subjects_list()
 
@@ -3490,7 +3547,8 @@ def get_configs_api(admin = Depends(get_admin_user)):
             "exam_end_time": get_config('exam_end_time', '12:00:00')[:5],
             "regions": get_config('regions', '三元肥,尿素塔'),
             "job_types": get_config('job_types', default_jobs),
-            "special_work_enabled": is_special_work_enabled()
+            "special_work_enabled": is_special_work_enabled(),
+            "blacklist_enabled": is_blacklist_enabled()
         }
     }
 
@@ -3503,6 +3561,7 @@ def save_config_api(
     job_types: str = Form(""),
     admin = Depends(get_admin_user)
 ):
+    _require_primary_admin(admin)
     if len(start_time) == 5:
         start_time = f"{start_time}:00"
     if len(end_time) == 5:
@@ -3535,6 +3594,7 @@ def save_special_work_feature(
     enabled: str = Form(...),
     admin = Depends(get_admin_user)
 ):
+    _require_primary_admin(admin)
     enabled_value = str(enabled).strip().lower() in ('1', 'true', 'yes', 'on')
     with get_db() as conn:
         cursor = conn.cursor()
@@ -3549,6 +3609,92 @@ def save_special_work_feature(
         "data": {"special_work_enabled": enabled_value}
     }
 
+
+@app.post("/api/admin/features/blacklist")
+def save_blacklist_feature(
+    enabled: str = Form(...),
+    admin = Depends(get_admin_user)
+):
+    _require_primary_admin(admin)
+    enabled_value = str(enabled).strip().lower() in ('1', 'true', 'yes', 'on')
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT OR REPLACE INTO configs (key, value) VALUES ('blacklist_enabled', ?)",
+            ('true' if enabled_value else 'false',)
+        )
+        conn.commit()
+    return {
+        "code": 200,
+        "message": "黑名单功能已启用" if enabled_value else "黑名单功能已关闭",
+        "data": {"blacklist_enabled": enabled_value}
+    }
+
+
+@app.post("/api/admin/blacklist/add")
+def add_blacklist_entry(
+    record_id: int = Form(...),
+    admin = Depends(get_admin_user)
+):
+    if not is_blacklist_enabled():
+        raise HTTPException(status_code=403, detail="黑名单功能尚未启用")
+
+    with get_db() as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT id, id_card, name, phone, company FROM records WHERE id = ?",
+            (record_id,)
+        )
+        record = cursor.fetchone()
+        if not record:
+            raise HTTPException(status_code=404, detail="未找到对应的人员记录")
+        id_card = (record['id_card'] or '').strip()
+        if not id_card:
+            raise HTTPException(status_code=400, detail="该人员缺少身份证号，无法加入黑名单")
+
+        cursor.execute("SELECT id FROM blacklist_entries WHERE id_card = ?", (id_card,))
+        exists = cursor.fetchone()
+        if not exists:
+            cursor.execute(
+                '''INSERT INTO blacklist_entries (id_card, name, phone, company, source_record_id, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?)''',
+                (id_card, record['name'] or '', record['phone'] or '', record['company'] or '', record['id'], beijing_now().strftime("%Y-%m-%d %H:%M:%S"))
+            )
+            conn.commit()
+            message = "已加入黑名单"
+        else:
+            message = "该人员已在黑名单中"
+
+    return {"code": 200, "message": message, "data": {"record_id": record_id, "id_card": id_card, "is_blacklisted": True}}
+
+
+@app.get("/api/admin/blacklist")
+def get_blacklist_entries(admin = Depends(get_admin_user)):
+    _require_primary_admin(admin)
+    if not is_blacklist_enabled():
+        raise HTTPException(status_code=403, detail="黑名单功能尚未启用")
+    with get_db() as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, id_card, name, phone, company, source_record_id, created_at FROM blacklist_entries ORDER BY created_at DESC, id DESC")
+        return {"code": 200, "data": [dict(row) for row in cursor.fetchall()]}
+
+
+@app.post("/api/admin/blacklist/remove")
+def remove_blacklist_entry(
+    id_card: str = Form(...),
+    admin = Depends(get_admin_user)
+):
+    _require_primary_admin(admin)
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM blacklist_entries WHERE id_card = ?", (id_card.strip(),))
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="黑名单中未找到该人员")
+        conn.commit()
+    return {"code": 200, "message": "已移出黑名单"}
+
 # 修改管理员密码（仅管理员）
 @app.post("/api/admin/update_password")
 def update_admin_password(
@@ -3556,6 +3702,7 @@ def update_admin_password(
     new_password: str = Form(...),
     admin = Depends(get_admin_user)
 ):
+    _require_primary_admin(admin)
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     try:

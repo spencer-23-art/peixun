@@ -34,6 +34,7 @@
       config: null,
       subjects: null,
       admins: null,
+      blacklist: null,
       notice: '',
       error: '',
       busy: false,
@@ -46,6 +47,9 @@
   };
 
   function isMobile() { return media.matches; }
+  function isPrimaryAdmin() {
+    try { return String(getSessionItem('username') || '').trim() === 'admin'; } catch (e) { return false; }
+  }
   function esc(value) {
     if (typeof window.escapeHtml === 'function') return window.escapeHtml(String(value == null ? '' : value));
     return String(value == null ? '' : value).replace(/[&<>"']/g, function (m) {
@@ -260,13 +264,16 @@
     return '<div class="pager"><button type="button" ' + (page <= 1 ? 'disabled' : '') + ' onclick="changeExamPage(' + (page - 1) + ')">上一页</button><span>第 ' + page + ' / ' + pages + ' 页 · 共 ' + total + ' 条</span><button type="button" ' + (page >= pages ? 'disabled' : '') + ' onclick="changeExamPage(' + (page + 1) + ')">下一页</button></div>';
   }
   function settingsPanel() {
+    if (!isPrimaryAdmin()) {
+      return '<section class="tab-panel ' + (state.tab === 'settings' ? 'is-active' : '') + '" data-panel="settings">' + settingsLogoutRow() + '</section>';
+    }
     if (state.settingsView !== 'home') return settingsDetailPanel();
     var config = state.settings.config;
     var start = config ? config.start_time : '--';
     var end = config ? config.end_time : '--';
     var regions = config && config.regions.length ? config.regions.join('、') : '未配置';
     return '<section class="tab-panel ' + (state.tab === 'settings' ? 'is-active' : '') + '" data-panel="settings">' +
-      settingsRow('系统配置', '考试 ' + start + ' – ' + end + ' · 区域 ' + regions, 'core') + settingsRow('培训单位', '查看当前单位与归属来源', 'units') + settingsRow('考试题库', '科目、题目、导入与更新', 'bank') + settingsRow('二级管理员', '账号、权限与状态', 'admins') + settingsRow('修改密码', '更新当前管理员密码', 'password') + settingsRow('测试功能', '特殊工种证件拍摄与下载开关', 'test') + settingsRow('清理资料', '按日期清理录入档案与上传文件', 'cleanup') + settingsLogoutRow() + settingsNotice() + '</section>';
+      settingsRow('系统配置', '考试 ' + start + ' – ' + end + ' · 区域 ' + regions, 'core') + settingsRow('培训单位', '查看当前单位与归属来源', 'units') + settingsRow('考试题库', '科目、题目、导入与更新', 'bank') + settingsRow('二级管理员', '账号、权限与状态', 'admins') + settingsRow('修改密码', '更新当前管理员密码', 'password') + settingsRow('测试功能', '特殊工种证件与黑名单开关', 'test') + (config && config.blacklist_enabled ? settingsRow('黑名单', '查看已拉黑人员并移除', 'blacklist') : '') + settingsRow('清理资料', '按日期清理录入档案与上传文件', 'cleanup') + settingsLogoutRow() + settingsNotice() + '</section>';
   }
   function settingsRow(title, detail, view) {
     return '<button class="settings-row" type="button" onclick="mobileAdminOpenSettings(\'' + view + '\')"><span class="settings-icon">' + icon('settings') + '</span><span class="settings-copy"><strong>' + title + '</strong><span>' + detail + '</span></span>' + icon('arrow') + '</button>';
@@ -289,6 +296,7 @@
     if (state.settingsView === 'admins') body = settingsAdminsPanel();
     if (state.settingsView === 'password') body = settingsPasswordPanel();
     if (state.settingsView === 'test') body = settingsTestPanel();
+    if (state.settingsView === 'blacklist') body = settingsBlacklistPanel();
     if (state.settingsView === 'cleanup') body = settingsCleanupPanel();
     return '<section class="tab-panel is-active settings-detail" data-panel="settings">' + body + settingsNotice() + '</section>';
   }
@@ -304,9 +312,21 @@
     var config = state.settings.config;
     if (!config) return settingsDetailHeader('测试功能', '功能开关') + '<div class="empty-state">正在读取测试功能配置…</div>';
     var checked = config.special_work_enabled ? ' checked' : '';
+    var blacklistChecked = config.blacklist_enabled ? ' checked' : '';
     return settingsDetailHeader('测试功能', '只在启用后对客户端和下载入口生效') + '<div class="sheet settings-form">' +
       '<label class="settings-test-toggle"><span><strong>特殊工种</strong><small>客户端显示特殊工种证件拍摄框；下载菜单显示证件照压缩包。</small></span><input id="mobile-special-work-enabled" type="checkbox"' + checked + '></label>' +
-      '<button class="settings-primary" type="button" ' + (state.settings.busy ? 'disabled' : '') + ' onclick="mobileAdminSaveSpecialWorkFeature()">' + (state.settings.busy ? '保存中…' : '保存测试功能') + '</button></div>';
+      '<button class="settings-primary" type="button" ' + (state.settings.busy ? 'disabled' : '') + ' onclick="mobileAdminSaveSpecialWorkFeature()">' + (state.settings.busy ? '保存中…' : '保存特殊工种功能') + '</button>' +
+      '<label class="settings-test-toggle" style="border-color:rgba(248,113,113,.32); background:rgba(127,29,29,.18);"><span><strong>黑名单</strong><small>人员详情底部显示加入黑名单按钮；设置中可查看并移除已拉黑人员。</small></span><input id="mobile-blacklist-enabled" type="checkbox"' + blacklistChecked + '></label>' +
+      '<button class="settings-primary" type="button" style="background:#dc2626; border-color:#ef4444;" ' + (state.settings.busy ? 'disabled' : '') + ' onclick="mobileAdminSaveBlacklistFeature()">' + (state.settings.busy ? '保存中…' : '保存黑名单功能') + '</button></div>';
+  }
+
+  function settingsBlacklistPanel() {
+    var entries = state.settings.blacklist;
+    if (!entries) return settingsDetailHeader('黑名单', '已拉黑人员') + '<div class="empty-state">正在加载黑名单…</div>';
+    return settingsDetailHeader('黑名单', '名单按身份证号去重保存') + '<div class="settings-list">' +
+      (entries.length ? entries.map(function (entry) {
+        return '<article class="settings-list-card"><div><strong>' + esc(entry.name || '--') + '</strong><small>' + esc(entry.company || '--') + ' · ' + esc(entry.phone || '--') + '</small><small>身份证：' + esc(entry.id_card || '--') + ' · 加入：' + esc(displayDateTime(entry.created_at)) + '</small></div><div class="settings-list-actions"><button class="small-action danger-action" type="button" onclick="mobileAdminRemoveBlacklistEntry(' + jsArg(entry.id_card) + ')">移除</button></div></article>';
+      }).join('') : '<div class="empty-state">暂无黑名单人员</div>') + '</div>';
   }
   function settingsTagEditor(label, type, values, placeholder) {
     var tags = values.length ? values.map(function (value, index) { return '<span class="settings-tag">' + esc(value) + '<button type="button" aria-label="删除' + esc(value) + '" onclick="mobileAdminRemoveSettingsTag(\'' + type + '\',' + index + ')">×</button></span>'; }).join('') : '<span class="settings-empty">暂未添加</span>';
@@ -516,7 +536,8 @@
         end_time: data.exam_end_time || '12:00',
         regions: String(data.regions || '').split(',').map(function (item) { return item.trim(); }).filter(Boolean),
         jobs: String(data.job_types || '').split(',').map(function (item) { return item.trim(); }).filter(Boolean),
-        special_work_enabled: data.special_work_enabled === true || String(data.special_work_enabled).toLowerCase() === 'true'
+        special_work_enabled: data.special_work_enabled === true || String(data.special_work_enabled).toLowerCase() === 'true',
+        blacklist_enabled: data.blacklist_enabled === true || String(data.blacklist_enabled).toLowerCase() === 'true'
       };
       if (typeof window.loadSystemConfig === 'function') window.loadSystemConfig();
     } catch (error) { setSettingsMessage(error.message || '读取系统配置失败', true); }
@@ -538,7 +559,16 @@
     } catch (error) { setSettingsMessage(error.message || '读取二级管理员失败', true); state.settings.admins = []; }
     if (isMobile() && state.tab === 'settings') render();
   }
+  async function loadSettingsBlacklist() {
+    try {
+      state.settings.error = '';
+      var result = await requestSettings('/api/admin/blacklist', { headers: authHeaders() });
+      state.settings.blacklist = result.data || [];
+    } catch (error) { setSettingsMessage(error.message || '加载黑名单失败', true); state.settings.blacklist = []; }
+    if (isMobile() && state.tab === 'settings') render();
+  }
   window.mobileAdminOpenSettings = function (view) {
+    if (!isPrimaryAdmin()) view = 'home';
     state.settingsView = view;
     state.settings.notice = '';
     state.settings.error = '';
@@ -547,6 +577,7 @@
     if (view === 'units' && typeof window.loadCompanies === 'function') Promise.resolve(window.loadCompanies()).then(function () { if (isMobile() && state.tab === 'settings') render(); });
     if (view === 'bank') { state.settings.subjects = null; loadSettingsSubjects(); }
     if (view === 'admins') { state.settings.admins = null; state.settings.adminEditor = null; loadSettingsAdmins(); }
+    if (view === 'blacklist') { state.settings.blacklist = null; loadSettingsBlacklist(); }
     if (view === 'cleanup') { state.settings.cleanupPreview = null; state.settings.cleanupResult = null; }
     render();
   };
@@ -611,6 +642,9 @@
     sessionStorage.clear();
     window.location.href = '/login';
   };
+  window.addEventListener('adminidentityready', function () {
+    if (isMobile() && state.tab === 'settings') render();
+  });
   window.mobileAdminAddSettingsTag = function (type) {
     var config = state.settings.config;
     var input = document.getElementById('mobile-config-' + type);
@@ -669,6 +703,40 @@
     }
     state.settings.busy = false;
     render();
+  };
+  window.mobileAdminSaveBlacklistFeature = async function () {
+    var config = state.settings.config;
+    var input = document.getElementById('mobile-blacklist-enabled');
+    if (!config || !input) return;
+    var enabled = Boolean(input.checked);
+    state.settings.busy = true;
+    render();
+    try {
+      var formData = new FormData();
+      formData.append('enabled', enabled ? 'true' : 'false');
+      var result = await requestSettings('/api/admin/features/blacklist', { method: 'POST', headers: authHeaders(), body: formData });
+      config.blacklist_enabled = Boolean(result.data && result.data.blacklist_enabled);
+      if (!config.blacklist_enabled) state.settings.blacklist = null;
+      setSettingsMessage(result.message || '黑名单功能已保存', false);
+    } catch (error) {
+      setSettingsMessage(error.message || '保存黑名单功能失败', true);
+    }
+    state.settings.busy = false;
+    render();
+  };
+  window.mobileAdminRemoveBlacklistEntry = async function (idCard) {
+    if (!confirm('确定将该人员移出黑名单吗？')) return;
+    try {
+      var formData = new FormData();
+      formData.append('id_card', idCard);
+      var result = await requestSettings('/api/admin/blacklist/remove', { method: 'POST', headers: authHeaders(), body: formData });
+      setSettingsMessage(result.message || '已移出黑名单', false);
+      await loadSettingsBlacklist();
+      if (typeof window.loadRecords === 'function') window.loadRecords();
+    } catch (error) {
+      setSettingsMessage(error.message || '移除黑名单失败', true);
+      render();
+    }
   };
   window.mobileAdminAddExamSubject = async function () {
     var input = document.getElementById('mobile-bank-subject');

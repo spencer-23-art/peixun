@@ -928,7 +928,12 @@
     
     <!-- TAB 5: 系统配置 -->
     <div class="tab-content" id="admin-content-config">
-      <div class="config-split-container" style="display: flex; gap: 24px; width: 100%; align-items: flex-start; max-width: 1100px; margin: 20px auto 0 auto; box-sizing: border-box;">
+      <div id="secondary-admin-settings" class="glass-container" style="display: none; max-width: 560px; margin: 42px auto 0; padding: 30px; border: 1px solid var(--glass-border); border-radius: 12px; background: rgba(255, 255, 255, 0.02); box-sizing: border-box; text-align: center;">
+        <h3 style="margin: 0 0 10px; color: var(--text-main); font-size: 1.2rem;">设置</h3>
+        <p style="margin: 0 0 24px; color: var(--text-muted); line-height: 1.6;">二级管理员不具备系统设置权限。</p>
+        <button class="btn btn-secondary" type="button" onclick="logout()" style="width: auto; min-width: 180px; padding: 10px 24px; border-color: rgba(248,113,113,.45); color: #fecaca; background: rgba(127,29,29,.28);">退出登录</button>
+      </div>
+      <div id="config-settings-content" class="config-split-container" style="display: flex; gap: 24px; width: 100%; align-items: flex-start; max-width: 1100px; margin: 20px auto 0 auto; box-sizing: border-box;">
         <!-- 左边：标题栏菜单 -->
         <div class="config-menu" style="width: 220px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px;">
           <div class="config-menu-item active" onclick="switchConfigSubTab('core')" id="cfg-menu-core" style="padding: 12px 16px; border-radius: 8px; background: rgba(255,255,255,0.02); border: 1px solid var(--glass-border); color: var(--text-main); font-weight: 600; cursor: pointer; text-align: left; transition: all 0.2s;">
@@ -942,6 +947,9 @@
           </div>
           <div class="config-menu-item" onclick="switchConfigSubTab('test')" id="cfg-menu-test" style="padding: 12px 16px; border-radius: 8px; background: rgba(99,102,241,0.08); border: 1px solid rgba(129,140,248,0.24); color: #c7d2fe; font-weight: 500; cursor: pointer; text-align: left; transition: all 0.2s;">
             🧪 测试功能
+          </div>
+          <div class="config-menu-item" onclick="switchConfigSubTab('blacklist')" id="cfg-menu-blacklist" style="display: none; padding: 12px 16px; border-radius: 8px; background: rgba(239,68,68,0.08); border: 1px solid rgba(248,113,113,0.24); color: #fecaca; font-weight: 500; cursor: pointer; text-align: left; transition: all 0.2s;">
+            ⛔ 黑名单
           </div>
           <div class="config-menu-item" onclick="switchConfigSubTab('cleanup')" id="cfg-menu-cleanup" style="padding: 12px 16px; border-radius: 8px; background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); color: #fca5a5; font-weight: 500; cursor: pointer; text-align: left; transition: all 0.2s;">
             🗑️ 清理资料
@@ -958,6 +966,18 @@
                 <span><strong style="display: block; color: var(--text-main);">特殊工种</strong><small style="display: block; margin-top: 4px; color: var(--text-muted); line-height: 1.55;">启用后，客户端显示特殊工种证件拍摄框，并允许下载所选人员的证件照压缩包。</small></span>
               </label>
               <div style="margin-top: 18px; text-align: left;"><button class="btn btn-primary" type="button" onclick="saveSpecialWorkFeature()" style="width: auto; padding: 10px 24px;">保存测试功能</button></div>
+              <label style="display: flex; align-items: center; gap: 12px; margin-top: 14px; padding: 14px; border: 1px solid rgba(248,113,113,0.24); border-radius: 10px; background: rgba(127,29,29,0.13); cursor: pointer; text-align: left;">
+                <input id="cfg-blacklist-enabled" type="checkbox" style="width: 19px; height: 19px; accent-color: #ef4444;">
+                <span><strong style="display: block; color: var(--text-main);">黑名单</strong><small style="display: block; margin-top: 4px; color: var(--text-muted); line-height: 1.55;">启用后，人员详情底部可加入黑名单；设置中可查看名单并移除人员。</small></span>
+              </label>
+              <div style="margin-top: 18px; text-align: left;"><button class="btn btn-primary" type="button" onclick="saveBlacklistFeature()" style="width: auto; padding: 10px 24px; background: #dc2626; border-color: #ef4444;">保存黑名单功能</button></div>
+            </div>
+          </div>
+          <div id="cfg-panel-blacklist" class="config-sub-panel" style="display: none; width: 100%;">
+            <div class="glass-container" style="max-width: 100%; margin: 0; padding: 30px; border: 1px solid rgba(248,113,113,0.28); border-radius: 12px; background: rgba(127,29,29,0.12); box-sizing: border-box; width: 100%;">
+              <h3 style="margin-bottom: 12px; font-size: 1.25rem; color: #fecaca; border-bottom: 1px solid rgba(248,113,113,0.22); padding-bottom: 12px; text-align: left;">黑名单</h3>
+              <p style="margin: 0 0 18px; color: var(--text-muted); line-height: 1.6; text-align: left;">名单按身份证号去重保存，移除后该人员可再次加入。</p>
+              <div id="blacklist-container" style="display: grid; gap: 10px;"></div>
             </div>
           </div>
           <div id="cfg-panel-cleanup" class="config-sub-panel" style="display: none; width: 100%;">
@@ -1202,7 +1222,7 @@
           </div>
         </div>
 
-        <div class="form-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">
+        <div class="form-grid detail-form-grid" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px;">
           <div class="form-group">
             <label for="detail-name" style="font-size: 0.85rem; color: var(--text-muted); display: block; margin-bottom: 4px;">姓名 *</label>
             <input type="text" id="detail-name" class="form-control" required>
@@ -1256,6 +1276,7 @@
           <button type="submit" class="btn btn-primary" style="width: auto; padding: 8px 16px;">保存修改</button>
           <button type="button" class="btn btn-secondary" onclick="closeRecordDetailModal()" style="width: auto; padding: 8px 16px;">取消</button>
         </div>
+        <div id="detail-blacklist-actions" style="display: none; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--glass-border);"></div>
       </form>
     </div>
   </div>
@@ -1278,6 +1299,18 @@
 
     let currentAdminUsername = getSessionItem('username') || '';
 
+    function isPrimaryAdmin() {
+      return currentAdminUsername === 'admin';
+    }
+
+    function applyAdminSettingsAccess() {
+      const fullSettings = document.getElementById('config-settings-content');
+      const secondarySettings = document.getElementById('secondary-admin-settings');
+      const isPrimary = isPrimaryAdmin();
+      if (fullSettings) fullSettings.style.display = isPrimary ? 'flex' : 'none';
+      if (secondarySettings) secondarySettings.style.display = isPrimary ? 'none' : 'block';
+    }
+
     // 初始化获取管理员详细信息，同步并校准本地 username 状态
     async function initAdminInfo() {
       try {
@@ -1290,6 +1323,8 @@
           const storage = localStorage.getItem('token') ? localStorage : sessionStorage;
           storage.setItem('username', currentAdminUsername);
           updateAdminMenuTitle();
+          applyAdminSettingsAccess();
+          window.dispatchEvent(new Event('adminidentityready'));
         }
       } catch (err) {
         console.error('初始化管理员信息失败', err);
@@ -1316,6 +1351,7 @@
     }
 
     // 页面加载后立即获取最新的超管/二级管理员身份
+    applyAdminSettingsAccess();
     initAdminInfo();
 
     // 统一处理 401 响应：清 session + 友好提示 + 跳登录页
@@ -2781,6 +2817,7 @@
       }
       
       window._detailPhotoBlob = null;
+      renderDetailBlacklistAction(record);
       document.getElementById('record-detail-modal').style.display = 'flex';
     }
 
@@ -2790,6 +2827,47 @@
       document.getElementById('detail-photo-preview').src = '';
       document.getElementById('detail-idcard-preview').src = '';
       window._detailPhotoBlob = null;
+    }
+
+    function renderDetailBlacklistAction(record) {
+      const container = document.getElementById('detail-blacklist-actions');
+      if (!container) return;
+      if (!blacklistFeatureEnabled) {
+        container.style.display = 'none';
+        container.innerHTML = '';
+        return;
+      }
+      container.style.display = 'block';
+      if (Number(record.is_blacklisted) === 1) {
+        // 管理端不额外展示黑名单状态；黑名单人员无法从客户端产生新记录。
+        container.style.display = 'none';
+        container.innerHTML = '';
+        return;
+      }
+      container.innerHTML = '<button type="button" class="btn btn-secondary" onclick="addRecordToBlacklist(' + Number(record.id) + ')" style="width: auto; padding: 8px 16px; border-color: rgba(248,113,113,.5); color: #fecaca; background: rgba(127,29,29,.28);">加入黑名单</button>';
+    }
+
+    async function addRecordToBlacklist(recordId) {
+      if (!confirm('确定将该人员加入黑名单吗？')) return;
+      const formData = new FormData();
+      formData.append('record_id', recordId);
+      try {
+        const response = await fetch('/api/admin/blacklist/add', {
+          method: 'POST',
+          headers: { 'Authorization': token },
+          body: formData
+        });
+        const result = await response.json();
+        if (!response.ok || result.code !== 200) throw new Error(result.detail || result.message || '加入黑名单失败');
+        const record = lastFilteredRecords.find(function(item) { return Number(item.id) === Number(recordId); });
+        if (record) {
+          record.is_blacklisted = 1;
+          renderDetailBlacklistAction(record);
+        }
+        showAlert('success', result.message || '已加入黑名单');
+      } catch (error) {
+        showAlert('error', error.message || '加入黑名单失败');
+      }
     }
 
     function handleDetailPhotoChange(e) {
@@ -3922,6 +4000,7 @@
     }
 
     function switchConfigSubTab(subTab) {
+      if (!isPrimaryAdmin()) return;
       document.querySelectorAll('.config-sub-panel').forEach(p => p.style.display = 'none');
       document.getElementById('cfg-panel-' + subTab).style.display = 'block';
       document.querySelectorAll('.config-menu-item').forEach(item => {
@@ -3938,6 +4017,8 @@
         loadExamBanks();
       } else if (subTab === 'test') {
         loadSystemConfig();
+      } else if (subTab === 'blacklist') {
+        loadBlacklistEntries();
       } else if (subTab === 'password') {
         const subAdminSec = document.getElementById('sub-admins-section');
         if (currentAdminUsername === 'admin') {
@@ -4067,6 +4148,11 @@
           const specialWorkCheckbox = document.getElementById('cfg-special-work-enabled');
           if (specialWorkCheckbox) specialWorkCheckbox.checked = specialWorkEnabled;
           applySpecialWorkFeatureControls(specialWorkEnabled);
+
+          const blacklistEnabled = Boolean(result.data.blacklist_enabled);
+          const blacklistCheckbox = document.getElementById('cfg-blacklist-enabled');
+          if (blacklistCheckbox) blacklistCheckbox.checked = blacklistEnabled;
+          applyBlacklistFeatureControls(blacklistEnabled);
         } else {
           showAlert('error', '加载系统配置失败');
         }
@@ -4081,6 +4167,20 @@
       const mobileButton = document.getElementById('mobile-download-special-work');
       if (desktopButton) desktopButton.style.display = display;
       if (mobileButton) mobileButton.style.display = display;
+    }
+
+    let blacklistFeatureEnabled = false;
+
+    function applyBlacklistFeatureControls(enabled) {
+      blacklistFeatureEnabled = Boolean(enabled);
+      const menu = document.getElementById('cfg-menu-blacklist');
+      const panel = document.getElementById('cfg-panel-blacklist');
+      if (menu) menu.style.display = blacklistFeatureEnabled ? '' : 'none';
+      if (!blacklistFeatureEnabled && panel) panel.style.display = 'none';
+      if (!blacklistFeatureEnabled) {
+        const actions = document.getElementById('detail-blacklist-actions');
+        if (actions) actions.style.display = 'none';
+      }
     }
 
     async function saveSpecialWorkFeature() {
@@ -4105,6 +4205,71 @@
         showAlert('success', result.message || '测试功能已保存');
       } catch (err) {
         showAlert('error', err.message || '保存测试功能时网络错误');
+      }
+    }
+
+    async function saveBlacklistFeature() {
+      const checkbox = document.getElementById('cfg-blacklist-enabled');
+      if (!checkbox) return;
+      const formData = new FormData();
+      formData.append('enabled', checkbox.checked ? 'true' : 'false');
+      try {
+        const response = await fetch('/api/admin/features/blacklist', {
+          method: 'POST',
+          headers: { 'Authorization': token },
+          body: formData
+        });
+        const result = await response.json();
+        if (!response.ok || result.code !== 200) {
+          throw new Error(result.detail || result.message || '保存黑名单功能失败');
+        }
+        const active = Boolean(result.data && result.data.blacklist_enabled);
+        checkbox.checked = active;
+        applyBlacklistFeatureControls(active);
+        showAlert('success', result.message || '黑名单功能已保存');
+      } catch (err) {
+        showAlert('error', err.message || '保存黑名单功能时网络错误');
+      }
+    }
+
+    async function loadBlacklistEntries() {
+      const container = document.getElementById('blacklist-container');
+      if (!container) return;
+      container.innerHTML = '<div style="padding: 14px 0; color: var(--text-muted);">正在加载黑名单…</div>';
+      try {
+        const response = await fetch('/api/admin/blacklist', { headers: { 'Authorization': token } });
+        const result = await response.json();
+        if (!response.ok || result.code !== 200) {
+          throw new Error(result.detail || result.message || '加载黑名单失败');
+        }
+        const entries = result.data || [];
+        if (!entries.length) {
+          container.innerHTML = '<div style="padding: 20px 0; color: var(--text-muted); text-align: center;">暂无黑名单人员</div>';
+          return;
+        }
+        container.innerHTML = entries.map(function(entry) {
+          return '<div style="display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 13px; border: 1px solid rgba(248,113,113,.22); border-radius: 10px; background: rgba(15,23,42,.34); text-align: left;">' +
+            '<div style="min-width: 0;"><strong style="display: block; color: var(--text-main);">' + escapeHtml(entry.name || '--') + '</strong><small style="display: block; margin-top: 4px; color: var(--text-muted);">' + escapeHtml(entry.company || '--') + ' · ' + escapeHtml(entry.phone || '--') + '</small><small style="display: block; margin-top: 3px; color: var(--text-muted);">身份证：' + escapeHtml(entry.id_card || '--') + ' · 加入：' + escapeHtml(formatDateTime(entry.created_at)) + '</small></div>' +
+            '<button class="btn btn-secondary" type="button" onclick="removeBlacklistEntry(' + JSON.stringify(entry.id_card).replace(/"/g, '&quot;') + ')" style="width: auto; flex: 0 0 auto; padding: 6px 12px; border-color: rgba(248,113,113,.42); color: #fecaca; background: rgba(127,29,29,.24);">移除</button></div>';
+        }).join('');
+      } catch (error) {
+        container.innerHTML = '<div style="padding: 14px 0; color: #fca5a5;">' + escapeHtml(error.message || '加载黑名单失败') + '</div>';
+      }
+    }
+
+    async function removeBlacklistEntry(idCard) {
+      if (!confirm('确定将该人员移出黑名单吗？')) return;
+      const formData = new FormData();
+      formData.append('id_card', idCard);
+      try {
+        const response = await fetch('/api/admin/blacklist/remove', { method: 'POST', headers: { 'Authorization': token }, body: formData });
+        const result = await response.json();
+        if (!response.ok || result.code !== 200) throw new Error(result.detail || result.message || '移除失败');
+        showAlert('success', result.message || '已移出黑名单');
+        loadBlacklistEntries();
+        loadRecords();
+      } catch (error) {
+        showAlert('error', error.message || '移除黑名单失败');
       }
     }
 
@@ -4685,7 +4850,7 @@
     <button class="app-tab" type="button" data-tab="config" aria-selected="false" onclick="switchAdminTab('config'); setMobileTab('config')"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.1 2.1-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56v.1h-3v-.1A1.7 1.7 0 0 0 10.7 18.6a1.7 1.7 0 0 0-1.88.34l-.06.06-2.1-2.1.06-.06A1.7 1.7 0 0 0 7.06 15 1.7 1.7 0 0 0 5.5 14H5.4v-3h.1A1.7 1.7 0 0 0 7.06 10a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.1-2.1.06.06A1.7 1.7 0 0 0 10.7 6.36a1.7 1.7 0 0 0 1.03-1.56V4.7h3v.1a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.88-.34l.06-.06 2.1 2.1-.06.06A1.7 1.7 0 0 0 19.4 10a1.7 1.7 0 0 0 1.56 1h.1v3h-.1A1.7 1.7 0 0 0 19.4 15Z"></path></svg><span class="app-tab-label">设置</span></button>
   </nav>
   <section id="mobile-admin-live" aria-label="培训管理移动端"></section>
-  <script src="/static/admin-mobile-live.js?v=1.0.9"></script>
+  <script src="/static/admin-mobile-live.js?v=1.0.11"></script>
 
 </body>
 </html>
