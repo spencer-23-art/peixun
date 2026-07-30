@@ -4259,19 +4259,40 @@
         if (!response.ok || result.code !== 200) {
           throw new Error(result.detail || result.message || '加载黑名单失败');
         }
-        const entries = result.data || [];
-        if (!entries.length) {
-          container.innerHTML = '<div style="padding: 20px 0; color: var(--text-muted); text-align: center;">暂无黑名单人员</div>';
-          return;
-        }
-        container.innerHTML = entries.map(function(entry) {
-          return '<div style="display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 13px; border: 1px solid rgba(248,113,113,.22); border-radius: 10px; background: rgba(15,23,42,.34); text-align: left;">' +
-            '<div style="min-width: 0;"><strong style="display: block; color: var(--text-main);">' + escapeHtml(entry.name || '--') + '</strong><small style="display: block; margin-top: 4px; color: var(--text-muted);">' + escapeHtml(entry.company || '--') + ' · ' + escapeHtml(entry.phone || '--') + '</small><small style="display: block; margin-top: 3px; color: var(--text-muted);">身份证：' + escapeHtml(entry.id_card || '--') + ' · 加入：' + escapeHtml(formatDateTime(entry.created_at)) + '</small></div>' +
-            '<button class="btn btn-secondary" type="button" onclick="removeBlacklistEntry(' + JSON.stringify(entry.id_card).replace(/"/g, '&quot;') + ')" style="width: auto; flex: 0 0 auto; padding: 6px 12px; border-color: rgba(248,113,113,.42); color: #fecaca; background: rgba(127,29,29,.24);">移除</button></div>';
-        }).join('');
+        blacklistEntriesCache = result.data || [];
+        container.innerHTML = '<input id="blacklist-search" class="form-control" type="search" placeholder="搜索姓名、单位、电话或身份证号" oninput="filterBlacklistEntries(this.value)" style="width: 100%; box-sizing: border-box; margin: 0 0 14px;">' +
+          '<div id="blacklist-list" style="display: grid; gap: 10px;"></div>';
+        renderBlacklistEntries();
       } catch (error) {
         container.innerHTML = '<div style="padding: 14px 0; color: #fca5a5;">' + escapeHtml(error.message || '加载黑名单失败') + '</div>';
       }
+    }
+
+    let blacklistEntriesCache = [];
+
+    function filterBlacklistEntries(query) {
+      renderBlacklistEntries(query);
+    }
+
+    function renderBlacklistEntries(query) {
+      const list = document.getElementById('blacklist-list');
+      if (!list) return;
+      const keyword = String(query == null ? (document.getElementById('blacklist-search') || {}).value || '' : query).trim().toLowerCase();
+      const entries = blacklistEntriesCache.filter(function(entry) {
+        if (!keyword) return true;
+        return [entry.name, entry.company, entry.phone, entry.id_card].some(function(value) {
+          return String(value || '').toLowerCase().includes(keyword);
+        });
+      });
+      if (!entries.length) {
+        list.innerHTML = '<div style="padding: 20px 0; color: var(--text-muted); text-align: center;">' + (keyword ? '未找到匹配的黑名单人员' : '暂无黑名单人员') + '</div>';
+        return;
+      }
+      list.innerHTML = entries.map(function(entry) {
+          return '<div style="display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 13px; border: 1px solid rgba(248,113,113,.22); border-radius: 10px; background: rgba(15,23,42,.34); text-align: left;">' +
+            '<div style="min-width: 0;"><strong style="display: block; color: var(--text-main);">' + escapeHtml(entry.name || '--') + '</strong><small style="display: block; margin-top: 4px; color: var(--text-muted);">' + escapeHtml(entry.company || '--') + ' · ' + escapeHtml(entry.phone || '--') + '</small><small style="display: block; margin-top: 3px; color: var(--text-muted);">身份证：' + escapeHtml(entry.id_card || '--') + ' · 加入：' + escapeHtml(formatDateTime(entry.created_at)) + '</small></div>' +
+            '<button class="btn btn-secondary" type="button" onclick="removeBlacklistEntry(' + JSON.stringify(entry.id_card).replace(/"/g, '&quot;') + ')" style="width: auto; flex: 0 0 auto; padding: 6px 12px; border-color: rgba(248,113,113,.42); color: #fecaca; background: rgba(127,29,29,.24);">移除</button></div>';
+      }).join('');
     }
 
     async function removeBlacklistEntry(idCard) {

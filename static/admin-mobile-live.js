@@ -35,6 +35,7 @@
       subjects: null,
       admins: null,
       blacklist: null,
+      blacklistQuery: '',
       notice: '',
       error: '',
       busy: false,
@@ -323,10 +324,16 @@
   function settingsBlacklistPanel() {
     var entries = state.settings.blacklist;
     if (!entries) return settingsDetailHeader('黑名单', '已拉黑人员') + '<div class="empty-state">正在加载黑名单…</div>';
+    var query = String(state.settings.blacklistQuery || '').trim().toLowerCase();
+    var filtered = entries.filter(function (entry) {
+      if (!query) return true;
+      return [entry.name, entry.company, entry.phone, entry.id_card].some(function (value) { return String(value || '').toLowerCase().indexOf(query) !== -1; });
+    });
     return settingsDetailHeader('黑名单', '名单按身份证号去重保存') + '<div class="settings-list">' +
-      (entries.length ? entries.map(function (entry) {
+      '<input class="form-control" type="search" value="' + esc(state.settings.blacklistQuery || '') + '" placeholder="搜索姓名、单位、电话或身份证号" oninput="mobileAdminFilterBlacklist(this.value)">' +
+      (filtered.length ? filtered.map(function (entry) {
         return '<article class="settings-list-card"><div><strong>' + esc(entry.name || '--') + '</strong><small>' + esc(entry.company || '--') + ' · ' + esc(entry.phone || '--') + '</small><small>身份证：' + esc(entry.id_card || '--') + ' · 加入：' + esc(displayDateTime(entry.created_at)) + '</small></div><div class="settings-list-actions"><button class="small-action danger-action" type="button" onclick="mobileAdminRemoveBlacklistEntry(' + jsArg(entry.id_card) + ')">移除</button></div></article>';
-      }).join('') : '<div class="empty-state">暂无黑名单人员</div>') + '</div>';
+      }).join('') : '<div class="empty-state">' + (query ? '未找到匹配的黑名单人员' : '暂无黑名单人员') + '</div>') + '</div>';
   }
   function settingsTagEditor(label, type, values, placeholder) {
     var tags = values.length ? values.map(function (value, index) { return '<span class="settings-tag">' + esc(value) + '<button type="button" aria-label="删除' + esc(value) + '" onclick="mobileAdminRemoveSettingsTag(\'' + type + '\',' + index + ')">×</button></span>'; }).join('') : '<span class="settings-empty">暂未添加</span>';
@@ -577,7 +584,7 @@
     if (view === 'units' && typeof window.loadCompanies === 'function') Promise.resolve(window.loadCompanies()).then(function () { if (isMobile() && state.tab === 'settings') render(); });
     if (view === 'bank') { state.settings.subjects = null; loadSettingsSubjects(); }
     if (view === 'admins') { state.settings.admins = null; state.settings.adminEditor = null; loadSettingsAdmins(); }
-    if (view === 'blacklist') { state.settings.blacklist = null; loadSettingsBlacklist(); }
+    if (view === 'blacklist') { state.settings.blacklist = null; state.settings.blacklistQuery = ''; loadSettingsBlacklist(); }
     if (view === 'cleanup') { state.settings.cleanupPreview = null; state.settings.cleanupResult = null; }
     render();
   };
@@ -737,6 +744,10 @@
       setSettingsMessage(error.message || '移除黑名单失败', true);
       render();
     }
+  };
+  window.mobileAdminFilterBlacklist = function (query) {
+    state.settings.blacklistQuery = query || '';
+    render();
   };
   window.mobileAdminAddExamSubject = async function () {
     var input = document.getElementById('mobile-bank-subject');
