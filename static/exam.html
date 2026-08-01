@@ -436,8 +436,23 @@
       .question-text { font-size: 16px; }
       .option-item { padding: 16px 0; }
       .option-item .option-label { font-size: 18px; }
-      .btn-prev, .btn-next { padding: 12px 10px; font-size: 14px; }
-      .btn-prev span, .btn-next span { display: none; }
+      .exam-actions { gap: 5px; }
+      .btn-exam {
+        min-width: 0;
+        padding: 10px 2px;
+        font-size: clamp(11px, 3.8vw, 14px);
+        gap: 3px;
+        white-space: nowrap;
+      }
+      .btn-exam svg { width: 12px; height: 12px; }
+      .btn-prev span, .btn-next span { display: inline; }
+    }
+
+    /* 极窄屏仍完整显示翻题文字，优先压缩字号与留白。 */
+    @media (max-width: 320px) {
+      .exam-actions { padding-left: 10px; padding-right: 10px; gap: 4px; }
+      .btn-exam { min-height: 42px; padding: 8px 0; font-size: 11px; gap: 2px; }
+      .btn-exam svg { width: 11px; height: 11px; }
     }
 
     /* ===== 横屏适配 ===== */
