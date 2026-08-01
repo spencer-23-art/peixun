@@ -2308,7 +2308,10 @@
           </td>
           <td style="text-align: center;">
             <div style="display: flex; flex-direction: column; gap: 4px; align-items: center;">
-              <button class="btn btn-primary" style="padding: 4px 8px; font-size: 0.8rem; width: auto; background: #6366f1; border-color: #6366f1;" onclick="openRecordDetail(${r.id})">详情</button>
+              <div style="display: flex; align-items: center; gap: 4px;">
+                ${Number(r.is_exam_passed) === 1 ? '<span class="btn" style="padding: 4px 8px; font-size: 0.8rem; width: auto; background: #dc2626; border-color: #dc2626; color: #fff; cursor: default;">合格</span>' : ''}
+                <button class="btn btn-primary" style="padding: 4px 8px; font-size: 0.8rem; width: auto; background: #6366f1; border-color: #6366f1;" onclick="openRecordDetail(${r.id})">详情</button>
+              </div>
               <button class="btn btn-danger" style="padding: 4px 8px; font-size: 0.8rem; width: auto; margin-left: 0;" onclick="deleteRecord(${r.id})">删除</button>
             </div>
           </td>

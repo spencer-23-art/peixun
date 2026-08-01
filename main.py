@@ -2094,7 +2094,16 @@ def get_all_records(start_date: str = None, end_date: str = None, company: str =
         
         query = f'''
         SELECT r.*, u.real_name as recorder_name,
-               CASE WHEN b.id IS NULL THEN 0 ELSE 1 END AS is_blacklisted
+               CASE WHEN b.id IS NULL THEN 0 ELSE 1 END AS is_blacklisted,
+               CASE WHEN EXISTS (
+                   SELECT 1 FROM exam_records e
+                   WHERE e.name = r.name
+                     AND e.score >= {EXAM_PASSING_SCORE}
+                     AND (
+                         NULLIF(TRIM(e.id_last6), '') = SUBSTR(r.id_card, -6)
+                         OR (NULLIF(TRIM(e.id_last6), '') IS NULL AND e.company = r.company)
+                     )
+               ) THEN 1 ELSE 0 END AS is_exam_passed
         FROM records r 
         LEFT JOIN users u ON r.user_id = u.id 
         LEFT JOIN blacklist_entries b ON NULLIF(TRIM(r.id_card), '') = b.id_card
@@ -2107,7 +2116,16 @@ def get_all_records(start_date: str = None, end_date: str = None, company: str =
     else:
         query = f'''
         SELECT r.*, u.real_name as recorder_name,
-               CASE WHEN b.id IS NULL THEN 0 ELSE 1 END AS is_blacklisted
+               CASE WHEN b.id IS NULL THEN 0 ELSE 1 END AS is_blacklisted,
+               CASE WHEN EXISTS (
+                   SELECT 1 FROM exam_records e
+                   WHERE e.name = r.name
+                     AND e.score >= {EXAM_PASSING_SCORE}
+                     AND (
+                         NULLIF(TRIM(e.id_last6), '') = SUBSTR(r.id_card, -6)
+                         OR (NULLIF(TRIM(e.id_last6), '') IS NULL AND e.company = r.company)
+                     )
+               ) THEN 1 ELSE 0 END AS is_exam_passed
         FROM records r 
         LEFT JOIN users u ON r.user_id = u.id 
         LEFT JOIN blacklist_entries b ON NULLIF(TRIM(r.id_card), '') = b.id_card
