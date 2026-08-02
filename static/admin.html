@@ -2284,6 +2284,7 @@
               ${escapeHtml(r.gender)} · <span style="${((r.gender === '女' ? r.age >= 55 : r.age >= 60)) ? 'color:#ff0000;font-weight:bold;' : ''}">${r.age}岁</span> · ${escapeHtml(r.nation)}
             </div>
             <div style="font-family: monospace; font-size: 0.85rem; color: var(--text-main); font-weight: 600; margin-top: 4px;">身份证: ${escapeHtml(r.id_card)}</div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">录入人: ${escapeHtml(r.recorder_name || '系统管理员')}</div>
             <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">手机: ${escapeHtml(r.phone)}</div>
           </td>
           <td>
@@ -2304,7 +2305,6 @@
           </td>
           <td>
             <div style="font-size: 0.85rem; color: var(--text-main);">${formatTime(r.created_at)}</div>
-            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">录入人: ${escapeHtml(r.recorder_name || '系统管理员')}</div>
           </td>
           <td style="text-align: center;">
             <div style="display: flex; flex-direction: column; gap: 4px; align-items: center;">
