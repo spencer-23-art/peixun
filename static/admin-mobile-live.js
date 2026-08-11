@@ -30,6 +30,7 @@
     examFiltersOpen: false,
     examHistoryId: null,
     settingsView: 'home',
+    testFeatureVisible: false,
     settings: {
       config: null,
       subjects: null,
@@ -277,13 +278,13 @@
     var end = config ? config.end_time : '--';
     var regions = config && config.regions.length ? config.regions.join('、') : '未配置';
     return '<section class="tab-panel ' + (state.tab === 'settings' ? 'is-active' : '') + '" data-panel="settings">' +
-      settingsRow('系统配置', '考试 ' + start + ' – ' + end + ' · 区域 ' + regions, 'core') + settingsRow('培训单位', '查看当前单位与归属来源', 'units') + settingsRow('考试题库', '科目、题目、导入与更新', 'bank') + settingsRow('二级管理员', '账号、权限与状态', 'admins') + settingsRow('修改密码', '更新当前管理员密码', 'password') + settingsRow('测试功能', '特殊工种证件与黑名单开关', 'test') + (config && config.blacklist_enabled ? settingsRow('黑名单', '查看已拉黑人员并移除', 'blacklist') : '') + settingsRow('清理资料', '按日期清理录入档案与上传文件', 'cleanup') + settingsLogoutRow() + settingsNotice() + '</section>';
+      settingsRow('系统配置', '考试 ' + start + ' – ' + end + ' · 区域 ' + regions, 'core') + settingsRow('培训单位', '查看当前单位与归属来源', 'units') + settingsRow('考试题库', '科目、题目、导入与更新', 'bank') + settingsRow('二级管理员', '账号、权限与状态', 'admins') + settingsRow('修改密码', '更新当前管理员密码', 'password') + (state.testFeatureVisible ? settingsRow('测试功能', '特殊工种证件与黑名单开关', 'test') : '') + (config && config.blacklist_enabled ? settingsRow('黑名单', '查看已拉黑人员并移除', 'blacklist') : '') + settingsRow('清理资料', '按日期清理录入档案与上传文件', 'cleanup') + settingsLogoutRow() + settingsNotice() + '</section>';
   }
   function settingsRow(title, detail, view) {
     return '<button class="settings-row" type="button" onclick="mobileAdminOpenSettings(\'' + view + '\')"><span class="settings-icon">' + icon('settings') + '</span><span class="settings-copy"><strong>' + title + '</strong><span>' + detail + '</span></span>' + icon('arrow') + '</button>';
   }
   function settingsLogoutRow() {
-    return '<button class="settings-row settings-logout-row" type="button" onclick="mobileAdminLogout()"><span class="settings-icon">' + icon('logout') + '</span><span class="settings-copy"><strong>退出登录</strong><span>清除本机登录状态并返回登录页</span></span></button>';
+    return '<button class="settings-row settings-logout-row" type="button" onpointerdown="mobileAdminStartTestFeatureHold(event)" onpointerup="mobileAdminEndTestFeatureHold()" onpointercancel="mobileAdminCancelTestFeatureHold()" onpointerleave="mobileAdminCancelTestFeatureHold()" oncontextmenu="return false;" onclick="mobileAdminLogout(event)"><span class="settings-icon">' + icon('logout') + '</span><span class="settings-copy"><strong>退出登录</strong><span>清除本机登录状态并返回登录页</span></span></button>';
   }
   function settingsNotice() {
     if (!state.settings.notice && !state.settings.error) return '';
@@ -579,6 +580,7 @@
   }
   window.mobileAdminOpenSettings = function (view) {
     if (!isPrimaryAdmin()) view = 'home';
+    if (view === 'test' && !state.testFeatureVisible) view = 'home';
     state.settingsView = view;
     state.settings.notice = '';
     state.settings.error = '';
@@ -642,7 +644,41 @@
     state.settings.busy = false;
     render();
   };
-  window.mobileAdminLogout = function () {
+  var testFeatureHoldTimer = null;
+  var suppressLogoutAfterTestFeatureToggle = false;
+  var TEST_FEATURE_HOLD_DURATION = 5000;
+  window.mobileAdminStartTestFeatureHold = function (event) {
+    if (!isPrimaryAdmin()) return;
+    if (event && event.button !== undefined && event.button !== 0) return;
+    window.mobileAdminCancelTestFeatureHold();
+    testFeatureHoldTimer = setTimeout(function () {
+      testFeatureHoldTimer = null;
+      suppressLogoutAfterTestFeatureToggle = true;
+      state.testFeatureVisible = !state.testFeatureVisible;
+      state.settings.notice = state.testFeatureVisible ? '测试功能已显示' : '测试功能已隐藏';
+      state.settings.error = '';
+      render();
+      setTimeout(function () { suppressLogoutAfterTestFeatureToggle = false; }, 800);
+    }, TEST_FEATURE_HOLD_DURATION);
+  };
+  window.mobileAdminEndTestFeatureHold = function () {
+    if (testFeatureHoldTimer) {
+      clearTimeout(testFeatureHoldTimer);
+      testFeatureHoldTimer = null;
+    }
+  };
+  window.mobileAdminCancelTestFeatureHold = function () {
+    window.mobileAdminEndTestFeatureHold();
+  };
+  window.mobileAdminLogout = function (event) {
+    if (suppressLogoutAfterTestFeatureToggle) {
+      if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      suppressLogoutAfterTestFeatureToggle = false;
+      return;
+    }
     if (!confirm('确定退出当前管理员账号吗？')) return;
     if (typeof window.logout === 'function') {
       window.logout();

@@ -618,7 +618,7 @@
     </div>
     <div class="sidebar-footer">
       <div style="color: var(--text-muted); margin-bottom: 8px;">当前管理员：<strong>系统管理员</strong></div>
-      <button class="btn btn-danger" style="padding: 8px; font-size: 0.85rem;" onclick="logout()">退出后台</button>
+      <button class="btn btn-danger" style="padding: 8px; font-size: 0.85rem;" onpointerdown="startTestFeatureHold(event)" onpointerup="endTestFeatureHold()" onpointercancel="cancelTestFeatureHold()" onpointerleave="cancelTestFeatureHold()" oncontextmenu="return false;" onclick="handleAdminLogout(event)">退出后台</button>
     </div>
   </div>
   <!-- 侧拉栏遮罩 -->
@@ -654,7 +654,7 @@
 
     <div class="user-info">
       <span>当前管理员：<strong>系统管理员</strong></span>
-      <button class="btn-logout" onclick="logout()">退出后台</button>
+      <button class="btn-logout" onpointerdown="startTestFeatureHold(event)" onpointerup="endTestFeatureHold()" onpointercancel="cancelTestFeatureHold()" onpointerleave="cancelTestFeatureHold()" oncontextmenu="return false;" onclick="handleAdminLogout(event)">退出后台</button>
     </div>
   </div>
 
@@ -962,7 +962,7 @@
           <div class="config-menu-item" onclick="switchConfigSubTab('password')" id="cfg-menu-password" style="padding: 12px 16px; border-radius: 8px; background: rgba(255,255,255,0.02); border: 1px solid var(--glass-border); color: var(--text-muted); font-weight: 500; cursor: pointer; text-align: left; transition: all 0.2s;">
             🔒 管理员密码修改
           </div>
-          <div class="config-menu-item" onclick="switchConfigSubTab('test')" id="cfg-menu-test" style="padding: 12px 16px; border-radius: 8px; background: rgba(99,102,241,0.08); border: 1px solid rgba(129,140,248,0.24); color: #c7d2fe; font-weight: 500; cursor: pointer; text-align: left; transition: all 0.2s;">
+          <div class="config-menu-item" onclick="switchConfigSubTab('test')" id="cfg-menu-test" style="display: none; padding: 12px 16px; border-radius: 8px; background: rgba(99,102,241,0.08); border: 1px solid rgba(129,140,248,0.24); color: #c7d2fe; font-weight: 500; cursor: pointer; text-align: left; transition: all 0.2s;">
             🧪 测试功能
           </div>
           <div class="config-menu-item" onclick="switchConfigSubTab('blacklist')" id="cfg-menu-blacklist" style="display: none; padding: 12px 16px; border-radius: 8px; background: rgba(239,68,68,0.08); border: 1px solid rgba(248,113,113,0.24); color: #fecaca; font-weight: 500; cursor: pointer; text-align: left; transition: all 0.2s;">
@@ -3935,6 +3935,61 @@
 
     let configuredRegions = [];
     let configuredJobs = [];
+    let testFeatureMenuVisible = false;
+    let testFeatureHoldTimer = null;
+    let suppressLogoutAfterTestFeatureToggle = false;
+    const TEST_FEATURE_HOLD_DURATION = 5000;
+
+    function setTestFeatureMenuVisible(visible) {
+      const menu = document.getElementById('cfg-menu-test');
+      if (!menu) return;
+
+      const wasActive = menu.classList.contains('active');
+      testFeatureMenuVisible = Boolean(visible);
+      menu.style.display = testFeatureMenuVisible ? 'block' : 'none';
+
+      if (!testFeatureMenuVisible && wasActive) {
+        switchConfigSubTab('core');
+      }
+
+      showAlert('success', testFeatureMenuVisible ? '测试功能已显示' : '测试功能已隐藏');
+    }
+
+    function startTestFeatureHold(event) {
+      if (!isPrimaryAdmin()) return;
+      if (event && event.button !== undefined && event.button !== 0) return;
+
+      cancelTestFeatureHold();
+      testFeatureHoldTimer = setTimeout(() => {
+        testFeatureHoldTimer = null;
+        suppressLogoutAfterTestFeatureToggle = true;
+        setTestFeatureMenuVisible(!testFeatureMenuVisible);
+        setTimeout(() => { suppressLogoutAfterTestFeatureToggle = false; }, 800);
+      }, TEST_FEATURE_HOLD_DURATION);
+    }
+
+    function endTestFeatureHold() {
+      if (testFeatureHoldTimer) {
+        clearTimeout(testFeatureHoldTimer);
+        testFeatureHoldTimer = null;
+      }
+    }
+
+    function cancelTestFeatureHold() {
+      endTestFeatureHold();
+    }
+
+    function handleAdminLogout(event) {
+      if (suppressLogoutAfterTestFeatureToggle) {
+        if (event) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+        suppressLogoutAfterTestFeatureToggle = false;
+        return;
+      }
+      logout();
+    }
 
     function renderRegionTags() {
       const container = document.getElementById('cfg-regions-container');
@@ -4021,6 +4076,7 @@
 
     function switchConfigSubTab(subTab) {
       if (!isPrimaryAdmin()) return;
+      if (subTab === 'test' && !testFeatureMenuVisible) return;
       document.querySelectorAll('.config-sub-panel').forEach(p => p.style.display = 'none');
       document.getElementById('cfg-panel-' + subTab).style.display = 'block';
       document.querySelectorAll('.config-menu-item').forEach(item => {
@@ -4891,7 +4947,7 @@
     <button class="app-tab" type="button" data-tab="config" aria-selected="false" onclick="switchAdminTab('config'); setMobileTab('config')"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.1 2.1-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56v.1h-3v-.1A1.7 1.7 0 0 0 10.7 18.6a1.7 1.7 0 0 0-1.88.34l-.06.06-2.1-2.1.06-.06A1.7 1.7 0 0 0 7.06 15 1.7 1.7 0 0 0 5.5 14H5.4v-3h.1A1.7 1.7 0 0 0 7.06 10a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.1-2.1.06.06A1.7 1.7 0 0 0 10.7 6.36a1.7 1.7 0 0 0 1.03-1.56V4.7h3v.1a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.88-.34l.06-.06 2.1 2.1-.06.06A1.7 1.7 0 0 0 19.4 10a1.7 1.7 0 0 0 1.56 1h.1v3h-.1A1.7 1.7 0 0 0 19.4 15Z"></path></svg><span class="app-tab-label">设置</span></button>
   </nav>
   <section id="mobile-admin-live" aria-label="培训管理移动端"></section>
-  <script src="/static/admin-mobile-live.js?v=1.0.12"></script>
+  <script src="/static/admin-mobile-live.js?v=1.0.13"></script>
 
 </body>
 </html>
