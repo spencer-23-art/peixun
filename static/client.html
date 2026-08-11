@@ -1340,8 +1340,8 @@
                 <div style="display:flex;align-items:center;gap:6px;">
                   <strong>${escapeHtml(row.name)}</strong>
                   <span style="font-size:0.8rem;color:var(--text-muted);">${escapeHtml(row.gender)} · ${row.age || 0}岁</span>
+                  <span style="font-size:0.8rem;color:var(--text-muted);">手机: ${escapeHtml(row.phone)}</span>
                 </div>
-                <div style="font-size:0.8rem;color:var(--text-muted);margin-top:2px;">手机: ${escapeHtml(row.phone)}</div>
                 <div style="font-family:monospace;font-size:0.85rem;color:var(--text-main);font-weight:600;margin-top:4px;">身份证: ${escapeHtml(row.id_card)}</div>
                 <div style="font-size:0.8rem;color:var(--text-muted);margin-top:2px;">培训单位: ${escapeHtml(row.company || '')}</div>
               </td>
