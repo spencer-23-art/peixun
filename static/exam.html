@@ -350,6 +350,55 @@
     }
     .btn-exam svg { width: 14px; height: 14px; flex-shrink: 0; }
 
+    /* ===== 交卷确认弹窗 ===== */
+    .exam-submit-dialog {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      box-sizing: border-box;
+      background: rgba(2, 6, 23, 0.62);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transition: opacity 0.2s ease, visibility 0.2s ease;
+    }
+    .exam-submit-dialog.is-open {
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+    }
+    .exam-submit-dialog-card {
+      width: min(100%, 340px);
+      padding: 22px;
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 18px;
+      background: rgba(30, 41, 59, 0.94);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+      transform: translateY(12px) scale(0.97);
+      transition: transform 0.22s ease;
+    }
+    .exam-submit-dialog.is-open .exam-submit-dialog-card { transform: translateY(0) scale(1); }
+    .exam-submit-dialog-card h3 { margin: 0 0 10px; color: var(--text-main); font-size: 18px; }
+    .exam-submit-dialog-card p { margin: 0; color: var(--text-muted); font-size: 15px; line-height: 1.6; }
+    .exam-submit-dialog-actions { display: flex; gap: 10px; margin-top: 22px; }
+    .exam-submit-dialog-actions button {
+      flex: 1;
+      min-height: 44px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.14);
+      font-size: 15px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .exam-submit-cancel { background: rgba(255,255,255,0.06); color: var(--text-main); }
+    .exam-submit-confirm { background: #dc2626; border-color: #ef4444 !important; color: #fff; }
+
     /* ===== 结果页 ===== */
     .result-area {
       flex: 1;
@@ -597,6 +646,17 @@
       <div class="result-footer">
         <button class="btn btn-primary" id="restart-exam-button" onclick="restartExamDirectly()">重新答题</button>
         <button class="btn btn-secondary" onclick="restartExamWithNewSubject()">更换科目 / 返回</button>
+      </div>
+    </div>
+
+    <div class="exam-submit-dialog" id="exam-submit-dialog" role="dialog" aria-modal="true" aria-labelledby="exam-submit-dialog-title" aria-hidden="true">
+      <div class="exam-submit-dialog-card">
+        <h3 id="exam-submit-dialog-title">确认交卷</h3>
+        <p id="exam-submit-dialog-message"></p>
+        <div class="exam-submit-dialog-actions">
+          <button type="button" class="exam-submit-cancel" onclick="closeSubmitConfirm()">否，继续答题</button>
+          <button type="button" class="exam-submit-confirm" onclick="confirmSubmitExam()">是，交卷</button>
+        </div>
       </div>
     </div>
 
@@ -898,7 +958,40 @@
         examData.currentIndex++;
         renderQuestion();
         renderQuestionNav();
+        return;
       }
+      openSubmitConfirm();
+    }
+
+    function getUnansweredQuestionCount() {
+      return examData.questions.reduce((count, _, index) => {
+        return count + (examData.answers[index] === undefined ? 1 : 0);
+      }, 0);
+    }
+
+    function openSubmitConfirm() {
+      const unanswered = getUnansweredQuestionCount();
+      const dialog = document.getElementById('exam-submit-dialog');
+      const message = document.getElementById('exam-submit-dialog-message');
+      if (!dialog || !message) return;
+
+      message.textContent = unanswered > 0
+        ? `还有 ${unanswered} 道题未答，是否交卷？`
+        : '所有题目已答完，是否交卷？';
+      dialog.classList.add('is-open');
+      dialog.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeSubmitConfirm() {
+      const dialog = document.getElementById('exam-submit-dialog');
+      if (!dialog) return;
+      dialog.classList.remove('is-open');
+      dialog.setAttribute('aria-hidden', 'true');
+    }
+
+    function confirmSubmitExam() {
+      closeSubmitConfirm();
+      submitExamNow();
     }
 
     function goToQuestion(index) {
@@ -918,13 +1011,22 @@
         document.getElementById('timer').textContent =
           `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
         if (examData.remainingTime <= 0) {
-          submitExam();
+          submitExamNow();
         }
       }, 1000);
     }
 
-    async function submitExam() {
+    function submitExam() {
+      if (getUnansweredQuestionCount() > 0) {
+        openSubmitConfirm();
+        return;
+      }
+      submitExamNow();
+    }
+
+    async function submitExamNow() {
       const btnSubmit = document.getElementById('btn-submit');
+      if (btnSubmit && btnSubmit.disabled) return;
       if (btnSubmit) {
         btnSubmit.disabled = true;
         btnSubmit.textContent = '正在交卷...';

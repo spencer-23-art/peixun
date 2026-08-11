@@ -216,11 +216,17 @@
         position: absolute;
         top: 16px;
         right: 16px;
-        width: 40px !important;
-        height: 50px !important;
+        width: 90px !important;
+        height: 119px !important;
         padding: 0 !important;
         display: block !important;
         background: transparent !important;
+      }
+
+      #history-table-body .table-img {
+        width: 90px !important;
+        height: 119px !important;
+        object-fit: cover;
       }
       
       /* 门禁恢复列表照片绝对定位 */
@@ -242,7 +248,8 @@
 
       /* 卡片式结构定制：文字信息列在右侧留白，防止遮挡 */
       #history-table-body td:nth-child(2) {
-        padding-right: 56px !important;
+        min-height: 119px;
+        padding-right: 102px !important;
       }
 
       /* 历史记录卡片：操作按钮在卡片底部排开 */
