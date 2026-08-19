@@ -1075,6 +1075,242 @@ def ocr_idcard_process(image_path):
     }
 
 
+def _ocr_result_text(line):
+    """Read text from the RapidOCR result shape used by supported versions."""
+    if not line or len(line) < 2:
+        return ""
+    value = line[1]
+    if isinstance(value, (tuple, list)):
+        value = value[0] if value else ""
+    return str(value or "").strip()
+
+
+def _ocr_result_confidence(line):
+    if not line:
+        return 0.0
+    try:
+        if len(line) > 2:
+            return float(line[2])
+        if len(line) > 1 and isinstance(line[1], (tuple, list)) and len(line[1]) > 1:
+            return float(line[1][1])
+    except (TypeError, ValueError):
+        pass
+    return 0.0
+
+
+def _special_work_ocr_lines(ocr_results):
+    lines = []
+    for line in ocr_results or []:
+        text = _ocr_result_text(line)
+        if not text:
+            continue
+        x, y = 0.0, 0.0
+        try:
+            box = np.asarray(line[0], dtype=float)
+            x = float(np.min(box[:, 0]))
+            y = float(np.mean(box[:, 1]))
+        except Exception:
+            pass
+        lines.append({"text": text, "compact": re.sub(r"\s+", "", text), "x": x, "y": y})
+    return sorted(lines, key=lambda item: (round(item["y"] / 12.0), item["x"]))
+
+
+def _special_work_ocr_score(ocr_results):
+    score = 0.0
+    for line in ocr_results or []:
+        text = _ocr_result_text(line)
+        if text:
+            score += len(text) * (0.5 + max(0.0, min(1.0, _ocr_result_confidence(line))))
+    return score
+
+
+def _normalize_special_work_date(value):
+    value = str(value or "")
+    patterns = (
+        r"(?<!\d)(20\d{2})\s*[年./\-]\s*(0?[1-9]|1[0-2])\s*[月./\-]\s*(0?[1-9]|[12]\d|3[01])\s*日?",
+        r"(?<!\d)(20\d{2})(0[1-9]|1[0-2])([0-3]\d)(?!\d)",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, value)
+        if not match:
+            continue
+        try:
+            parsed = datetime.date(int(match.group(1)), int(match.group(2)), int(match.group(3)))
+            return parsed.strftime("%Y%m%d")
+        except ValueError:
+            continue
+    return ""
+
+
+def _find_date_near_labels(lines, labels):
+    for index, line in enumerate(lines):
+        compact = line["compact"]
+        if not any(label in compact for label in labels):
+            continue
+        for nearby in lines[index:index + 3]:
+            matched_date = _normalize_special_work_date(nearby["compact"])
+            if matched_date:
+                return matched_date
+    return ""
+
+
+def _person_name_from_value(value):
+    value = re.sub(r"^(姓名|持证人|姓\s*名)\s*[:：]?", "", str(value or ""))
+    value = re.split(r"性别|民族|身份证|证件|出生|住址|工种", value)[0]
+    cleaned = re.sub(r"[^\u4e00-\u9fff]", "", value)
+    invalid = ("姓名", "持证人", "特种", "作业", "操作", "证书")
+    return cleaned if 2 <= len(cleaned) <= 8 and not any(word in cleaned for word in invalid) else ""
+
+
+def _value_after_labels(lines, labels, extractor=None):
+    for index, line in enumerate(lines):
+        compact = line["compact"]
+        for label in labels:
+            position = compact.find(label)
+            if position < 0:
+                continue
+            candidates = [compact[position + len(label):].lstrip(":：-—_")]
+            candidates.extend(next_line["compact"] for next_line in lines[index + 1:index + 3])
+            for candidate in candidates:
+                if not candidate or any(other in candidate for other in labels):
+                    continue
+                value = extractor(candidate) if extractor else candidate
+                if value:
+                    return value
+    return ""
+
+
+def _special_work_id_card(text):
+    compact = re.sub(r"\s+", "", str(text or "")).upper()
+    match = re.search(r"(?<!\d)([1-9]\d{5}[12]\d{3}[01]\d[0-3]\d{4}[\dX])(?![\dX])", compact)
+    if match:
+        return match.group(1)
+    corrected = compact.replace("O", "0").replace("I", "1").replace("L", "1").replace("Z", "2").replace("S", "5")
+    match = re.search(r"(?<!\d)([1-9]\d{5}[12]\d{3}[01]\d[0-3]\d{4}[\dX])(?![\dX])", corrected)
+    return match.group(1) if match else ""
+
+
+def _clean_certificate_name(value):
+    value = re.sub(r"^(作业类别|操作项目|作业项目|证件名称|作业工种|准操项目|操作类别|作业种类)\s*[:：]?", "", str(value or ""))
+    value = re.split(r"证书编号|证件编号|有效期|发证机关|发证单位|姓名|身份证", value)[0]
+    value = re.sub(r"^[^\u4e00-\u9fffA-Za-z0-9]+|[^\u4e00-\u9fffA-Za-z0-9（）()\-]+$", "", value)
+    return value[:60] if 2 <= len(value) <= 60 else ""
+
+
+def _clean_issuing_authority(value):
+    value = re.sub(r"^(发证机关|发证单位|发证部门|发证机构|签发机关)\s*[:：]?", "", str(value or ""))
+    value = re.split(r"有效期|证书编号|证件编号|姓名|身份证", value)[0]
+    value = re.sub(r"^[^\u4e00-\u9fffA-Za-z0-9]+|[^\u4e00-\u9fffA-Za-z0-9（）()\-]+$", "", value)
+    return value[:80] if 2 <= len(value) <= 80 else ""
+
+
+def extract_special_work_certificate_info(ocr_results):
+    """Extract the fields needed by the special-work qualification register."""
+    lines = _special_work_ocr_lines(ocr_results)
+    full_text = "".join(line["compact"] for line in lines)
+    name = _value_after_labels(lines, ("姓名", "持证人"), _person_name_from_value)
+    id_card = _special_work_id_card(full_text)
+    certificate_name = _value_after_labels(
+        lines,
+        ("作业类别", "操作项目", "作业项目", "证件名称", "作业工种", "准操项目", "操作类别", "作业种类"),
+        _clean_certificate_name
+    )
+    if not certificate_name:
+        work_keywords = ("电工", "焊", "司机", "信号", "高处", "登高", "制冷", "起重", "叉车", "有限空间", "架子", "压力")
+        for line in lines:
+            candidate = _clean_certificate_name(line["compact"])
+            if candidate and any(keyword in candidate for keyword in work_keywords) and candidate not in ("特种作业操作证", "中华人民共和国特种作业操作证"):
+                certificate_name = candidate
+                break
+    start_date = _find_date_near_labels(lines, ("起始日期", "初始日期", "初次取证", "初领日期", "发证日期", "生效日期"))
+    end_date = _find_date_near_labels(lines, ("有效期至", "有效期限", "有效日期", "有效期"))
+    all_dates = []
+    for line in lines:
+        value = _normalize_special_work_date(line["compact"])
+        if value and value not in all_dates:
+            all_dates.append(value)
+    if not start_date and all_dates:
+        start_date = all_dates[0]
+    if not end_date and len(all_dates) > 1:
+        end_date = all_dates[-1]
+    issuing_authority = _value_after_labels(
+        lines,
+        ("发证机关", "发证单位", "发证部门", "发证机构", "签发机关"),
+        _clean_issuing_authority
+    )
+    if not issuing_authority:
+        issuer_keywords = ("应急管理", "市场监督", "安全生产", "管理局", "管理厅", "人民政府", "委员会", "住建")
+        for line in lines:
+            candidate = _clean_issuing_authority(line["compact"])
+            if candidate and any(keyword in candidate for keyword in issuer_keywords):
+                issuing_authority = candidate
+                break
+    certificate_number = _value_after_labels(
+        lines,
+        ("证书编号", "证件编号", "证书号"),
+        lambda value: re.search(r"[A-Za-z0-9\-]{6,}", value).group(0) if re.search(r"[A-Za-z0-9\-]{6,}", value) else ""
+    )
+    return {
+        "name": name,
+        "id_card": id_card,
+        "certificate_name": certificate_name,
+        "start_date": start_date,
+        "end_date": end_date,
+        "issuing_authority": issuing_authority,
+        "certificate_number": certificate_number,
+        "raw_text": "\n".join(line["text"] for line in lines)[:2000],
+        "recognized": bool(name or id_card or certificate_name or start_date or end_date or issuing_authority),
+    }
+
+
+def ocr_special_work_certificate_process(image_path):
+    """OCR a special-work certificate and return register-ready fields."""
+    engine = init_ppocrv6()
+    source = _read_and_auto_orient(image_path)
+    if source is None:
+        raise ValueError("无法解析特殊工种证件图片。")
+    candidates = (
+        ("original", source),
+        ("rotate_cw", cv2.rotate(source, cv2.ROTATE_90_CLOCKWISE)),
+        ("rotate_ccw", cv2.rotate(source, cv2.ROTATE_90_COUNTERCLOCKWISE)),
+        ("rotate_180", cv2.rotate(source, cv2.ROTATE_180)),
+    )
+    best_results = None
+    best_score = -1.0
+    best_orientation = "original"
+    for index, (orientation, candidate) in enumerate(candidates):
+        try:
+            results, _ = engine(candidate)
+        except Exception:
+            results = None
+        score = _special_work_ocr_score(results)
+        if score > best_score:
+            best_results = results
+            best_score = score
+            best_orientation = orientation
+        if index == 0 and score >= 100:
+            break
+    if best_score < 30:
+        filtered = _reduce_screen_pattern(source)
+        try:
+            filtered_results, _ = engine(filtered)
+        except Exception:
+            filtered_results = None
+        filtered_score = _special_work_ocr_score(filtered_results)
+        if filtered_score > best_score:
+            best_results = filtered_results
+            best_score = filtered_score
+            best_orientation = "original_screen_filter"
+    result = extract_special_work_certificate_info(best_results)
+    result["orientation"] = best_orientation
+    result["ocr_score"] = round(best_score, 2)
+    print(
+        f"[SpecialWork-OCR] direction={best_orientation}, score={best_score:.1f}, "
+        f"name={'yes' if result['name'] else 'no'}, id={'yes' if result['id_card'] else 'no'}"
+    )
+    return result
+
+
 # ================= 4. Word 登记卡自动生成 =================
 def _center_text_in_spaces(text, total_spaces):
     width = sum(2 if ord(c) > 127 else 1 for c in text)

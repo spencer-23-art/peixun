@@ -492,7 +492,7 @@
     }
     .filter-grid {
       display: grid;
-      grid-template-columns: 2fr 1fr 1fr auto;
+      grid-template-columns: 2fr 1fr 1fr 0.9fr auto;
       gap: 16px;
       align-items: flex-end;
     }
@@ -705,6 +705,9 @@
         <button class="btn btn-secondary" id="btn-export-special-work" onclick="exportData('special_work')" style="margin-left: 8px; display: none;">
           下载特殊工种证件
         </button>
+        <button class="btn btn-secondary" id="btn-export-special-work-register" onclick="exportData('special_work_register')" style="margin-left: 8px; display: none;">
+          下载特殊工种登记表
+        </button>
       </div>
     </div>
 
@@ -743,6 +746,7 @@
             <button type="button" onclick="exportMobileRecords('csv')">下载 CSV</button>
             <button type="button" onclick="exportMobileRecords('photos')">下载照片包</button>
             <button id="mobile-download-special-work" type="button" onclick="exportMobileRecords('special_work')" style="display: none;">下载特殊工种证件</button>
+            <button id="mobile-download-special-work-register" type="button" onclick="exportMobileRecords('special_work_register')" style="display: none;">下载特殊工种登记表</button>
           </div>
         </div>
       </div>
@@ -769,6 +773,14 @@
           <div class="filter-item">
             <label class="filter-label">姓名搜索</label>
             <input type="text" id="filter-name" class="form-control filter-control" placeholder="输入姓名搜索..." oninput="handleNameSearch()" autocomplete="new-password" readonly onfocus="this.removeAttribute('readonly');">
+          </div>
+          <!-- 岗位类型 -->
+          <div class="filter-item">
+            <label class="filter-label">岗位类型</label>
+            <select id="filter-special-work" class="form-control filter-control" onchange="handleSpecialWorkFilterChange()">
+              <option value="">全部岗位</option>
+              <option value="special">特殊工种</option>
+            </select>
           </div>
           <!-- 筛选操作按钮 -->
           <div class="filter-actions-btn">
@@ -1007,7 +1019,7 @@
               <h3 style="margin-bottom: 12px; font-size: 1.25rem; color: #e0e7ff; border-bottom: 1px solid rgba(129,140,248,0.22); padding-bottom: 12px; text-align: left;">测试功能</h3>
               <label style="display: flex; align-items: center; gap: 12px; padding: 14px; border: 1px solid rgba(129,140,248,0.22); border-radius: 10px; background: rgba(15,23,42,0.38); cursor: pointer; text-align: left;">
                 <input id="cfg-special-work-enabled" type="checkbox" style="width: 19px; height: 19px; accent-color: #6366f1;">
-                <span><strong style="display: block; color: var(--text-main);">特殊工种</strong><small style="display: block; margin-top: 4px; color: var(--text-muted); line-height: 1.55;">启用后，客户端显示特殊工种证件拍摄框，并允许下载所选人员的证件照压缩包。</small></span>
+                <span><strong style="display: block; color: var(--text-main);">特殊工种</strong><small style="display: block; margin-top: 4px; color: var(--text-muted); line-height: 1.55;">启用后，客户端识别特殊工种证件；下载菜单可下载证件照压缩包和资质登记表。</small></span>
               </label>
               <div style="margin-top: 18px; text-align: left;"><button class="btn btn-primary" type="button" onclick="saveSpecialWorkFeature()" style="width: auto; padding: 10px 24px;">保存测试功能</button></div>
               <label style="display: flex; align-items: center; gap: 12px; margin-top: 14px; padding: 14px; border: 1px solid rgba(248,113,113,0.24); border-radius: 10px; background: rgba(127,29,29,0.13); cursor: pointer; text-align: left;">
@@ -1314,6 +1326,7 @@
         <div class="form-group" style="margin-bottom: 20px;">
           <label for="detail-remark" style="font-size: 0.85rem; color: var(--text-muted); display: block; margin-bottom: 4px;">备注</label>
           <textarea id="detail-remark" class="form-control" rows="3" maxlength="1000" placeholder="填写本次培训备注"></textarea>
+          <div id="detail-remark-attachment" style="display:none; align-items:center; gap:8px; flex-wrap:wrap; margin-top:9px; font-size:0.85rem;"></div>
         </div>
 
         <div style="display: flex; gap: 10px;">
@@ -1446,6 +1459,7 @@
     let filterEndDate = '';
     let filterCompany = '';
     let filterName = '';
+    let filterSpecialWork = false;
     
     // 分页管理
     let recordsPage = 1;
@@ -2215,6 +2229,9 @@
         if (filterName) {
           url += 'name=' + encodeURIComponent(filterName) + '&';
         }
+        if (filterSpecialWork) {
+          url += 'special_work=true&';
+        }
         
         url += 'page=' + recordsPage + '&limit=' + recordsLimit;
         
@@ -2408,6 +2425,13 @@
       loadRecords();
     }
 
+    // 仅显示电工、电焊工、塔吊司机、吊车司机、信号工和电梯司机。
+    function handleSpecialWorkFilterChange() {
+      filterSpecialWork = document.getElementById('filter-special-work').value === 'special';
+      recordsPage = 1;
+      loadRecords();
+    }
+
     let searchTimeout = null;
     // 姓名实时搜索（带300ms防抖）
     function handleNameSearch() {
@@ -2425,12 +2449,14 @@
       document.getElementById('filter-end-date').value = '';
       document.getElementById('filter-company').value = '';
       document.getElementById('filter-name').value = '';
+      document.getElementById('filter-special-work').value = '';
       var mobileQuery = document.getElementById('mobile-record-query');
       if (mobileQuery) mobileQuery.value = '';
       filterStartDate = '';
       filterEndDate = '';
       filterCompany = '';
       filterName = '';
+      filterSpecialWork = false;
       recordsPage = 1;
       
       // 清空所有勾选历史状态，重新应用默认勾选
@@ -2674,6 +2700,9 @@
       } else if (format === 'special_work') {
         const certificateUrl = '/api/admin/export/special-work-certificates?ids=' + encodeURIComponent(ids);
         downloadFileWithToken(certificateUrl, '特殊工种证件照.zip', false);
+      } else if (format === 'special_work_register') {
+        const registerUrl = '/api/admin/export/special-work-register?ids=' + encodeURIComponent(ids);
+        downloadFileWithToken(registerUrl, '特种作业人员资质登记表.xlsx', false);
       } else if (format === 'gate') {
         // 1. 下载 CSV 文件（此接口会同时更新已下载状态，故传入 shouldRefreshList 为 true）
         const csvUrl = '/api/admin/export/gate/csv?ids=' + encodeURIComponent(ids);
@@ -2783,6 +2812,7 @@
       document.getElementById('detail-address').value = record.address || '';
       document.getElementById('detail-education').value = record.education || '大专';
       document.getElementById('detail-remark').value = record.remark || '';
+      renderDetailRemarkAttachment(record);
 
       // 填充民族
       const nationSelect = document.getElementById('detail-nation');
@@ -2868,11 +2898,38 @@
       document.getElementById('record-detail-modal').style.display = 'flex';
     }
 
+    function renderDetailRemarkAttachment(record) {
+      const container = document.getElementById('detail-remark-attachment');
+      if (!container) return;
+      const attachmentName = record && record.remark_attachment_name ? String(record.remark_attachment_name) : '';
+      const recordId = record && record.id ? Number(record.id) : 0;
+      container.innerHTML = '';
+      if (!attachmentName || !recordId) {
+        container.style.display = 'none';
+        return;
+      }
+      const label = document.createElement('span');
+      label.textContent = '备注附件：' + attachmentName;
+      label.style.cssText = 'color:var(--text-muted); word-break:break-all;';
+      const downloadButton = document.createElement('button');
+      downloadButton.type = 'button';
+      downloadButton.className = 'btn btn-secondary';
+      downloadButton.textContent = '下载附件';
+      downloadButton.style.cssText = 'width:auto; margin:0; padding:6px 11px; font-size:0.8rem; white-space:nowrap;';
+      downloadButton.onclick = function() {
+        downloadFileWithToken('/api/admin/records/' + encodeURIComponent(recordId) + '/remark-attachment', attachmentName, false);
+      };
+      container.appendChild(label);
+      container.appendChild(downloadButton);
+      container.style.display = 'flex';
+    }
+
     function closeRecordDetailModal() {
       document.getElementById('record-detail-modal').style.display = 'none';
       document.getElementById('detail-record-form').reset();
       document.getElementById('detail-photo-preview').src = '';
       document.getElementById('detail-idcard-preview').src = '';
+      renderDetailRemarkAttachment(null);
       window._detailPhotoBlob = null;
     }
 
@@ -4268,8 +4325,12 @@
       const display = enabled ? '' : 'none';
       const desktopButton = document.getElementById('btn-export-special-work');
       const mobileButton = document.getElementById('mobile-download-special-work');
+      const desktopRegisterButton = document.getElementById('btn-export-special-work-register');
+      const mobileRegisterButton = document.getElementById('mobile-download-special-work-register');
       if (desktopButton) desktopButton.style.display = display;
       if (mobileButton) mobileButton.style.display = display;
+      if (desktopRegisterButton) desktopRegisterButton.style.display = display;
+      if (mobileRegisterButton) mobileRegisterButton.style.display = display;
     }
 
     let blacklistFeatureEnabled = false;
@@ -4974,7 +5035,7 @@
     <button class="app-tab" type="button" data-tab="config" aria-selected="false" onclick="switchAdminTab('config'); setMobileTab('config')"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.1 2.1-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56v.1h-3v-.1A1.7 1.7 0 0 0 10.7 18.6a1.7 1.7 0 0 0-1.88.34l-.06.06-2.1-2.1.06-.06A1.7 1.7 0 0 0 7.06 15 1.7 1.7 0 0 0 5.5 14H5.4v-3h.1A1.7 1.7 0 0 0 7.06 10a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.1-2.1.06.06A1.7 1.7 0 0 0 10.7 6.36a1.7 1.7 0 0 0 1.03-1.56V4.7h3v.1a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.88-.34l.06-.06 2.1 2.1-.06.06A1.7 1.7 0 0 0 19.4 10a1.7 1.7 0 0 0 1.56 1h.1v3h-.1A1.7 1.7 0 0 0 19.4 15Z"></path></svg><span class="app-tab-label">设置</span></button>
   </nav>
   <section id="mobile-admin-live" aria-label="培训管理移动端"></section>
-  <script src="/static/admin-mobile-live.js?v=1.0.13"></script>
+  <script src="/static/admin-mobile-live.js?v=1.0.15"></script>
 
 </body>
 </html>

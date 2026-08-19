@@ -20,6 +20,7 @@
     recordCompanyOpen: false,
     recordFiltersOpen: false,
     recordStatus: 'all',
+    recordJobCategory: 'all',
     downloadOpen: false,
     composing: { record: false, exam: false, pending: false, restore: false },
     pendingQuery: '',
@@ -144,7 +145,9 @@
     try { query = typeof filterName !== 'undefined' ? filterName : ''; } catch (e) { query = ''; }
     var selectedCompany = '';
     try { selectedCompany = typeof filterCompany !== 'undefined' ? filterCompany : ''; } catch (e) { selectedCompany = ''; }
+    try { state.recordJobCategory = typeof filterSpecialWork !== 'undefined' && filterSpecialWork ? 'special' : 'all'; } catch (e) { state.recordJobCategory = 'all'; }
     var status = function (key, text) { return '<button type="button" class="filter-option ' + (state.recordStatus === key ? 'is-selected' : '') + '" onclick="mobileAdminSetRecordStatus(\'' + key + '\')">' + text + '</button>'; };
+    var jobCategory = function (key, text) { return '<button type="button" class="filter-option ' + (state.recordJobCategory === key ? 'is-selected' : '') + '" onclick="mobileAdminSetRecordJobCategory(\'' + key + '\')">' + text + '</button>'; };
     return '<section class="tab-panel ' + (state.tab === 'records' ? 'is-active' : '') + '" data-panel="records">' +
       '<div class="summary-grid"><article class="summary-card primary"><div class="summary-label">培训记录</div><div class="summary-value">' + total + '</div><div class="summary-note">完整保留历史培训</div></article><article class="summary-card"><div class="summary-label">本页待下载</div><div class="summary-value">' + pending + '</div><div class="summary-note">默认已勾选，可逐个调整</div></article></div>' +
       '<div class="page-toolbar"><div class="company-combobox"><span class="search-glyph">' + icon('search') + '</span>' +
@@ -153,8 +156,8 @@
         '<div class="company-options ' + (state.recordCompanyOpen ? 'is-open' : '') + '">' + companyButtons + '</div></div>' +
       '<button class="toolbar-btn" type="button" aria-label="筛选培训记录" onclick="mobileAdminToggleRecordFilters(event)">' + icon('filter') + '</button>' +
       '<div class="download-wrap"><button class="toolbar-btn" type="button" aria-label="下载所选人员" onclick="mobileAdminToggleDownload(event)">' + icon('download') + '</button>' +
-        '<div class="download-chooser ' + (state.downloadOpen ? 'is-open' : '') + '"><h3>选择下载内容</h3><p>可按需要只下载一种内容。</p><div class="download-options"><button type="button" onclick="mobileAdminExport(\'excel\')">下载 Excel</button><button type="button" onclick="mobileAdminExport(\'csv\')">下载 CSV</button><button type="button" onclick="mobileAdminExport(\'photos\')">下载照片包</button>' + (specialWorkEnabled ? '<button type="button" onclick="mobileAdminExport(\'special_work\')">下载特殊工种证件</button>' : '') + '</div></div></div></div>' +
-      '<div class="filter-panel ' + (state.recordFiltersOpen ? 'is-open' : '') + '"><div class="filter-group"><span class="filter-group-label">下载状态</span><div class="filter-options">' + status('all', '全部') + status('pending', '未下载') + status('downloaded', '已下载') + status('today', '今日录入') + '</div></div>' +
+        '<div class="download-chooser ' + (state.downloadOpen ? 'is-open' : '') + '"><h3>选择下载内容</h3><p>可按需要只下载一种内容。</p><div class="download-options"><button type="button" onclick="mobileAdminExport(\'excel\')">下载 Excel</button><button type="button" onclick="mobileAdminExport(\'csv\')">下载 CSV</button><button type="button" onclick="mobileAdminExport(\'photos\')">下载照片包</button>' + (specialWorkEnabled ? '<button type="button" onclick="mobileAdminExport(\'special_work\')">下载特殊工种证件</button><button type="button" onclick="mobileAdminExport(\'special_work_register\')">下载特殊工种登记表</button>' : '') + '</div></div></div></div>' +
+      '<div class="filter-panel ' + (state.recordFiltersOpen ? 'is-open' : '') + '"><div class="filter-group"><span class="filter-group-label">下载状态</span><div class="filter-options">' + status('all', '全部') + status('pending', '未下载') + status('downloaded', '已下载') + status('today', '今日录入') + '</div></div><div class="filter-group"><span class="filter-group-label">岗位类型</span><div class="filter-options">' + jobCategory('all', '全部岗位') + jobCategory('special', '特殊工种') + '</div></div>' +
         '<div class="filter-panel-actions"><button type="button" onclick="mobileAdminClearRecordFilters()">重置</button><button type="button" class="apply-filter" onclick="mobileAdminToggleRecordFilters()">完成</button></div></div>' +
       '<div class="section-heading"><h3>' + esc(selectedCompany || '全部培训单位') + '</h3><span>当前 ' + records.length + ' 人</span></div><div class="record-stack">' +
       (records.length ? records.map(recordCard).join('') : '<div class="empty-state">没有符合条件的培训记录</div>') + '</div>' + recordPager() + '</section>';
@@ -319,7 +322,7 @@
     var checked = config.special_work_enabled ? ' checked' : '';
     var blacklistChecked = config.blacklist_enabled ? ' checked' : '';
     return settingsDetailHeader('测试功能', '只在启用后对客户端和下载入口生效') + '<div class="sheet settings-form">' +
-      '<label class="settings-test-toggle"><span><strong>特殊工种</strong><small>客户端显示特殊工种证件拍摄框；下载菜单显示证件照压缩包。</small></span><input id="mobile-special-work-enabled" type="checkbox"' + checked + '></label>' +
+      '<label class="settings-test-toggle"><span><strong>特殊工种</strong><small>客户端识别特殊工种证件；下载菜单显示证件照和资质登记表。</small></span><input id="mobile-special-work-enabled" type="checkbox"' + checked + '></label>' +
       '<button class="settings-primary" type="button" ' + (state.settings.busy ? 'disabled' : '') + ' onclick="mobileAdminSaveSpecialWorkFeature()">' + (state.settings.busy ? '保存中…' : '保存特殊工种功能') + '</button>' +
       '<label class="settings-test-toggle" style="border-color:rgba(248,113,113,.32); background:rgba(127,29,29,.18);"><span><strong>黑名单</strong><small>人员详情底部显示加入黑名单按钮；设置中可查看并移除已拉黑人员。</small></span><input id="mobile-blacklist-enabled" type="checkbox"' + blacklistChecked + '></label>' +
       '<button class="settings-primary" type="button" style="background:#dc2626; border-color:#ef4444;" ' + (state.settings.busy ? 'disabled' : '') + ' onclick="mobileAdminSaveBlacklistFeature()">' + (state.settings.busy ? '保存中…' : '保存黑名单功能') + '</button></div>';
@@ -476,9 +479,19 @@
   };
   window.mobileAdminToggleRecordFilters = function (event) { if (event) event.stopPropagation(); state.recordFiltersOpen = !state.recordFiltersOpen; state.downloadOpen = false; render(); };
   window.mobileAdminSetRecordStatus = function (status) { state.recordStatus = status; render(); };
+  window.mobileAdminSetRecordJobCategory = function (category) {
+    state.recordJobCategory = category === 'special' ? 'special' : 'all';
+    try {
+      filterSpecialWork = state.recordJobCategory === 'special';
+      recordsPage = 1;
+      var control = document.getElementById('filter-special-work');
+      if (control) control.value = filterSpecialWork ? 'special' : '';
+    } catch (e) { /* page loading */ }
+    if (typeof window.loadRecords === 'function') window.loadRecords(); else render();
+  };
   window.mobileAdminClearRecordFilters = function () {
-    state.recordStatus = 'all'; state.recordFiltersOpen = false;
-    try { filterName = ''; filterCompany = ''; recordsPage = 1; document.getElementById('filter-name').value = ''; document.getElementById('filter-company').value = ''; } catch (e) { /* ignore */ }
+    state.recordStatus = 'all'; state.recordJobCategory = 'all'; state.recordFiltersOpen = false;
+    try { filterName = ''; filterCompany = ''; filterSpecialWork = false; recordsPage = 1; document.getElementById('filter-name').value = ''; document.getElementById('filter-company').value = ''; document.getElementById('filter-special-work').value = ''; } catch (e) { /* ignore */ }
     if (typeof window.loadRecords === 'function') window.loadRecords(); else render();
   };
   window.mobileAdminToggleDownload = function (event) { if (event) event.stopPropagation(); state.downloadOpen = !state.downloadOpen; state.recordCompanyOpen = false; render(); };

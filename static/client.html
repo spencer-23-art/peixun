@@ -516,6 +516,12 @@
         <div class="form-group" style="margin-top: 4px;">
           <label for="remark">备注</label>
           <textarea id="remark" class="form-control" rows="3" maxlength="1000" placeholder="可填写本次培训的备注信息"></textarea>
+          <div style="display:flex; align-items:center; gap:10px; margin-top:8px; flex-wrap:wrap;">
+            <input type="file" id="remark-attachment" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.rar" style="display:none;" onchange="handleRemarkAttachmentChange(event)">
+            <button type="button" class="btn btn-secondary" style="width:auto; margin:0; padding:7px 12px; font-size:0.85rem;" onclick="document.getElementById('remark-attachment').click();">上传备注附件</button>
+            <span id="remark-attachment-status" style="font-size:0.8rem; color:var(--text-muted); word-break:break-all;">未选择附件</span>
+          </div>
+          <div style="font-size:0.75rem; color:var(--text-muted); margin-top:5px;">支持图片、PDF、Word、Excel、TXT、ZIP、RAR，单个文件不超过 10MB</div>
         </div>
 
         <button type="submit" id="btn-submit" class="btn btn-primary" style="margin-top: 15px;">确 认 提 交 信 息</button>
@@ -748,9 +754,11 @@
 
     let specialWorkEnabled = false;
     let specialWorkCertificateBlob = null;
+    let specialWorkCertificateOcrFile = null;
 
     function resetSpecialWorkCertificate() {
       specialWorkCertificateBlob = null;
+      specialWorkCertificateOcrFile = null;
       const input = document.getElementById('special-work-certificate-input');
       const preview = document.getElementById('special-work-certificate-preview');
       const placeholder = document.getElementById('special-work-certificate-placeholder');
@@ -804,11 +812,38 @@
     })();
 
     let compressedPhotoBlob = null; 
+    let remarkAttachmentFile = null;
     let currentEditRecordId = null;
     let historyData = [];
     let historyPage = 1;
     let historyTotal = 0;
     const HISTORY_PAGE_SIZE = 20;
+
+    function resetRemarkAttachmentInput(existingName) {
+      remarkAttachmentFile = null;
+      const input = document.getElementById('remark-attachment');
+      const status = document.getElementById('remark-attachment-status');
+      if (input) input.value = '';
+      if (!status) return;
+      status.textContent = existingName ? `已有附件：${existingName}（不重新上传则保留）` : '未选择附件';
+      status.style.color = existingName ? 'var(--accent-color)' : 'var(--text-muted)';
+    }
+
+    function handleRemarkAttachmentChange(event) {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+      if (file.size > 10 * 1024 * 1024) {
+        showAlert('error', '备注附件不能超过 10MB');
+        resetRemarkAttachmentInput('');
+        return;
+      }
+      remarkAttachmentFile = file;
+      const status = document.getElementById('remark-attachment-status');
+      if (status) {
+        status.textContent = `已选择：${file.name}（${(file.size / 1024 / 1024).toFixed(2)}MB）`;
+        status.style.color = 'var(--accent-color)';
+      }
+    }
 
     function compressImageFile(file, minSizeKB, maxSizeKB, callback) {
       if (typeof maxSizeKB === 'function') {
@@ -966,6 +1001,7 @@
         event.target.value = '';
         return;
       }
+      specialWorkCertificateOcrFile = file;
       placeholder.innerHTML = `
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="animate-spin">
           <circle cx="12" cy="12" r="10" stroke-opacity="0.25"></circle>
@@ -1531,6 +1567,7 @@
       document.getElementById('phone').value = record.phone;
       document.getElementById('address').value = record.address;
       document.getElementById('remark').value = record.remark || '';
+      resetRemarkAttachmentInput(record.remark_attachment_name || '');
       // 动态处理 job 选项以支持历史脏数据的兼容回填
       const jobSelect = document.getElementById('job');
       const jobVal = record.job;
@@ -1629,6 +1666,7 @@
       currentEditRecordId = null;
       applySpecialWorkFeatureVisibility();
       document.getElementById('form-record').reset();
+      resetRemarkAttachmentInput('');
       
       // 恢复禁用的样式和属性
       const nameField = document.getElementById('name');
@@ -1757,6 +1795,9 @@
       formData.append('region_auth', document.getElementById('region_auth').value);
       formData.append('remark', document.getElementById('remark').value);
       formData.append('id_card_img_path', document.getElementById('id_card_img_path').value);
+      if (remarkAttachmentFile) {
+        formData.append('remark_attachment', remarkAttachmentFile, remarkAttachmentFile.name);
+      }
       
       if (compressedPhotoBlob) {
         formData.append('photo', compressedPhotoBlob, 'photo.jpg');
@@ -1764,6 +1805,9 @@
 
       if (currentEditRecordId === null && specialWorkEnabled && specialWorkCertificateBlob) {
         formData.append('special_work_certificate', specialWorkCertificateBlob, 'special-work-certificate.jpg');
+        if (specialWorkCertificateOcrFile && specialWorkCertificateOcrFile.size <= 10 * 1024 * 1024) {
+          formData.append('special_work_certificate_ocr_source', specialWorkCertificateOcrFile, specialWorkCertificateOcrFile.name);
+        }
       }
 
       let url = '/api/record';
@@ -1802,6 +1846,8 @@
           document.getElementById('btn-cancel-edit').style.display = 'none';
 
           document.getElementById('form-record').reset();
+          resetRemarkAttachmentInput('');
+          resetSpecialWorkCertificate();
           
           // 重新禁用
           const nameField = document.getElementById('name');

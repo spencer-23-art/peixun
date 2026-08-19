@@ -42,11 +42,13 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import openpyxl
+from copy import copy
+from openpyxl.formula.translate import Translator
 import csv
 
 # 引入 OCR 核心
 try:
-    from ocr_handler import ocr_idcard_process, generate_record_card, start_cleanup_thread
+    from ocr_handler import ocr_idcard_process, ocr_special_work_certificate_process, generate_record_card, start_cleanup_thread
     OCR_AVAILABLE = True
 except Exception as e:
     OCR_AVAILABLE = False
@@ -54,6 +56,9 @@ except Exception as e:
     print(f"[Warning] Failed to import ocr_handler, OCR features will be disabled: {e}")
     
     def ocr_idcard_process(*args, **kwargs):
+        raise HTTPException(status_code=500, detail="OCR 引擎不可用，请联系管理员检查服务器依赖")
+
+    def ocr_special_work_certificate_process(*args, **kwargs):
         raise HTTPException(status_code=500, detail="OCR 引擎不可用，请联系管理员检查服务器依赖")
 
     def generate_record_card(*args, **kwargs):
@@ -65,6 +70,16 @@ except Exception as e:
 
 # D6: 统一从 app.config 引用路径常量，避免多处重复定义
 from app.config import DB_PATH, UPLOAD_DIR, TEMP_IDS_DIR
+
+# 备注附件：保留原文件供管理端下载，避免客户端上传任意超大或可执行文件。
+REMARK_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024
+REMARK_ATTACHMENT_ALLOWED_EXTENSIONS = {
+    '.jpg', '.jpeg', '.png', '.gif', '.webp',
+    '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.txt', '.zip', '.rar'
+}
+SPECIAL_WORK_REGISTER_TEMPLATE_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "特种作业人员资质登记表.xlsx"
+)
 
 # 默认考试科目（供首次初始化及回退使用）。R3：原本在 5 处重复，现统一为常量。
 DEFAULT_EXAM_SUBJECTS = [
@@ -338,17 +353,117 @@ def _managed_upload_path(path: str):
     return candidate if os.path.isfile(candidate) else None
 
 
+def _safe_attachment_name(filename: str) -> str:
+    """Keep a usable download name without allowing paths or response-header control characters."""
+    raw_name = os.path.basename((filename or '').strip())
+    raw_name = ''.join('_' if ord(char) < 32 else char for char in raw_name)
+    safe_name = re.sub(r'[<>:"/\\|?*]+', '_', raw_name).strip(' ._')
+    return safe_name[:120] or '备注附件'
+
+
+async def _prepare_remark_attachment(upload: UploadFile):
+    """Validate and read a remark attachment before any record data is written."""
+    if not upload or not upload.filename:
+        return None
+    original_name = _safe_attachment_name(upload.filename)
+    extension = os.path.splitext(original_name)[1].lower()
+    if extension not in REMARK_ATTACHMENT_ALLOWED_EXTENSIONS:
+        allowed = 'jpg、png、webp、pdf、doc/docx、xls/xlsx、txt、zip、rar'
+        raise HTTPException(status_code=400, detail=f"备注附件格式不支持，仅允许 {allowed}")
+    content = await upload.read(REMARK_ATTACHMENT_MAX_BYTES + 1)
+    if len(content) > REMARK_ATTACHMENT_MAX_BYTES:
+        raise HTTPException(status_code=400, detail="备注附件不能超过 10MB")
+    if not content:
+        raise HTTPException(status_code=400, detail="备注附件不能为空")
+    return {"name": original_name, "extension": extension, "content": content}
+
+
+def _store_remark_attachment(prepared_attachment, pending: bool = False):
+    """Store a validated attachment and return its managed path and display name."""
+    if not prepared_attachment:
+        return None, ''
+    directory = os.path.join(UPLOAD_DIR, 'remark_attachments')
+    if pending:
+        directory = os.path.join(directory, 'pending')
+    os.makedirs(directory, exist_ok=True)
+    filename = f"remark_{uuid.uuid4().hex}{prepared_attachment['extension']}"
+    path = os.path.join(directory, filename)
+    with open(path, 'wb') as attachment_file:
+        attachment_file.write(prepared_attachment['content'])
+    return path.replace('\\', '/'), prepared_attachment['name']
+
+
+def _promote_pending_remark_attachment(path: str):
+    """Move an approved pending attachment into permanent storage."""
+    source_path = _managed_upload_path(path)
+    if not source_path:
+        return None
+    pending_directory = os.path.realpath(os.path.join(UPLOAD_DIR, 'remark_attachments', 'pending'))
+    try:
+        if os.path.commonpath([pending_directory, source_path]) != pending_directory:
+            return None
+    except ValueError:
+        return None
+    destination_directory = os.path.join(UPLOAD_DIR, 'remark_attachments')
+    os.makedirs(destination_directory, exist_ok=True)
+    destination_path = os.path.join(destination_directory, os.path.basename(source_path))
+    try:
+        os.replace(source_path, destination_path)
+        return destination_path.replace('\\', '/')
+    except OSError:
+        return None
+
+
+def _remove_managed_upload(path: str):
+    managed_path = _managed_upload_path(path)
+    if managed_path:
+        try:
+            os.remove(managed_path)
+        except OSError:
+            pass
+
+
+async def _recognize_special_work_certificate(certificate_path: str, ocr_source: UploadFile = None):
+    """Use a temporary original image for OCR while retaining only the compressed certificate photo."""
+    source_path = None
+    if ocr_source and ocr_source.filename:
+        source_extension = os.path.splitext(ocr_source.filename)[1].lower()
+        if source_extension in {'.jpg', '.jpeg', '.png', '.webp', '.bmp'}:
+            content = await ocr_source.read(10 * 1024 * 1024 + 1)
+            if 0 < len(content) <= 10 * 1024 * 1024:
+                temporary_dir = os.path.join(UPLOAD_DIR, 'temp_special_work_ocr')
+                os.makedirs(temporary_dir, exist_ok=True)
+                source_path = os.path.join(temporary_dir, f"special_work_ocr_{uuid.uuid4().hex}{source_extension}")
+                with open(source_path, 'wb') as source_file:
+                    source_file.write(content)
+            elif len(content) > 10 * 1024 * 1024:
+                print("[SpecialWork-OCR] 原始证件照超过 10MB，改用已压缩证件照识别")
+    target_path = source_path or certificate_path
+    try:
+        result = ocr_special_work_certificate_process(target_path)
+        return json.dumps(result, ensure_ascii=False)
+    except Exception as exc:
+        print(f"[SpecialWork-OCR] 识别失败，证件照仍会正常保存: {type(exc).__name__}")
+        return json.dumps({"recognized": False, "error": "ocr_failed"}, ensure_ascii=False)
+    finally:
+        if source_path:
+            try:
+                os.remove(source_path)
+            except OSError:
+                pass
+
+
 def _build_storage_cleanup_plan(cursor, start_date: str, end_date: str):
     """Collect only files owned by selected training records, without deleting yet."""
     date_filter = "substr(created_at, 1, 10) >= ? AND substr(created_at, 1, 10) <= ?"
     cursor.execute(
-        f"SELECT id, id_card, photo_path, word_path, special_work_cert_path FROM records WHERE {date_filter}",
+        f"SELECT id, id_card, photo_path, word_path, special_work_cert_path, remark_attachment_path FROM records WHERE {date_filter}",
         (start_date, end_date)
     )
     records = cursor.fetchall()
     cursor.execute(
         f"""
-        SELECT id, photo_path, id_card_img_path FROM record_updates
+        SELECT id, photo_path, id_card_img_path, remark_attachment_path FROM record_updates
         WHERE record_id IN (SELECT id FROM records WHERE {date_filter})
         """,
         (start_date, end_date)
@@ -360,12 +475,14 @@ def _build_storage_cleanup_plan(cursor, start_date: str, end_date: str):
         file_candidates.extend([
             (record['photo_path'], 'photo'),
             (record['word_path'], 'card'),
-            (record['special_work_cert_path'], 'special_work_certificate')
+            (record['special_work_cert_path'], 'special_work_certificate'),
+            (record['remark_attachment_path'], 'remark_attachment')
         ])
     for update in updates:
         file_candidates.extend([
             (update['photo_path'], 'update_attachment'),
-            (update['id_card_img_path'], 'update_attachment')
+            (update['id_card_img_path'], 'update_attachment'),
+            (update['remark_attachment_path'], 'update_attachment')
         ])
 
     # An ID card image is named by ID number and can be shared by multiple
@@ -514,6 +631,124 @@ def pack_special_work_certificates_zip(records) -> bytes:
             zip_file.write(certificate_path, arcname=filename)
     return zip_buffer.getvalue()
 
+
+def _record_value(record, key, default=''):
+    try:
+        value = record[key]
+    except (KeyError, IndexError, TypeError):
+        value = default
+    return default if value is None else value
+
+
+def _special_work_ocr_values(record):
+    raw_data = _record_value(record, 'special_work_ocr_data', '')
+    try:
+        data = json.loads(raw_data) if raw_data else {}
+        return data if isinstance(data, dict) else {}
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return {}
+
+
+def _special_work_register_date(value):
+    compact = re.sub(r'\D', '', str(value or ''))
+    if len(compact) != 8:
+        return ''
+    try:
+        datetime.strptime(compact, '%Y%m%d')
+        return int(compact)
+    except ValueError:
+        return ''
+
+
+def _special_work_register_note(record, ocr_data):
+    notes = []
+    remark = str(_record_value(record, 'remark', '')).strip()
+    if remark:
+        notes.append(remark)
+    certificate_number = str(ocr_data.get('certificate_number') or '').strip()
+    if certificate_number:
+        notes.append(f"证书编号：{certificate_number}")
+    if not ocr_data.get('recognized'):
+        notes.append('OCR未完整识别，请核对证件信息')
+    return '；'.join(notes)
+
+
+def _ensure_special_work_register_rows(worksheet, required_last_row):
+    """Extend the template only when needed, copying its row style and status formula."""
+    template_row = 3
+    original_last_row = worksheet.max_row
+    if required_last_row <= original_last_row:
+        return
+    status_formula = worksheet.cell(template_row, 10).value
+    for row_number in range(original_last_row + 1, required_last_row + 1):
+        worksheet.row_dimensions[row_number].height = worksheet.row_dimensions[template_row].height
+        for column_number in range(1, worksheet.max_column + 1):
+            source = worksheet.cell(template_row, column_number)
+            target = worksheet.cell(row_number, column_number)
+            if source.has_style:
+                target._style = copy(source._style)
+            if source.number_format:
+                target.number_format = source.number_format
+            if source.alignment:
+                target.alignment = copy(source.alignment)
+            if source.protection:
+                target.protection = copy(source.protection)
+            if source.fill:
+                target.fill = copy(source.fill)
+            if source.font:
+                target.font = copy(source.font)
+            if source.border:
+                target.border = copy(source.border)
+        if isinstance(status_formula, str) and status_formula.startswith('='):
+            worksheet.cell(row_number, 10).value = Translator(
+                status_formula, origin=f'J{template_row}'
+            ).translate_formula(f'J{row_number}')
+
+
+def build_special_work_register_excel(records) -> bytes:
+    """Fill the user-supplied special-work register template without changing its layout."""
+    if not os.path.isfile(SPECIAL_WORK_REGISTER_TEMPLATE_PATH):
+        raise HTTPException(status_code=500, detail='缺少特种作业人员资质登记表.xlsx 模板文件')
+    qualified_records = [
+        record for record in records
+        if _managed_upload_path(_record_value(record, 'special_work_cert_path'))
+    ]
+    if not qualified_records:
+        raise HTTPException(status_code=404, detail='所选人员没有已上传的特殊工种证件')
+    workbook = openpyxl.load_workbook(SPECIAL_WORK_REGISTER_TEMPLATE_PATH)
+    worksheet = workbook.active
+    data_start_row = 3
+    _ensure_special_work_register_rows(worksheet, data_start_row + len(qualified_records) - 1)
+    for row_number in range(data_start_row, worksheet.max_row + 1):
+        for column_number in range(1, 10):
+            worksheet.cell(row_number, column_number).value = None
+    for offset, record in enumerate(qualified_records):
+        row_number = data_start_row + offset
+        ocr_data = _special_work_ocr_values(record)
+        created_at = str(_record_value(record, 'created_at', ''))
+        values = (
+            created_at[:10],
+            _record_value(record, 'company', ''),
+            ocr_data.get('name') or _record_value(record, 'name', ''),
+            ocr_data.get('id_card') or _record_value(record, 'id_card', ''),
+            ocr_data.get('certificate_name') or '',
+            _special_work_register_date(ocr_data.get('start_date')),
+            _special_work_register_date(ocr_data.get('end_date')),
+            ocr_data.get('issuing_authority') or '',
+            _special_work_register_note(record, ocr_data),
+        )
+        for column_number, value in enumerate(values, start=1):
+            worksheet.cell(row_number, column_number).value = value
+    try:
+        workbook.calculation.fullCalcOnLoad = True
+        workbook.calculation.forceFullCalc = True
+    except Exception:
+        pass
+    output = io.BytesIO()
+    workbook.save(output)
+    return output.getvalue()
+
+
 def _csv_download_response(content: bytes, filename: str):
     """生成带 UTF-8 文件名的 CSV 下载响应。"""
     return Response(
@@ -529,6 +764,15 @@ def _zip_download_response(content: bytes, filename: str):
         media_type="application/zip",
         headers={"Content-Disposition": f"attachment; filename*=utf-8''{urllib.parse.quote(filename)}"}
     )
+
+
+def _xlsx_download_response(content: bytes, filename: str):
+    return Response(
+        content=content,
+        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        headers={"Content-Disposition": f"attachment; filename*=utf-8''{urllib.parse.quote(filename)}"}
+    )
+
 
 def parse_id_list(ids: str) -> list:
     """把 "1,2,3" 解析为 [1,2,3]，校验非空。"""
@@ -647,7 +891,10 @@ def init_db():
         age INTEGER,
         company TEXT DEFAULT '',
         remark TEXT DEFAULT '',
+        remark_attachment_path TEXT DEFAULT NULL,
+        remark_attachment_name TEXT DEFAULT '',
         special_work_cert_path TEXT DEFAULT NULL,
+        special_work_ocr_data TEXT DEFAULT '',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY(user_id) REFERENCES users(id)
     )
@@ -709,7 +956,22 @@ def init_db():
     except sqlite3.OperationalError:
         pass
     try:
+        cursor.execute("ALTER TABLE records ADD COLUMN remark_attachment_path TEXT DEFAULT NULL")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+    try:
+        cursor.execute("ALTER TABLE records ADD COLUMN remark_attachment_name TEXT DEFAULT ''")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+    try:
         cursor.execute("ALTER TABLE records ADD COLUMN special_work_cert_path TEXT DEFAULT NULL")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+    try:
+        cursor.execute("ALTER TABLE records ADD COLUMN special_work_ocr_data TEXT DEFAULT ''")
         conn.commit()
     except sqlite3.OperationalError:
         pass
@@ -833,6 +1095,8 @@ def init_db():
         education TEXT NOT NULL,
         region_auth TEXT,
         remark TEXT DEFAULT '',
+        remark_attachment_path TEXT DEFAULT NULL,
+        remark_attachment_name TEXT DEFAULT '',
         photo_path TEXT,
         id_card_img_path TEXT,
         status TEXT NOT NULL DEFAULT 'pending',
@@ -844,6 +1108,14 @@ def init_db():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_record_updates_status ON record_updates (status)")
     try:
         cursor.execute("ALTER TABLE record_updates ADD COLUMN remark TEXT DEFAULT ''")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        cursor.execute("ALTER TABLE record_updates ADD COLUMN remark_attachment_path TEXT DEFAULT NULL")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        cursor.execute("ALTER TABLE record_updates ADD COLUMN remark_attachment_name TEXT DEFAULT ''")
     except sqlite3.OperationalError:
         pass
     
@@ -917,6 +1189,7 @@ async def protect_uploads(request, call_next):
         "/uploads/idcards/",
         "/uploads/cards/",
         "/uploads/temp_ids/",
+        "/uploads/temp_special_work_ocr/",
         "/uploads/special_work_certificates/"
     )
     if any(path.startswith(p) for p in protected_prefixes):
@@ -1260,7 +1533,7 @@ def delete_record(record_id: int = Form(...), admin = Depends(get_admin_user)):
     cursor = conn.cursor()
     
     # 1. 获取照片路径，以便随后进行物理删除
-    cursor.execute("SELECT photo_path, special_work_cert_path FROM records WHERE id = ?", (record_id,))
+    cursor.execute("SELECT photo_path, special_work_cert_path, remark_attachment_path FROM records WHERE id = ?", (record_id,))
     row = cursor.fetchone()
     if not row:
         conn.close()
@@ -1268,6 +1541,7 @@ def delete_record(record_id: int = Form(...), admin = Depends(get_admin_user)):
         
     photo_path = row[0]
     special_work_cert_path = row[1]
+    remark_attachment_path = row[2]
     
     # 2. 从数据库删除记录
     cursor.execute("DELETE FROM records WHERE id = ?", (record_id,))
@@ -1285,8 +1559,28 @@ def delete_record(record_id: int = Form(...), admin = Depends(get_admin_user)):
             os.remove(special_work_cert_path)
         except Exception:
             pass
+    _remove_managed_upload(remark_attachment_path)
             
     return {"code": 200, "message": "记录删除成功"}
+
+
+@app.get("/api/admin/records/{record_id}/remark-attachment")
+def download_record_remark_attachment(record_id: int, admin = Depends(get_admin_user)):
+    """Download a record's remark attachment through the admin-authenticated API."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT remark_attachment_path, remark_attachment_name FROM records WHERE id = ?",
+            (record_id,)
+        )
+        row = cursor.fetchone()
+    if not row or not row['remark_attachment_path']:
+        raise HTTPException(status_code=404, detail="该记录没有备注附件")
+    attachment_path = _managed_upload_path(row['remark_attachment_path'])
+    if not attachment_path:
+        raise HTTPException(status_code=404, detail="备注附件不存在或已被清理")
+    download_name = _safe_attachment_name(row['remark_attachment_name'] or os.path.basename(attachment_path))
+    return FileResponse(attachment_path, media_type="application/octet-stream", filename=download_name)
 
 
 # 管理员修改普通用户信息（仅管理员）
@@ -1571,6 +1865,8 @@ async def create_record(
     id_card_img_path: str = Form(None),
     photo: UploadFile = File(...),
     special_work_certificate: UploadFile = File(None),
+    special_work_certificate_ocr_source: UploadFile = File(None),
+    remark_attachment: UploadFile = File(None),
     current_user = Depends(get_current_user)
 ):
     if not validate_id_card(id_card):
@@ -1584,6 +1880,7 @@ async def create_record(
     remark = (remark or '').strip()
     if len(remark) > 1000:
         raise HTTPException(status_code=400, detail="备注不能超过1000个字符")
+    prepared_remark_attachment = await _prepare_remark_attachment(remark_attachment)
 
     # 解析身份证
     gender, age = parse_id_card(id_card)
@@ -1607,6 +1904,7 @@ async def create_record(
         shutil.copyfileobj(photo.file, f)
 
     special_work_cert_path = None
+    special_work_ocr_data = ''
     if special_work_certificate and special_work_certificate.filename:
         if not is_special_work_enabled():
             try:
@@ -1638,14 +1936,19 @@ async def create_record(
         special_work_cert_path = os.path.join(certificate_dir, certificate_filename).replace('\\', '/')
         with open(special_work_cert_path, 'wb') as f:
             f.write(certificate_content)
+        special_work_ocr_data = await _recognize_special_work_certificate(
+            special_work_cert_path, special_work_certificate_ocr_source
+        )
+
+    remark_attachment_path, remark_attachment_name = _store_remark_attachment(prepared_remark_attachment)
         
     # 插入记录
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('''
-    INSERT INTO records (user_id, photo_path, name, nation, id_card, phone, address, job, education, region_auth, gender, age, company, remark, special_work_cert_path, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (current_user['id'], photo_path, name, nation, id_card, phone, address, job, education, region_auth, gender, age, current_user['company'].strip(), remark, special_work_cert_path, beijing_now().strftime("%Y-%m-%d %H:%M:%S")))
+    INSERT INTO records (user_id, photo_path, name, nation, id_card, phone, address, job, education, region_auth, gender, age, company, remark, remark_attachment_path, remark_attachment_name, special_work_cert_path, special_work_ocr_data, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (current_user['id'], photo_path, name, nation, id_card, phone, address, job, education, region_auth, gender, age, current_user['company'].strip(), remark, remark_attachment_path, remark_attachment_name, special_work_cert_path, special_work_ocr_data, beijing_now().strftime("%Y-%m-%d %H:%M:%S")))
     record_id = cursor.lastrowid
     conn.commit()
     conn.close()
@@ -1744,6 +2047,7 @@ async def update_record(
     remark: str = Form(""),
     id_card_img_path: str = Form(None),
     photo: UploadFile = File(None),
+    remark_attachment: UploadFile = File(None),
     current_user = Depends(get_current_user)
 ):
     if not validate_id_card(id_card):
@@ -1752,6 +2056,7 @@ async def update_record(
     remark = (remark or '').strip()
     if len(remark) > 1000:
         raise HTTPException(status_code=400, detail="备注不能超过1000个字符")
+    prepared_remark_attachment = await _prepare_remark_attachment(remark_attachment)
 
     # 解析身份证
     gender, age = parse_id_card(id_card)
@@ -1793,15 +2098,19 @@ async def update_record(
         temp_id_card_img_path = None
         if safe_temp_id_path(id_card_img_path):
             temp_id_card_img_path = id_card_img_path
+
+        pending_remark_attachment_path, pending_remark_attachment_name = _store_remark_attachment(
+            prepared_remark_attachment, pending=True
+        )
             
         # 4. 插入修改申请表
         cursor.execute('''
         INSERT INTO record_updates (
-            record_id, user_id, name, nation, id_card, phone, address, job, education, region_auth, remark, photo_path, id_card_img_path, status, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+            record_id, user_id, name, nation, id_card, phone, address, job, education, region_auth, remark, remark_attachment_path, remark_attachment_name, photo_path, id_card_img_path, status, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
         ''', (
             record_id, current_user['id'], name.strip(), nation.strip(), id_card.strip(), phone.strip(),
-            address.strip(), job.strip(), education.strip(), region_auth.strip(), remark, temp_photo_path, temp_id_card_img_path,
+            address.strip(), job.strip(), education.strip(), region_auth.strip(), remark, pending_remark_attachment_path, pending_remark_attachment_name, temp_photo_path, temp_id_card_img_path,
             beijing_now().strftime("%Y-%m-%d %H:%M:%S")
         ))
         conn.commit()
@@ -1809,6 +2118,15 @@ async def update_record(
         return {"code": 200, "message": "信息修改申请已提交，等待管理员审批", "pending_approval": True}
 
     photo_path = record['photo_path']
+    remark_attachment_path = record['remark_attachment_path']
+    remark_attachment_name = record['remark_attachment_name'] or ''
+    old_remark_attachment_to_delete = None
+    if prepared_remark_attachment:
+        new_remark_attachment_path, new_remark_attachment_name = _store_remark_attachment(prepared_remark_attachment)
+        remark_attachment_path = new_remark_attachment_path
+        remark_attachment_name = new_remark_attachment_name
+        if record['remark_attachment_path'] and record['remark_attachment_path'] != new_remark_attachment_path:
+            old_remark_attachment_to_delete = record['remark_attachment_path']
     if photo and photo.filename:
         # 保存新照片
         file_ext = os.path.splitext(photo.filename)[1]
@@ -1871,12 +2189,14 @@ async def update_record(
             
     cursor.execute('''
     UPDATE records 
-    SET name = ?, nation = ?, id_card = ?, phone = ?, address = ?, job = ?, education = ?, region_auth = ?, remark = ?, gender = ?, age = ?, photo_path = ?, word_path = ?
+    SET name = ?, nation = ?, id_card = ?, phone = ?, address = ?, job = ?, education = ?, region_auth = ?, remark = ?, remark_attachment_path = ?, remark_attachment_name = ?, gender = ?, age = ?, photo_path = ?, word_path = ?
     WHERE id = ? AND user_id = ?
-    ''', (name, nation, id_card, phone, address, job, education, region_auth, remark, gender, age, photo_path, new_word_path, record_id, current_user['id']))
+    ''', (name, nation, id_card, phone, address, job, education, region_auth, remark, remark_attachment_path, remark_attachment_name, gender, age, photo_path, new_word_path, record_id, current_user['id']))
     
     conn.commit()
     conn.close()
+    if old_remark_attachment_to_delete:
+        _remove_managed_upload(old_remark_attachment_to_delete)
     return {"code": 200, "message": "信息修改成功！"}
 
 # 管理员修改培训人员记录（无权属检查）
@@ -2046,9 +2366,9 @@ def get_companies():
     conn.close()
     return {"code": 200, "data": sorted_companies}
 
-# 查看所有已录入的信息（仅管理员，支持按日期区间筛选、工作单位筛选和门禁下载状态排序）
+# 查看所有已录入的信息（仅管理员，支持日期、单位、关键字与特殊工种筛选）
 @app.get("/api/admin/records")
-def get_all_records(start_date: str = None, end_date: str = None, company: str = None, name: str = None, page: int = 1, limit: int = 20, admin = Depends(get_admin_user)):
+def get_all_records(start_date: str = None, end_date: str = None, company: str = None, name: str = None, special_work: bool = False, page: int = 1, limit: int = 20, admin = Depends(get_admin_user)):
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
@@ -2065,6 +2385,13 @@ def get_all_records(start_date: str = None, end_date: str = None, company: str =
         keyword = f"%{name.strip()}%"
         conditions.append("(r.name LIKE ? OR r.company LIKE ? OR r.id_card LIKE ? OR r.phone LIKE ?)")
         params.extend([keyword, keyword, keyword, keyword])
+
+    if special_work:
+        # 特殊工种统一按岗位名称归类，前后空格不影响筛选结果。
+        special_work_jobs = ("电工", "电焊工", "塔吊司机", "吊车司机", "信号工", "电梯司机")
+        placeholders = ", ".join("?" for _ in special_work_jobs)
+        conditions.append(f"TRIM(COALESCE(r.job, '')) IN ({placeholders})")
+        params.extend(special_work_jobs)
     
     start = start_date.strip() if start_date and start_date.strip() else None
     end = end_date.strip() if end_date and end_date.strip() else None
@@ -2188,6 +2515,21 @@ def export_special_work_certificates(ids: str = None, admin = Depends(get_admin_
     if not has_certificate:
         raise HTTPException(status_code=404, detail="所选人员没有已上传的特殊工种证件")
     return _zip_download_response(certificate_zip, "特殊工种证件照.zip")
+
+
+@app.get("/api/admin/export/special-work-register")
+def export_special_work_register(ids: str = None, admin = Depends(get_admin_user)):
+    """Export selected special-work OCR data using the supplied qualification register template."""
+    if not is_special_work_enabled():
+        raise HTTPException(status_code=403, detail="特殊工种证件功能尚未启用")
+    id_list = parse_id_list(ids)
+    with get_db() as conn:
+        cursor = conn.cursor()
+        records, _ = fetch_records_by_ids(cursor, id_list, gate_only=False)
+    if not records:
+        raise HTTPException(status_code=404, detail="未找到对应的记录")
+    register_excel = build_special_work_register_excel(records)
+    return _xlsx_download_response(register_excel, "特种作业人员资质登记表.xlsx")
 
 # 门禁下载旧版兼容接口 (CSV 导入表和照片打包，支持按 ids 筛选，并更新已下载状态)
 @app.get("/api/admin/export/gate")
@@ -2733,9 +3075,11 @@ def get_record_updates(admin = Depends(get_admin_user)):
             ru.id as update_id, ru.record_id, ru.user_id, ru.status, ru.created_at as apply_time,
             ru.name as new_name, ru.nation as new_nation, ru.id_card as new_id_card, ru.phone as new_phone,
             ru.address as new_address, ru.job as new_job, ru.education as new_education, ru.region_auth as new_region_auth, ru.remark as new_remark,
+            ru.remark_attachment_name as new_remark_attachment_name,
             ru.photo_path as new_photo_path, ru.id_card_img_path as new_id_card_img_path,
             r.name as old_name, r.nation as old_nation, r.id_card as old_id_card, r.phone as old_phone,
             r.address as old_address, r.job as old_job, r.education as old_education, r.region_auth as old_region_auth, r.remark as old_remark,
+            r.remark_attachment_name as old_remark_attachment_name,
             r.photo_path as old_photo_path, r.word_path as old_word_path,
             COALESCE(NULLIF(r.company, ''), u.company, '') as old_company
         FROM record_updates ru
@@ -2792,6 +3136,18 @@ def approve_record_update(update_id: int, admin = Depends(get_admin_user)):
             if record['photo_path'] and os.path.exists(record['photo_path']):
                 try: os.remove(record['photo_path'])
                 except: pass
+
+    final_remark_attachment_path = record['remark_attachment_path']
+    final_remark_attachment_name = record['remark_attachment_name'] or ''
+    old_remark_attachment_to_delete = None
+    pending_remark_attachment_path = update_req['remark_attachment_path']
+    if pending_remark_attachment_path:
+        promoted_attachment_path = _promote_pending_remark_attachment(pending_remark_attachment_path)
+        if promoted_attachment_path:
+            final_remark_attachment_path = promoted_attachment_path
+            final_remark_attachment_name = update_req['remark_attachment_name'] or os.path.basename(promoted_attachment_path)
+            if record['remark_attachment_path'] and record['remark_attachment_path'] != promoted_attachment_path:
+                old_remark_attachment_to_delete = record['remark_attachment_path']
                 
     # 处理新身份证裁剪图片的转正
     new_id_card = update_req['id_card']
@@ -2834,11 +3190,11 @@ def approve_record_update(update_id: int, admin = Depends(get_admin_user)):
     # 更新 records 记录
     cursor.execute('''
         UPDATE records 
-        SET name = ?, nation = ?, id_card = ?, phone = ?, address = ?, job = ?, education = ?, region_auth = ?, remark = ?, gender = ?, age = ?, photo_path = ?, word_path = ?
+        SET name = ?, nation = ?, id_card = ?, phone = ?, address = ?, job = ?, education = ?, region_auth = ?, remark = ?, remark_attachment_path = ?, remark_attachment_name = ?, gender = ?, age = ?, photo_path = ?, word_path = ?
         WHERE id = ?
     ''', (
         update_req['name'], update_req['nation'], new_id_card, update_req['phone'], update_req['address'],
-        update_req['job'], update_req['education'], update_req['region_auth'], update_req['remark'], gender, age, final_photo_path, new_word_path,
+        update_req['job'], update_req['education'], update_req['region_auth'], update_req['remark'], final_remark_attachment_path, final_remark_attachment_name, gender, age, final_photo_path, new_word_path,
         record_id
     ))
     
@@ -2847,6 +3203,8 @@ def approve_record_update(update_id: int, admin = Depends(get_admin_user)):
     
     conn.commit()
     conn.close()
+    if old_remark_attachment_to_delete:
+        _remove_managed_upload(old_remark_attachment_to_delete)
     return {"code": 200, "message": "审批已通过，人员信息已更新"}
 
 # 3. 拒绝人员信息修改申请（管理员）
@@ -2882,6 +3240,7 @@ def reject_record_update(update_id: int, admin = Depends(get_admin_user)):
     if temp_id_card_img_path and os.path.exists(temp_id_card_img_path):
         try: os.remove(temp_id_card_img_path)
         except: pass
+    _remove_managed_upload(update_req['remark_attachment_path'])
         
     cursor.execute("UPDATE record_updates SET status = 'rejected' WHERE id = ?", (update_id,))
     conn.commit()
