@@ -25,15 +25,15 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt /app/
 RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple -r requirements.txt
 
-# 复制代码、静态文件和登记卡模板
+# 复制代码、静态文件和业务模板
 COPY main.py ocr_handler.py start_server.py /app/
 COPY app/ /app/app/
 COPY static/ /app/static/
 COPY 登记卡.docx /app/
+COPY 特种作业人员资质登记表.xlsx /app/
 
 # 容器内部暴露 8000 端口
 EXPOSE 8000
 
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
-
 
