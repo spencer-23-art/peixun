@@ -21,6 +21,7 @@
     recordFiltersOpen: false,
     recordStatus: 'all',
     recordJobCategory: 'all',
+    recordRegions: [],
     downloadOpen: false,
     composing: { record: false, exam: false, pending: false, restore: false },
     pendingQuery: '',
@@ -148,6 +149,20 @@
     try { state.recordJobCategory = typeof filterSpecialWork !== 'undefined' && filterSpecialWork ? 'special' : 'all'; } catch (e) { state.recordJobCategory = 'all'; }
     var status = function (key, text) { return '<button type="button" class="filter-option ' + (state.recordStatus === key ? 'is-selected' : '') + '" onclick="mobileAdminSetRecordStatus(\'' + key + '\')">' + text + '</button>'; };
     var jobCategory = function (key, text) { return '<button type="button" class="filter-option ' + (state.recordJobCategory === key ? 'is-selected' : '') + '" onclick="mobileAdminSetRecordJobCategory(\'' + key + '\')">' + text + '</button>'; };
+    // 区域权限多选（一人可多区域）：同步 admin.html 全局 filterRegions，服务端过滤
+    try {
+      if (typeof filterRegions !== 'undefined' && Array.isArray(filterRegions)) state.recordRegions = filterRegions.slice();
+    } catch (e) { /* page loading */ }
+    var regionButton = function (region, text) {
+      var selected = region === '__all__' ? state.recordRegions.length === 0 : state.recordRegions.indexOf(region) !== -1;
+      var onclick = region === '__all__' ? 'mobileAdminClearRecordRegionFilter()' : 'mobileAdminToggleRecordRegion(' + jsArg(region) + ')';
+      return '<button type="button" class="filter-option ' + (selected ? 'is-selected' : '') + '" onclick="' + onclick + '">' + esc(text) + '</button>';
+    };
+    var regionButtons = '';
+    try {
+      var regionList = typeof systemRegions !== 'undefined' && Array.isArray(systemRegions) ? systemRegions : [];
+      regionButtons = regionList.map(function (rg) { return regionButton(rg, rg); }).join('');
+    } catch (e) { regionButtons = ''; }
     return '<section class="tab-panel ' + (state.tab === 'records' ? 'is-active' : '') + '" data-panel="records">' +
       '<div class="summary-grid"><article class="summary-card primary"><div class="summary-label">培训记录</div><div class="summary-value">' + total + '</div><div class="summary-note">完整保留历史培训</div></article><article class="summary-card"><div class="summary-label">本页待下载</div><div class="summary-value">' + pending + '</div><div class="summary-note">默认已勾选，可逐个调整</div></article></div>' +
       '<div class="page-toolbar"><div class="company-combobox"><span class="search-glyph">' + icon('search') + '</span>' +
@@ -157,7 +172,7 @@
       '<button class="toolbar-btn" type="button" aria-label="筛选培训记录" onclick="mobileAdminToggleRecordFilters(event)">' + icon('filter') + '</button>' +
       '<div class="download-wrap"><button class="toolbar-btn" type="button" aria-label="下载所选人员" onclick="mobileAdminToggleDownload(event)">' + icon('download') + '</button>' +
         '<div class="download-chooser ' + (state.downloadOpen ? 'is-open' : '') + '"><h3>选择下载内容</h3><p>可按需要只下载一种内容。</p><div class="download-options"><button type="button" onclick="mobileAdminExport(\'excel\')">下载 Excel</button><button type="button" onclick="mobileAdminExport(\'csv\')">下载 CSV</button><button type="button" onclick="mobileAdminExport(\'photos\')">下载照片包</button>' + (specialWorkEnabled ? '<button type="button" onclick="mobileAdminExport(\'special_work\')">下载特殊工种证件</button><button type="button" onclick="mobileAdminExport(\'special_work_register\')">下载特殊工种登记表</button>' : '') + '</div></div></div></div>' +
-      '<div class="filter-panel ' + (state.recordFiltersOpen ? 'is-open' : '') + '"><div class="filter-group"><span class="filter-group-label">下载状态</span><div class="filter-options">' + status('all', '全部') + status('pending', '未下载') + status('downloaded', '已下载') + status('today', '今日录入') + '</div></div><div class="filter-group"><span class="filter-group-label">岗位类型</span><div class="filter-options">' + jobCategory('all', '全部岗位') + jobCategory('special', '特殊工种') + '</div></div>' +
+      '<div class="filter-panel ' + (state.recordFiltersOpen ? 'is-open' : '') + '"><div class="filter-group"><span class="filter-group-label">下载状态</span><div class="filter-options">' + status('all', '全部') + status('pending', '未下载') + status('downloaded', '已下载') + status('today', '今日录入') + '</div></div><div class="filter-group"><span class="filter-group-label">岗位类型</span><div class="filter-options">' + jobCategory('all', '全部岗位') + jobCategory('special', '特殊工种') + '</div></div><div class="filter-group"><span class="filter-group-label">区域权限</span><div class="filter-options">' + regionButton('__all__', '全部区域') + regionButtons + '</div></div>' +
         '<div class="filter-panel-actions"><button type="button" onclick="mobileAdminClearRecordFilters()">重置</button><button type="button" class="apply-filter" onclick="mobileAdminToggleRecordFilters()">完成</button></div></div>' +
       '<div class="section-heading"><h3>' + esc(selectedCompany || '全部培训单位') + '</h3><span>当前 ' + records.length + ' 人</span></div><div class="record-stack">' +
       (records.length ? records.map(recordCard).join('') : '<div class="empty-state">没有符合条件的培训记录</div>') + '</div>' + recordPager() + '</section>';
@@ -489,9 +504,25 @@
     } catch (e) { /* page loading */ }
     if (typeof window.loadRecords === 'function') window.loadRecords(); else render();
   };
+  // 区域权限多选切换（一人多区域，同步 admin.html filterRegions 后服务端过滤）
+  window.mobileAdminToggleRecordRegion = function (region) {
+    var idx = state.recordRegions.indexOf(region);
+    if (idx !== -1) state.recordRegions.splice(idx, 1); else state.recordRegions.push(region);
+    try {
+      filterRegions = state.recordRegions.slice();
+      recordsPage = 1;
+    } catch (e) { /* page loading */ }
+    if (typeof window.loadRecords === 'function') window.loadRecords(); else render();
+  };
+  // 区域权限：全部区域（清空选择）
+  window.mobileAdminClearRecordRegionFilter = function () {
+    state.recordRegions = [];
+    try { filterRegions = []; recordsPage = 1; } catch (e) { /* page loading */ }
+    if (typeof window.loadRecords === 'function') window.loadRecords(); else render();
+  };
   window.mobileAdminClearRecordFilters = function () {
-    state.recordStatus = 'all'; state.recordJobCategory = 'all'; state.recordFiltersOpen = false;
-    try { filterName = ''; filterCompany = ''; filterSpecialWork = false; recordsPage = 1; document.getElementById('filter-name').value = ''; document.getElementById('filter-company').value = ''; document.getElementById('filter-special-work').value = ''; } catch (e) { /* ignore */ }
+    state.recordStatus = 'all'; state.recordJobCategory = 'all'; state.recordRegions = []; state.recordFiltersOpen = false;
+    try { filterName = ''; filterCompany = ''; filterSpecialWork = false; filterRegions = []; recordsPage = 1; document.getElementById('filter-name').value = ''; document.getElementById('filter-company').value = ''; document.getElementById('filter-special-work').value = ''; } catch (e) { /* ignore */ }
     if (typeof window.loadRecords === 'function') window.loadRecords(); else render();
   };
   window.mobileAdminToggleDownload = function (event) { if (event) event.stopPropagation(); state.downloadOpen = !state.downloadOpen; state.recordCompanyOpen = false; render(); };

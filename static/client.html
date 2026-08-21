@@ -8,6 +8,58 @@
   <link rel="stylesheet" href="/static/css/mobile-app.css?v=1.0.0">
   <style>
     /* 客户端页面特定样式微调 */
+    /* 多选下拉：display 复用 form-control 外观，与学历等下拉完全一致 */
+    .multi-select { position: relative; }
+    .multi-select-display {
+      cursor: pointer;
+      user-select: none;
+      display: flex;
+      align-items: center;
+      appearance: none;
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      background-size: 16px;
+      padding-right: 36px;
+    }
+    .multi-select.open .multi-select-display {
+      border-color: var(--primary-color);
+      background-color: rgba(255, 255, 255, 0.08);
+      box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.25);
+      background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236366f1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+    }
+    .multi-select-value { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .multi-select-menu {
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0;
+      right: 0;
+      background-color: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 10px;
+      max-height: 240px;
+      overflow-y: auto;
+      z-index: 9999;
+      display: none;
+      padding: 4px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6);
+    }
+    .multi-select.open .multi-select-menu { display: block; }
+    .multi-select-menu label {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 12px;
+      margin: 0;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.95rem;
+      color: #f8fafc;
+      user-select: none;
+    }
+    .multi-select-menu label:hover { background: rgba(255, 255, 255, 0.08); }
+    .multi-select-menu input[type="checkbox"] { width: 16px; height: 16px; margin: 0; cursor: pointer; flex-shrink: 0; }
     .user-info-bar {
       display: flex;
       justify-content: space-between;
@@ -505,10 +557,13 @@
               </select>
             </div>
             <div class="form-group">
-              <label for="region_auth">区域权限 *</label>
-              <select id="region_auth" class="form-control" required>
-                <option value="" disabled selected>请选择区域权限</option>
-              </select>
+              <label>区域权限 *</label>
+              <div class="multi-select" id="region-auth-multi">
+                <div class="form-control multi-select-display" onclick="toggleRegionMenu(event)">
+                  <span class="multi-select-value placeholder" id="region-auth-display">请选择区域权限</span>
+                </div>
+                <div class="multi-select-menu" id="region-auth-menu"></div>
+              </div>
             </div>
           </div>
         </div>
@@ -674,6 +729,8 @@
 
 
     let userSavedFields = null; // 缓存服务端回填字段
+    let regionOptionsList = []; // 区域权限可选列表（多选下拉）
+    let selectedRegions = [];   // 已选中的区域（多选）
 
     // 异步加载用户数据与上一次填写的字段
     async function fetchUserStatus() {
@@ -707,23 +764,86 @@
         if (userSavedFields.address) document.getElementById('address').value = userSavedFields.address;
         if (userSavedFields.job) document.getElementById('job').value = userSavedFields.job;
         if (userSavedFields.education) document.getElementById('education').value = userSavedFields.education;
-        if (userSavedFields.region_auth) document.getElementById('region_auth').value = userSavedFields.region_auth;
+        if (userSavedFields.region_auth) {
+          selectedRegions = String(userSavedFields.region_auth).split(',').map(x => x.trim()).filter(Boolean);
+          updateRegionDisplay();
+        }
       }
     }
+
+    // 收集已选中的区域权限（逗号分隔多值，一人多区域）
+    function getSelectedRegions() {
+      return selectedRegions.join(',');
+    }
+
+    // 渲染多选下拉菜单（label/文字用内联样式，避免被全局 label 样式覆盖）
+    function renderRegionMenu() {
+      const menu = document.getElementById('region-auth-menu');
+      if (!menu) return;
+      menu.innerHTML = '';
+      regionOptionsList.forEach(region => {
+        const label = document.createElement('label');
+        label.style.cssText = 'display:flex;align-items:center;gap:10px;padding:9px 12px;margin:0;border-radius:6px;cursor:pointer;font-size:0.95rem;color:#f8fafc;user-select:none;font-weight:normal;';
+        label.onmouseenter = function() { this.style.background = 'rgba(255,255,255,0.08)'; };
+        label.onmouseleave = function() { this.style.background = ''; };
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.value = region;
+        cb.checked = selectedRegions.includes(region);
+        cb.style.cssText = 'width:16px;height:16px;margin:0;cursor:pointer;flex-shrink:0;';
+        cb.onchange = function() { toggleRegionOption(region, this.checked); };
+        const span = document.createElement('span');
+        span.textContent = region;
+        span.style.cssText = 'white-space:nowrap;flex:1;';
+        label.appendChild(cb);
+        label.appendChild(span);
+        menu.appendChild(label);
+      });
+    }
+
+    // 切换单个区域选项
+    function toggleRegionOption(region, checked) {
+      if (checked) {
+        if (!selectedRegions.includes(region)) selectedRegions.push(region);
+      } else {
+        selectedRegions = selectedRegions.filter(r => r !== region);
+      }
+      updateRegionDisplay();
+    }
+
+    // 更新框内显示（已选区域顿号展示）
+    function updateRegionDisplay() {
+      const display = document.getElementById('region-auth-display');
+      if (!display) return;
+      if (selectedRegions.length === 0) {
+        display.textContent = '请选择区域权限';
+        display.classList.add('placeholder');
+      } else {
+        display.textContent = selectedRegions.join('、');
+        display.classList.remove('placeholder');
+      }
+    }
+
+    // 展开/收起多选下拉
+    function toggleRegionMenu(event) {
+      if (event) event.stopPropagation();
+      const wrap = document.getElementById('region-auth-multi');
+      if (wrap) wrap.classList.toggle('open');
+    }
+
+    // 点击页面其他区域关闭多选下拉
+    document.addEventListener('click', function(e) {
+      const wrap = document.getElementById('region-auth-multi');
+      if (wrap && !wrap.contains(e.target)) wrap.classList.remove('open');
+    });
 
     async function loadRegions() {
       try {
         const response = await fetch('/api/regions');
         const result = await response.json();
         if (response.ok && result.code === 200) {
-          const regionSelect = document.getElementById('region_auth');
-          regionSelect.innerHTML = '<option value="" disabled selected>请选择区域权限</option>';
-          result.regions.forEach(region => {
-            const opt = document.createElement('option');
-            opt.value = region;
-            opt.text = region;
-            regionSelect.appendChild(opt);
-          });
+          regionOptionsList = result.regions || [];
+          renderRegionMenu();
           fillSavedFields();
         }
       } catch (err) {
@@ -1199,7 +1319,7 @@
             <div style="font-size:0.8rem;color:var(--text-muted);margin-top:2px;">手机: ${escapeHtml(r.phone)}</div>
           </td>
           <td>
-            <div style="font-weight:600;color:var(--text-main);font-size:0.9rem;">权限: ${escapeHtml(r.region_auth)}</div>
+            <div style="font-weight:600;color:var(--text-main);font-size:0.9rem;">权限: ${(r.region_auth || '').split(',').map(x => escapeHtml(x.trim())).filter(Boolean).join('、') || '--'}</div>
             <div style="font-size:0.8rem;color:var(--text-muted);margin-top:4px;white-space:normal;word-break:break-all;max-width:280px;" title="${escapeHtml(r.address)}">地址: <span style="color:var(--text-main);">${escapeHtml(r.address)}</span></div>
           </td>
           <td>
@@ -1384,7 +1504,7 @@
               <td>
                 <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;">
                   <span style="font-weight:600;color:var(--text-main);font-size:0.9rem;">岗位: ${escapeHtml(row.job)}</span>
-                  <span style="font-size:0.8rem;color:var(--text-muted);">权限: ${escapeHtml(row.region_auth)}</span>
+                  <span style="font-size:0.8rem;color:var(--text-muted);">权限: ${(row.region_auth || '').split(',').map(x => escapeHtml(x.trim())).filter(Boolean).join('、') || '--'}</span>
                 </div>
                 <div style="font-size:0.8rem;color:var(--text-muted);margin-top:6px;white-space:normal;word-break:break-all;max-width:280px;" title="${escapeHtml(row.address)}">地址: <span style="color:var(--text-main);">${escapeHtml(row.address)}</span></div>
                 ${row.remark ? `<div style="font-size:0.8rem;color:var(--text-muted);margin-top:6px;white-space:normal;word-break:break-all;max-width:280px;">备注: <span style="color:var(--text-main);">${escapeHtml(row.remark)}</span></div>` : ''}
@@ -1596,31 +1716,14 @@
 
       document.getElementById('education').value = record.education;
 
-      // 动态处理 region_auth 选项以支持历史脏数据的兼容回填
-      const regionSelect = document.getElementById('region_auth');
-      const val = record.region_auth;
-      
-      // 清理之前编辑可能遗留的临时 option
-      const tempOption = regionSelect.querySelector('option[data-temp="true"]');
-      if (tempOption) {
-        tempOption.remove();
-      }
-
-      let exists = false;
-      for (let i = 0; i < regionSelect.options.length; i++) {
-        if (regionSelect.options[i].value === val) {
-          exists = true;
-          break;
-        }
-      }
-      if (!exists && val) {
-        const opt = document.createElement('option');
-        opt.value = val;
-        opt.text = val + ' (历史数据)';
-        opt.setAttribute('data-temp', 'true');
-        regionSelect.appendChild(opt);
-      }
-      regionSelect.value = val;
+      // 动态回填区域权限多选（历史脏数据：列表外的区域临时并入可选列表）
+      const savedRegions = record.region_auth ? String(record.region_auth).split(',').map(x => x.trim()).filter(Boolean) : [];
+      selectedRegions = savedRegions.slice();
+      savedRegions.forEach(rg => {
+        if (!regionOptionsList.includes(rg)) regionOptionsList.push(rg);
+      });
+      renderRegionMenu();
+      updateRegionDisplay();
 
       // 回填照片预览
       const placeholder = document.getElementById('uploader-placeholder');
@@ -1699,12 +1802,10 @@
         tempJobOption.remove();
       }
 
-      // 清理 region_auth 临时 option
-      const regionSelect = document.getElementById('region_auth');
-      const tempOption = regionSelect.querySelector('option[data-temp="true"]');
-      if (tempOption) {
-        tempOption.remove();
-      }
+      // 清空区域权限多选
+      selectedRegions = [];
+      updateRegionDisplay();
+      renderRegionMenu();
 
       // 重置照片预览
       compressedPhotoBlob = null;
@@ -1784,6 +1885,13 @@
         return;
       }
 
+      // 区域权限必填校验（一人可多区域，至少选一个）
+      const selectedRegionsVal = getSelectedRegions();
+      if (!selectedRegionsVal) {
+        showAlert('error', '请至少选择一个区域权限！');
+        return;
+      }
+
       const formData = new FormData();
       formData.append('name', document.getElementById('name').value);
       formData.append('nation', document.getElementById('nation').value);
@@ -1792,7 +1900,7 @@
       formData.append('address', document.getElementById('address').value);
       formData.append('job', document.getElementById('job').value);
       formData.append('education', document.getElementById('education').value);
-      formData.append('region_auth', document.getElementById('region_auth').value);
+      formData.append('region_auth', selectedRegionsVal);
       formData.append('remark', document.getElementById('remark').value);
       formData.append('id_card_img_path', document.getElementById('id_card_img_path').value);
       if (remarkAttachmentFile) {
@@ -1836,7 +1944,7 @@
             address: document.getElementById('address').value,
             job: document.getElementById('job').value,
             education: document.getElementById('education').value,
-            region_auth: document.getElementById('region_auth').value
+            region_auth: getSelectedRegions()
           };
 
           currentEditRecordId = null;
@@ -1879,11 +1987,9 @@
             tempJobOption.remove();
           }
 
-          const regionSelect = document.getElementById('region_auth');
-          const tempOption = regionSelect.querySelector('option[data-temp="true"]');
-          if (tempOption) {
-            tempOption.remove();
-          }
+          selectedRegions = [];
+          updateRegionDisplay();
+          renderRegionMenu();
           
           compressedPhotoBlob = null;
           document.getElementById('photo-preview').style.display = 'none';

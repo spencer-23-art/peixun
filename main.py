@@ -583,7 +583,9 @@ def build_gate_csv(records) -> bytes:
         elif r['gender'] == '女':
             gender_code = '2'
         company = r['company'] if r['company'] else ""
-        region = r['region_auth'] if r['region_auth'] else ""
+        # region_auth 可能为逗号分隔多区域，门禁导入表每行只认一个组织路径，取第一个区域导出
+        region_raw = r['region_auth'] if r['region_auth'] else ""
+        region = region_raw.split(',')[0].strip() if region_raw else ""
         org_path = f"{company}/{region}" if region else company
         writer.writerow([r['name'], gender_code, org_path, '111', r['id_card'], '', r['phone'], '', region, ''])
     csv_data = csv_output.getvalue().encode('gbk', errors='ignore')
@@ -1079,6 +1081,12 @@ def init_db():
         cursor.execute("ALTER TABLE users ADD COLUMN created_at DATETIME")
     except sqlite3.OperationalError:
         pass
+    # 自愈逻辑：给 users 增加 region_auth 字段（逗号分隔多区域，管理端账号可用区域）。
+    # 为空 = 不限制（超级管理员/普通录入员）；非空 = 只能看到自己区域内的记录。
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN region_auth TEXT DEFAULT NULL")
+    except sqlite3.OperationalError:
+        pass
 
     # 人员信息修改申请表
     cursor.execute('''
@@ -1360,7 +1368,8 @@ def login(request: Request, username: str = Form(...), password: str = Form(...)
             "role": user['role'],
             "username": user['username'],
             "real_name": user['real_name'],
-            "company": user['company']
+            "company": user['company'],
+            "region_auth": user['region_auth'] or ''
         }
     }
 
@@ -1649,9 +1658,12 @@ def admin_update_region(
     region_auth: str = Form(...),
     admin = Depends(get_admin_user)
 ):
-    if not region_auth.strip():
+    # region_auth 支持逗号分隔多区域，如 "三元肥,尿素塔"；自动去空白、去重
+    region_list = _parse_region_list(region_auth)
+    if not region_list:
         raise HTTPException(status_code=400, detail="区域权限不能为空")
-        
+    normalized_region = ",".join(region_list)
+
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
@@ -1661,7 +1673,7 @@ def admin_update_region(
         conn.close()
         raise HTTPException(status_code=404, detail="记录不存在")
         
-    cursor.execute("UPDATE records SET region_auth = ? WHERE id = ?", (region_auth.strip(), record_id))
+    cursor.execute("UPDATE records SET region_auth = ? WHERE id = ?", (normalized_region, record_id))
     conn.commit()
     conn.close()
     return {"code": 200, "message": "区域权限更改成功"}
@@ -2366,9 +2378,27 @@ def get_companies():
     conn.close()
     return {"code": 200, "data": sorted_companies}
 
-# 查看所有已录入的信息（仅管理员，支持日期、单位、关键字与特殊工种筛选）
+def _parse_region_list(s: str) -> list:
+    """把逗号分隔的区域字符串解析为去空列表。"""
+    if not s or not s.strip():
+        return []
+    return [r.strip() for r in s.split(',') if r.strip()]
+
+def _region_match_conditions(column: str, region_list: list):
+    """生成逗号分隔多区域匹配条件。
+
+    region_auth 存储为 "三元肥,尿素塔" 逗号分隔多值。
+    用 ','||col||',' LIKE '%,区域,%' 精确匹配，避免 '尿素塔' 误配 '尿素塔A'。
+    返回 (sql_fragment, params)，region_list 为空时返回 (None, [])。
+    """
+    if not region_list:
+        return None, []
+    conds = [f"',' || IFNULL({column}, '') || ',' LIKE '%,' || ? || ',%'" for _ in region_list]
+    return "(" + " OR ".join(conds) + ")", list(region_list)
+
+# 查看所有已录入的信息（仅管理员，支持日期、单位、关键字、特殊工种与区域筛选）
 @app.get("/api/admin/records")
-def get_all_records(start_date: str = None, end_date: str = None, company: str = None, name: str = None, special_work: bool = False, page: int = 1, limit: int = 20, admin = Depends(get_admin_user)):
+def get_all_records(start_date: str = None, end_date: str = None, company: str = None, name: str = None, special_work: bool = False, regions: str = None, page: int = 1, limit: int = 20, admin = Depends(get_admin_user)):
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
@@ -2376,6 +2406,29 @@ def get_all_records(start_date: str = None, end_date: str = None, company: str =
     conditions = []
     params = []
     
+    # 区域筛选 + 管理端账号区域权限（取交集）
+    # 账号权限为空 → 不限制；非空 → 只能在权限区域内查看
+    admin_region_list = _parse_region_list(admin['region_auth'] if admin['region_auth'] else '')
+    filter_region_list = _parse_region_list(regions or '')
+    
+    if admin_region_list:
+        if filter_region_list:
+            # 筛选项与账号权限取交集
+            effective_regions = [r for r in filter_region_list if r in admin_region_list]
+            if not effective_regions:
+                # 交集为空：任何区域都不满足，强制无结果
+                conditions.append("1 = 0")
+        else:
+            effective_regions = admin_region_list
+    else:
+        effective_regions = filter_region_list
+    
+    if effective_regions:
+        region_sql, region_params = _region_match_conditions('r.region_auth', effective_regions)
+        if region_sql:
+            conditions.append(region_sql)
+            params.extend(region_params)
+
     if company and company.strip():
         conditions.append("r.company = ?")
         params.append(company.strip())
@@ -3697,9 +3750,18 @@ def download_exam_record(record_id: int, admin = Depends(get_admin_user)):
 
 # ---------------- 静态页面路由 ----------------
 
+class NoCacheStaticFiles(StaticFiles):
+    """静态文件响应不缓存，确保前端更新后浏览器刷新即可拉到最新版本（避免手机端缓存旧页面）"""
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        response.headers.setdefault("Cache-Control", "no-cache, no-store, must-revalidate")
+        response.headers.setdefault("Pragma", "no-cache")
+        response.headers.setdefault("Expires", "0")
+        return response
+
 # 托管 uploads 目录以查看照片
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", NoCacheStaticFiles(directory="static"), name="static")
 
 @app.get("/", response_class=HTMLResponse)
 def index():
@@ -4113,7 +4175,7 @@ def get_sub_admins(admin = Depends(get_admin_user)):
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     try:
-        cursor.execute("SELECT id, username, real_name, company, status, role FROM users WHERE role = 'admin' AND username != 'admin'")
+        cursor.execute("SELECT id, username, real_name, company, status, role, region_auth FROM users WHERE role = 'admin' AND username != 'admin'")
         rows = cursor.fetchall()
         sub_admins = []
         for r in rows:
@@ -4123,7 +4185,8 @@ def get_sub_admins(admin = Depends(get_admin_user)):
                 "real_name": r["real_name"],
                 "company": r["company"],
                 "status": r["status"],
-                "role": r["role"]
+                "role": r["role"],
+                "region_auth": r["region_auth"] or ''
             })
         return {"code": 200, "data": sub_admins}
     except Exception as e:
@@ -4139,6 +4202,7 @@ def add_sub_admin(
     password: str = Form(...),
     real_name: str = Form("二级管理员"),
     company: str = Form("管理部"),
+    region_auth: str = Form(""), # 逗号分隔多区域，空 = 全部区域
     admin = Depends(get_admin_user)
 ):
     if admin['username'] != 'admin':
@@ -4159,9 +4223,11 @@ def add_sub_admin(
             raise HTTPException(status_code=400, detail="该用户名已存在")
         
         hashed_pwd = encrypt_pwd(password_clean)
+        region_list = _parse_region_list(region_auth)
+        normalized_region = ",".join(region_list)
         cursor.execute(
-            "INSERT INTO users (username, password, real_name, company, status, role) VALUES (?, ?, ?, ?, ?, ?)",
-            (username_clean, hashed_pwd, real_name.strip(), company.strip(), 'approved', 'admin')
+            "INSERT INTO users (username, password, real_name, company, status, role, region_auth) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (username_clean, hashed_pwd, real_name.strip(), company.strip(), 'approved', 'admin', normalized_region)
         )
         conn.commit()
         return {"code": 200, "message": "二级管理员添加成功"}
@@ -4211,6 +4277,7 @@ def update_sub_admin(
     new_password: str = Form(None), # 留空表示不修改
     real_name: str = Form(None),
     company: str = Form(None),
+    region_auth: str = Form(None), # 逗号分隔多区域，留空/不传表示不修改；传空字符串表示清空权限
     admin = Depends(get_admin_user)
 ):
     if admin['username'] != 'admin':
@@ -4254,6 +4321,11 @@ def update_sub_admin(
             cursor.execute("UPDATE users SET real_name = ? WHERE id = ?", (real_name.strip(), sub_admin_id))
         if company is not None:
             cursor.execute("UPDATE users SET company = ? WHERE id = ?", (company.strip(), sub_admin_id))
+        if region_auth is not None:
+            # 逗号分隔多区域，自动去空白、去重；空字符串表示清空（不限制区域）
+            region_list = _parse_region_list(region_auth)
+            normalized_region = ",".join(region_list)
+            cursor.execute("UPDATE users SET region_auth = ? WHERE id = ?", (normalized_region, sub_admin_id))
             
         conn.commit()
         return {"code": 200, "message": "二级管理员信息更新成功"}

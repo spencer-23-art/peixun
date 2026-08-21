@@ -53,3 +53,9 @@ __pycache__/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# 本地运行环境（Redis 数据与二进制、WorkBuddy 锁文件，勿入库）
+dump.rdb
+redis_bin/
+skills-lock.json
+

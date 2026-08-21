@@ -233,6 +233,102 @@
       color: #ef4444;
     }
 
+    /* 区域多选标签（筛选器/行内/二级管理员通用） */
+    .region-check {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      cursor: pointer;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      font-size: 0.8rem;
+      color: var(--text-main);
+      user-select: none;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+    .region-check:hover {
+      background: rgba(255, 255, 255, 0.12);
+    }
+    .region-check.active {
+      background: rgba(99, 102, 241, 0.25);
+      border-color: #818cf8;
+      color: #c7d2fe;
+    }
+    .region-check input {
+      display: none;
+    }
+    .filter-region-box {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+      min-height: 38px;
+      padding: 6px 8px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--glass-border);
+      border-radius: 6px;
+    }
+    .filter-region-box .region-check {
+      padding: 3px 9px;
+      font-size: 0.75rem;
+    }
+
+    /* 多选下拉：display 复用 form-control 外观，与其他下拉完全一致 */
+    .multi-select { position: relative; }
+    .multi-select-display {
+      cursor: pointer;
+      user-select: none;
+      display: flex;
+      align-items: center;
+      appearance: none;
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      background-size: 16px;
+      padding-right: 36px;
+    }
+    .multi-select.open .multi-select-display {
+      border-color: var(--primary-color);
+      background-color: rgba(255, 255, 255, 0.08);
+      box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.25);
+      background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236366f1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+    }
+    .multi-select-value { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .multi-select-menu {
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0;
+      right: 0;
+      background-color: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 10px;
+      max-height: 240px;
+      overflow-y: auto;
+      z-index: 9999;
+      display: none;
+      padding: 4px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6);
+    }
+    .multi-select.open .multi-select-menu { display: block; }
+    .multi-select-menu label {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 12px;
+      margin: 0;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.95rem;
+      color: #f8fafc;
+      user-select: none;
+    }
+    .multi-select-menu label:hover { background: rgba(255, 255, 255, 0.08); }
+    .multi-select-menu input[type="checkbox"] { width: 16px; height: 16px; margin: 0; cursor: pointer; flex-shrink: 0; }
+
     /* 针对后台页面的布局微调 */
     .admin-container {
       max-width: 1200px;
@@ -492,7 +588,7 @@
     }
     .filter-grid {
       display: grid;
-      grid-template-columns: 2fr 1fr 1fr 0.9fr auto;
+      grid-template-columns: 2fr 1fr 1fr 0.9fr 0.9fr auto;
       gap: 16px;
       align-items: flex-end;
     }
@@ -780,6 +876,14 @@
             <select id="filter-special-work" class="form-control filter-control" onchange="handleSpecialWorkFilterChange()">
               <option value="">全部岗位</option>
               <option value="special">特殊工种</option>
+            </select>
+          </div>
+          <!-- 区域权限（下拉表单） -->
+          <div class="filter-item">
+            <label class="filter-label">区域权限</label>
+            <select id="filter-regions" class="form-control filter-control" onchange="handleRegionFilterChange()">
+              <option value="">全部区域</option>
+              <!-- 其余选项由 renderRegionFilterOptions() 动态生成 -->
             </select>
           </div>
           <!-- 筛选操作按钮 -->
@@ -1145,6 +1249,7 @@
                       <th style="text-align: left;">账号名称 (用户名)</th>
                       <th style="text-align: left;">真实姓名</th>
                       <th style="text-align: left;">公司/部门</th>
+                      <th style="text-align: left;">区域权限</th>
                       <th style="text-align: center; width: 150px;">操作</th>
                     </tr>
                   </thead>
@@ -1209,6 +1314,12 @@
       <div class="form-group" style="margin-bottom: 15px;">
         <label for="sub-admin-company">公司/部门 *</label>
         <input type="text" id="sub-admin-company" class="form-control" placeholder="请输入公司或部门名称" required>
+      </div>
+      <div class="form-group" style="margin-bottom: 15px;">
+        <label>区域权限（可多选，空 = 全部区域）</label>
+        <div id="sub-admin-regions-box" class="filter-region-box" style="min-height: 38px;">
+          <!-- 由 renderSubAdminRegionOptions() 动态渲染 -->
+        </div>
       </div>
       <div class="form-group" style="margin-bottom: 20px;">
         <label id="sub-admin-password-label" for="sub-admin-password">密码 *</label>
@@ -1318,8 +1429,13 @@
             <input type="text" id="detail-address" class="form-control" required>
           </div>
           <div class="form-group">
-            <label for="detail-region" style="font-size: 0.85rem; color: var(--text-muted); display: block; margin-bottom: 4px;">区域权限 *</label>
-            <select id="detail-region" class="form-control" required></select>
+            <label style="font-size: 0.85rem; color: var(--text-muted); display: block; margin-bottom: 4px;">区域权限 *</label>
+            <div class="multi-select" id="detail-region-multi">
+              <div class="form-control multi-select-display" onclick="toggleDetailRegionMenu(event)">
+                <span class="multi-select-value placeholder" id="detail-region-display">请选择区域权限</span>
+              </div>
+              <div class="multi-select-menu" id="detail-region-menu"></div>
+            </div>
           </div>
         </div>
 
@@ -1460,6 +1576,7 @@
     let filterCompany = '';
     let filterName = '';
     let filterSpecialWork = false;
+    let filterRegions = []; // 区域权限多选筛选
     
     // 分页管理
     let recordsPage = 1;
@@ -2215,6 +2332,7 @@
     // 1. 加载已录入的数据
     async function loadRecords() {
       await loadSystemRegions();
+      renderRegionFilterOptions();
       try {
         let url = '/api/admin/records?';
         if (filterStartDate) {
@@ -2231,6 +2349,9 @@
         }
         if (filterSpecialWork) {
           url += 'special_work=true&';
+        }
+        if (filterRegions.length > 0) {
+          url += 'regions=' + encodeURIComponent(filterRegions.join(',')) + '&';
         }
         
         url += 'page=' + recordsPage + '&limit=' + recordsLimit;
@@ -2300,21 +2421,22 @@
         const checkedAttr = isChecked ? 'checked' : '';
         const safePhotoPath = r.photo_path ? r.photo_path.replace(/\\/g, '/') : '';
 
-        // 动态构建区域权限下拉选项
-        let optionsHtml = '';
-        const standardOptions = systemRegions;
-        const curVal = r.region_auth || '';
-        let hasSelected = false;
-        
-        standardOptions.forEach(opt => {
-          const isSel = (opt === curVal);
-          if (isSel) hasSelected = true;
-          optionsHtml += `<option value="${opt}" ${isSel ? 'selected' : ''}>${opt}</option>`;
+        // 动态构建区域权限多选标签（region_auth 逗号分隔多值，一人多区域）
+        const curRegions = r.region_auth ? String(r.region_auth).split(',').map(x => x.trim()).filter(Boolean) : [];
+        let regionChipsHtml = '';
+        (systemRegions || []).forEach(opt => {
+          const active = curRegions.includes(opt);
+          regionChipsHtml += `<label class="region-check ${active ? 'active' : ''}" style="font-size:0.72rem; padding:2px 8px;">
+            <input type="checkbox" data-region="${escapeHtml(opt)}" ${active ? 'checked' : ''} onchange="handleRowRegionToggle(this, ${r.id})">
+            ${escapeHtml(opt)}
+          </label>`;
         });
-        
-        if (!hasSelected && curVal) {
-          optionsHtml += `<option value="${escapeHtml(curVal)}" selected>${escapeHtml(curVal)} (历史数据)</option>`;
-        }
+        // 历史数据中不在 systemRegions 里的区域，只读展示
+        curRegions.forEach(rg => {
+          if (!(systemRegions || []).includes(rg)) {
+            regionChipsHtml += `<span class="region-tag" style="font-size:0.72rem; padding:2px 8px;">${escapeHtml(rg)}</span>`;
+          }
+        });
         
         tr.innerHTML = `
           <td style="text-align: center;"><input type="checkbox" class="record-checkbox" value="${r.id}" ${checkedAttr} onchange="handleSingleCheckboxChange(this, ${r.id})" onclick="event.stopPropagation()" style="width: 18px; height: 18px; cursor: pointer;"></td>
@@ -2336,12 +2458,12 @@
             <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap;">
               <span>岗位: ${escapeHtml(r.job)}</span>
               <span style="color: var(--glass-border);">|</span>
-              <span style="display: inline-flex; align-items: center; gap: 4px;">
+              <span style="display: flex; align-items: flex-start; gap: 4px; flex-wrap: wrap;">
                 权限:
-                <select class="form-control" style="width: auto; padding: 2px 24px 2px 6px; font-size: 0.75rem; height: 24px; line-height: 20px; background-size: 10px; margin-bottom: 0; min-width: 85px;" id="region-select-${r.id}" onchange="handleRegionSelectChange(this, ${r.id}, '${escapeHtml(curVal)}')">
-                  ${optionsHtml}
-                </select>
-                <button class="btn btn-primary" style="display: none; width: auto; padding: 2px 6px; font-size: 0.75rem; height: 24px; min-height: 24px;" id="region-btn-${r.id}" onclick="updateRecordRegion(${r.id})">确认</button>
+                <span id="row-regions-${r.id}" style="display: inline-flex; flex-wrap: wrap; gap: 4px;">
+                  ${regionChipsHtml}
+                </span>
+                <button class="btn btn-primary" style="display: none; width: auto; padding: 2px 8px; font-size: 0.75rem; height: 24px; min-height: 24px;" id="region-btn-${r.id}" onclick="updateRecordRegion(${r.id})">保存</button>
               </span>
             </div>
             <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 6px; white-space: normal; word-break: break-all; max-width: none;" title="${escapeHtml(r.address)}">地址: <span style="color: var(--text-main);">${escapeHtml(r.address)}</span></div>
@@ -2353,10 +2475,10 @@
           <td style="text-align: center;">
             <div style="display: flex; flex-direction: column; gap: 4px; align-items: center;">
               <div style="display: flex; align-items: center; gap: 4px;">
-                ${Number(r.is_exam_passed) === 1 ? '<span class="btn" style="padding: 4px 8px; font-size: 0.8rem; width: auto; background: #dc2626; border-color: #dc2626; color: #fff; cursor: default;">合格</span>' : ''}
                 <button class="btn btn-primary" style="padding: 4px 8px; font-size: 0.8rem; width: auto; background: #6366f1; border-color: #6366f1;" onclick="openRecordDetail(${r.id})">详情</button>
               </div>
               <button class="btn btn-danger" style="padding: 4px 8px; font-size: 0.8rem; width: auto; margin-left: 0;" onclick="deleteRecord(${r.id})">删除</button>
+              ${Number(r.is_exam_passed) === 1 ? '<span class="btn" style="padding: 4px 8px; font-size: 0.8rem; width: auto; background: #dc2626; border-color: #dc2626; color: #fff; cursor: default;">合格</span>' : ''}
             </div>
           </td>
         `;
@@ -2432,6 +2554,26 @@
       loadRecords();
     }
 
+    // 渲染筛选器区域权限下拉选项（按 systemRegions 动态生成）
+    function renderRegionFilterOptions() {
+      const sel = document.getElementById('filter-regions');
+      if (!sel) return;
+      const current = filterRegions.length ? filterRegions[0] : '';
+      let html = '<option value="">全部区域</option>';
+      (systemRegions || []).forEach(r => {
+        html += `<option value="${escapeHtml(r)}" ${r === current ? 'selected' : ''}>${escapeHtml(r)}</option>`;
+      });
+      sel.innerHTML = html;
+    }
+
+    // 筛选器区域下拉切换（单选）
+    function handleRegionFilterChange() {
+      const v = document.getElementById('filter-regions').value;
+      filterRegions = v ? [v] : [];
+      recordsPage = 1;
+      loadRecords();
+    }
+
     let searchTimeout = null;
     // 姓名实时搜索（带300ms防抖）
     function handleNameSearch() {
@@ -2457,6 +2599,10 @@
       filterCompany = '';
       filterName = '';
       filterSpecialWork = false;
+      // 重置区域权限筛选
+      filterRegions = [];
+      const regionSel = document.getElementById('filter-regions');
+      if (regionSel) regionSel.value = '';
       recordsPage = 1;
       
       // 清空所有勾选历史状态，重新应用默认勾选
@@ -2846,24 +2992,10 @@
       }
       jobSelect.value = record.job || '';
 
-      // 填充区域
-      const regionSelect = document.getElementById('detail-region');
-      regionSelect.innerHTML = '<option value="" disabled>请选择区域权限</option>';
-      systemRegions.forEach(r => {
-        const opt = document.createElement('option');
-        opt.value = r;
-        opt.textContent = r;
-        regionSelect.appendChild(opt);
-      });
-      let regionExists = systemRegions.includes(record.region_auth);
-      if (!regionExists && record.region_auth) {
-        const opt = document.createElement('option');
-        opt.value = record.region_auth;
-        opt.textContent = record.region_auth + ' (历史数据)';
-        opt.setAttribute('data-temp', 'true');
-        regionSelect.appendChild(opt);
-      }
-      regionSelect.value = record.region_auth || '';
+      // 填充区域权限多选下拉（一人多区域；历史脏数据区域并入可选列表）
+      detailSelectedRegions = record.region_auth ? String(record.region_auth).split(',').map(x => x.trim()).filter(Boolean) : [];
+      renderDetailRegionMenu();
+      updateDetailRegionDisplay();
 
       // 预览现场照片
       const photoPreview = document.getElementById('detail-photo-preview');
@@ -3053,6 +3185,79 @@
       }
     }
 
+    // 详情弹窗区域权限多选状态
+    let detailSelectedRegions = [];
+
+    // 渲染详情弹窗多选下拉菜单
+    function renderDetailRegionMenu() {
+      const menu = document.getElementById('detail-region-menu');
+      if (!menu) return;
+      menu.innerHTML = '';
+      const options = systemRegions.slice();
+      detailSelectedRegions.forEach(rg => {
+        if (!options.includes(rg)) options.push(rg);
+      });
+      options.forEach(region => {
+        const label = document.createElement('label');
+        label.style.cssText = 'display:flex;align-items:center;gap:10px;padding:9px 12px;margin:0;border-radius:6px;cursor:pointer;font-size:0.95rem;color:#f8fafc;user-select:none;font-weight:normal;';
+        label.onmouseenter = function() { this.style.background = 'rgba(255,255,255,0.08)'; };
+        label.onmouseleave = function() { this.style.background = ''; };
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.value = region;
+        cb.checked = detailSelectedRegions.includes(region);
+        cb.style.cssText = 'width:16px;height:16px;margin:0;cursor:pointer;flex-shrink:0;';
+        cb.onchange = function() { toggleDetailRegionOption(region, this.checked); };
+        const span = document.createElement('span');
+        span.textContent = region;
+        span.style.cssText = 'white-space:nowrap;flex:1;';
+        label.appendChild(cb);
+        label.appendChild(span);
+        menu.appendChild(label);
+      });
+    }
+
+    // 切换详情弹窗单个区域选项
+    function toggleDetailRegionOption(region, checked) {
+      if (checked) {
+        if (!detailSelectedRegions.includes(region)) detailSelectedRegions.push(region);
+      } else {
+        detailSelectedRegions = detailSelectedRegions.filter(r => r !== region);
+      }
+      updateDetailRegionDisplay();
+    }
+
+    // 更新详情弹窗框内显示
+    function updateDetailRegionDisplay() {
+      const display = document.getElementById('detail-region-display');
+      if (!display) return;
+      if (detailSelectedRegions.length === 0) {
+        display.textContent = '请选择区域权限';
+        display.classList.add('placeholder');
+      } else {
+        display.textContent = detailSelectedRegions.join('、');
+        display.classList.remove('placeholder');
+      }
+    }
+
+    // 展开/收起详情弹窗多选下拉
+    function toggleDetailRegionMenu(event) {
+      if (event) event.stopPropagation();
+      const wrap = document.getElementById('detail-region-multi');
+      if (wrap) wrap.classList.toggle('open');
+    }
+
+    // 点击页面其他区域关闭详情弹窗多选下拉
+    document.addEventListener('click', function(e) {
+      const wrap = document.getElementById('detail-region-multi');
+      if (wrap && !wrap.contains(e.target)) wrap.classList.remove('open');
+    });
+
+    // 收集详情弹窗已选中的区域权限（逗号分隔多值，一人多区域）
+    function getDetailRegions() {
+      return detailSelectedRegions.join(',');
+    }
+
     async function submitRecordDetail(e) {
       e.preventDefault();
       
@@ -3064,7 +3269,7 @@
       const address = document.getElementById('detail-address').value.trim();
       const job = document.getElementById('detail-job').value;
       const education = document.getElementById('detail-education').value;
-      const regionAuth = document.getElementById('detail-region').value;
+      const regionAuth = getDetailRegions();
       const remark = document.getElementById('detail-remark').value.trim();
       const idCardImgPath = document.getElementById('detail-id-card-img-path').value;
       
@@ -3497,24 +3702,24 @@
       return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
     }
 
-    // 监听下拉框变化动态显示/隐藏“确认”按钮
-    function handleRegionSelectChange(selectEl, id, originalVal) {
+    // 行内区域多选：勾选任意区域时显示“保存”按钮
+    function handleRowRegionToggle(cb, id) {
       const btn = document.getElementById(`region-btn-${id}`);
-      if (!btn) return;
-      if (selectEl.value !== originalVal) {
-        btn.style.display = 'inline-block';
-      } else {
-        btn.style.display = 'none';
-      }
+      if (btn) btn.style.display = 'inline-block';
     }
 
-    // 管理员修改人员区域权限
+    // 管理员修改人员区域权限（支持多区域，逗号分隔）
     async function updateRecordRegion(id) {
-      const selectEl = document.getElementById(`region-select-${id}`);
-      if (!selectEl) return;
-      const newVal = selectEl.value;
+      const container = document.getElementById(`row-regions-${id}`);
+      if (!container) return;
+      const selected = [];
+      container.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+        if (cb.checked) selected.push(cb.getAttribute('data-region'));
+      });
+      const newVal = selected.join(',');
+      const display = selected.join('、') || '（无）';
 
-      if (!confirm('确定要将该人员的区域权限更改为 "' + newVal + '" 吗？')) {
+      if (!confirm('确定要将该人员的区域权限设置为：' + display + ' 吗？')) {
         return;
       }
 
@@ -3537,9 +3742,10 @@
           // 2. 更新 selectedRecordsMap 中对应 record 的 region_auth
           const selectedRecord = selectedRecordsMap.get(id);
           if (selectedRecord) selectedRecord.region_auth = newVal;
-          
+
           // 重新在前端重新渲染即可，无需重新网络请求 loadRecords()，以防重载列表导致管理员的勾选购物车被重置！
           renderRecords();
+          showAlert('success', '区域权限更改成功');
         } else {
           showAlert('error', result.detail || '更改区域权限失败');
         }
@@ -4697,8 +4903,39 @@
     }
 
     // 加载二级管理员列表
-    async function loadSubAdmins() {
-      if (currentAdminUsername !== 'admin') return;
+    // 二级管理员弹窗区域多选状态
+    let subAdminSelectedRegions = [];
+
+    // 渲染二级管理员弹窗的区域多选标签
+    function renderSubAdminRegionOptions() {
+      const box = document.getElementById('sub-admin-regions-box');
+      if (!box) return;
+      if (!systemRegions || systemRegions.length === 0) {
+        box.innerHTML = '<span style="color:var(--text-muted); font-size:0.78rem;">暂无区域配置，保存后默认为全部区域</span>';
+        return;
+      }
+      box.innerHTML = systemRegions.map((r, i) => {
+        const active = subAdminSelectedRegions.includes(r);
+        return `<label class="region-check ${active ? 'active' : ''}">
+          <input type="checkbox" data-idx="${i}" ${active ? 'checked' : ''} onchange="handleSubAdminRegionToggle(this, ${i})">
+          ${escapeHtml(r)}
+        </label>`;
+      }).join('');
+    }
+
+    // 二级管理员弹窗区域多选切换（通过索引取值）
+    function handleSubAdminRegionToggle(cb, idx) {
+      const region = systemRegions[idx];
+      if (!region) return;
+      if (cb.checked) {
+        if (!subAdminSelectedRegions.includes(region)) subAdminSelectedRegions.push(region);
+      } else {
+        subAdminSelectedRegions = subAdminSelectedRegions.filter(r => r !== region);
+      }
+      renderSubAdminRegionOptions();
+    }
+
+    async function loadSubAdmins() {      if (currentAdminUsername !== 'admin') return;
       try {
         const response = await fetch('/api/admin/sub_admins', {
           headers: { 'Authorization': token }
@@ -4710,15 +4947,21 @@
           if (!tbody) return;
           tbody.innerHTML = '';
           if (subAdminsList.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">暂无二级管理员</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">暂无二级管理员</td></tr>`;
             return;
           }
           subAdminsList.forEach((item, index) => {
             const tr = document.createElement('tr');
+            // 区域权限：逗号分隔多区域，逐区域显示标签
+            const regions = (item.region_auth || '').split(',').map(x => x.trim()).filter(Boolean);
+            const regionsHtml = regions.length > 0
+              ? regions.map(r => `<span class="region-tag" style="font-size:0.72rem; padding:2px 8px;">${escapeHTML(r)}</span>`).join('')
+              : '<span style="color:var(--text-muted); font-size:0.8rem;">全部区域</span>';
             tr.innerHTML = `
               <td style="text-align: left;">${escapeHTML(item.username)}</td>
               <td style="text-align: left;">${escapeHTML(item.real_name)}</td>
               <td style="text-align: left;">${escapeHTML(item.company)}</td>
+              <td style="text-align: left;"><div style="display:flex; flex-wrap:wrap; gap:4px;">${regionsHtml}</div></td>
               <td style="text-align: center;">
                 <button class="btn btn-secondary" onclick="showEditSubAdminModalByIndex(${index})" style="width: auto; padding: 4px 10px; font-size: 0.8rem; margin: 0 4px;">修改</button>
                 <button class="btn btn-danger" onclick="deleteSubAdmin(${item.id}, '${escapeHTML(item.username)}')" style="width: auto; padding: 4px 10px; font-size: 0.8rem; margin: 0 4px; background: #ef4444; border-color: #ef4444;">删除</button>
@@ -4744,6 +4987,9 @@
       document.getElementById('sub-admin-modal-title').innerText = '添加二级管理员';
       document.getElementById('sub-admin-password-label').innerText = '密码 *';
       document.getElementById('sub-admin-password').placeholder = '请输入密码';
+      // 区域权限默认不选（全部区域）
+      subAdminSelectedRegions = [];
+      renderSubAdminRegionOptions();
       
       document.getElementById('sub-admin-modal').style.display = 'flex';
     }
@@ -4761,6 +5007,9 @@
       document.getElementById('sub-admin-modal-title').innerText = '修改二级管理员信息';
       document.getElementById('sub-admin-password-label').innerText = '新密码 (留空表示不修改)';
       document.getElementById('sub-admin-password').placeholder = '留空表示不修改密码';
+      // 回填区域权限（逗号分隔多区域）
+      subAdminSelectedRegions = (item.region_auth || '').split(',').map(x => x.trim()).filter(Boolean);
+      renderSubAdminRegionOptions();
       
       document.getElementById('sub-admin-modal').style.display = 'flex';
     }
@@ -4795,6 +5044,8 @@
       formData.append('username', usernameVal);
       formData.append('real_name', realnameVal);
       formData.append('company', companyVal);
+      // 区域权限：逗号分隔多区域；空 = 全部区域
+      formData.append('region_auth', subAdminSelectedRegions.join(','));
       if (passwordVal) {
         formData.append('password', passwordVal);
       }
@@ -5035,7 +5286,7 @@
     <button class="app-tab" type="button" data-tab="config" aria-selected="false" onclick="switchAdminTab('config'); setMobileTab('config')"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.1 2.1-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56v.1h-3v-.1A1.7 1.7 0 0 0 10.7 18.6a1.7 1.7 0 0 0-1.88.34l-.06.06-2.1-2.1.06-.06A1.7 1.7 0 0 0 7.06 15 1.7 1.7 0 0 0 5.5 14H5.4v-3h.1A1.7 1.7 0 0 0 7.06 10a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.1-2.1.06.06A1.7 1.7 0 0 0 10.7 6.36a1.7 1.7 0 0 0 1.03-1.56V4.7h3v.1a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.88-.34l.06-.06 2.1 2.1-.06.06A1.7 1.7 0 0 0 19.4 10a1.7 1.7 0 0 0 1.56 1h.1v3h-.1A1.7 1.7 0 0 0 19.4 15Z"></path></svg><span class="app-tab-label">设置</span></button>
   </nav>
   <section id="mobile-admin-live" aria-label="培训管理移动端"></section>
-  <script src="/static/admin-mobile-live.js?v=1.0.15"></script>
+  <script src="/static/admin-mobile-live.js?v=1.0.16"></script>
 
 </body>
 </html>
