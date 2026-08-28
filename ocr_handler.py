@@ -911,18 +911,13 @@ def _candidate_score(ocr_score, image):
 
 
 def _is_valid_id_card_number(id_card):
-    """验证 18 位居民身份证格式和校验位，避免误识别文本提前结束回退。"""
+    """验证 18 位居民身份证基础格式，确保卡面号码完整检出时正常裁切，不因单个字符 OCR 偏差误退回原图。"""
     value = str(id_card or "").strip().upper()
-    if not re.fullmatch(r"[1-9]\d{16}[\dX]", value):
-        return False
-    weights = (7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2)
-    check_codes = "10X98765432"
-    checksum = sum(int(value[index]) * weights[index] for index in range(17)) % 11
-    return value[-1] == check_codes[checksum]
+    return bool(re.fullmatch(r"[1-9]\d{16}[\dX]", value))
 
 
 def _has_complete_identity(metrics):
-    """当前阶段是否已完整识别姓名和可校验的身份证号。"""
+    """当前阶段是否已完整识别姓名和 18 位身份证号。"""
     _, name, id_card, _ = metrics
     clean_name = re.sub(r"[\s·・]", "", str(name or ""))
     return len(clean_name) >= 2 and _is_valid_id_card_number(id_card)
