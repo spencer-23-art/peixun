@@ -294,24 +294,24 @@ def api_health_check():
     """轻量健康检查接口，供 Watchdog 守护脚本秒级探活。"""
     return {"status": "ok", "timestamp": beijing_now().strftime("%Y-%m-%d %H:%M:%S")}
 
-# 18 位身份证号校验（前 17 位纯数字 + 中间 8 位合法公历公历生日 + 末位数字或 X）
-# 采用实用兼容模式：严格校验格式与真实公历日期，同时放行早期公安历史遗留错码身份证
+_ID_CARD_WEIGHTS = (7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2)
+_ID_CARD_CHECK = ('1', '0', 'X', '9', '8', '7', '6', '5', '4', '3', '2')
+
 def validate_id_card(id_card: str) -> bool:
     """校验身份证号合法性，合法返回 True。"""
     if not id_card or len(id_card) != 18:
         return False
     if not id_card[:17].isdigit():
         return False
-    if id_card[17].upper() not in '0123456789X':
-        return False
-    # 校验生日合法性（支持 1800-2099 年合法的公历日期，如排除 2月30日、13月等）
+    # 校验生日合法性（支持 1800-2099 年）
     try:
         birthday = datetime.strptime(id_card[6:14], "%Y%m%d")
         if birthday.year < 1800 or birthday.year > 2099:
             return False
     except ValueError:
         return False
-    return True
+    total = sum(int(id_card[i]) * _ID_CARD_WEIGHTS[i] for i in range(17))
+    return _ID_CARD_CHECK[total % 11] == id_card[17].upper()
 
 # S2: 校验前端回传的身份证裁剪图路径确实位于 uploads/temp_ids 目录内，
 # 防止攻击者传任意服务器路径（如 peixun.db / 登记卡.docx）被复制并经 /uploads 公开下载。
