@@ -289,11 +289,6 @@ def get_db():
     finally:
         conn.close()
 
-@app.get("/api/health")
-def api_health_check():
-    """轻量健康检查接口，供 Watchdog 守护脚本秒级探活。"""
-    return {"status": "ok", "timestamp": beijing_now().strftime("%Y-%m-%d %H:%M:%S")}
-
 _ID_CARD_WEIGHTS = (7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2)
 _ID_CARD_CHECK = ('1', '0', 'X', '9', '8', '7', '6', '5', '4', '3', '2')
 
@@ -1161,6 +1156,11 @@ if OCR_AVAILABLE:
 
 
 app = FastAPI(title="培训信息录入系统")
+
+@app.get("/api/health")
+def api_health_check():
+    """轻量健康检查接口，供 Watchdog 守护脚本秒级探活。"""
+    return {"status": "ok", "timestamp": beijing_now().strftime("%Y-%m-%d %H:%M:%S")}
 
 # S2: CORS 来源限制，默认通配符兼容现有部署，生产环境通过环境变量 PEIXUN_CORS_ORIGINS 配置白名单
 _allowed_origins = os.environ.get("PEIXUN_CORS_ORIGINS", "*").split(",")
